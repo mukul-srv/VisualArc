@@ -103,6 +103,7 @@ performance debt: `benchmarks/t21-benchmark-report.md`. Re-run with
 - Two plans drawn in one DXF are treated as one floor, silently.
 - API storage is local disk with no expiry; the API processes requests synchronously (no
   job timeout or worker process), so it is for local use, not public hosting.
+- One floor per generation; multi-floor projects and an on-screen floor selector are Phase 1.
 - Walk mode probes at fixed heights: a window with a sill below 0.3 m and a head above 1.6 m
   behaves like a door; no stairs or multi-floor navigation.
 - The viewer is validated by manual inspection and by loading the served GLB in tests; there
