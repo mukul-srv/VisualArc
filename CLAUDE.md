@@ -19,7 +19,8 @@ MVP-0 technical proof: DXF -> inventory -> canonical JSON -> wall/floor mesh -> 
 
 ## Conventions
 - Canonical units: millimetres. Plan X/Y -> GLB X/-Z, Y-up (ADR-001).
-- First DXF convention: walls = paired parallel lines on layer `A-WALL`; floor = closed LWPOLYLINE on `A-FLOR`; orthogonal walls only.
+- First DXF convention: walls = paired parallel lines on layer `A-WALL`; floor = closed LWPOLYLINE on `A-FLOR`; orthogonal walls only. Full spec + issue codes: Document 08 §3a.
+- Thresholds/tolerances live only in `engine/settings.py` (ADR-003), never as module constants. Ambiguity and duplicates block; unsupported input warns; never guess or repair.
 - Every important value carries provenance: source_extracted | user_provided | defaulted | inferred.
 
 ## Learn-as-you-build
