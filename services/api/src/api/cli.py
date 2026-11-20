@@ -10,9 +10,8 @@ from api.engine.adapters.dxf.reader import (
     read_dxf,
 )
 from api.engine.canonical.model import Project
-from api.engine.exporters.glb import build_meta, build_scene
-from api.engine.exporters.report import build_report
 from api.engine.settings import DEFAULTS
+from api.pipeline import write_artifacts
 
 
 def _positive_mm(text: str) -> float:
@@ -147,30 +146,14 @@ def _exit_if_blocking(blocking) -> None:
 
 def _build(args) -> None:
     project = _read(args)
-    args.out.mkdir(parents=True, exist_ok=True)
-    stem = args.dxf.stem
-    # canonical JSON always written: it is the evidence for why a build was blocked
-    (args.out / f"{stem}.canonical.json").write_text(
-        project.model_dump_json(indent=2) + "\n", encoding="utf-8"
-    )
     expected = (
         Project.model_validate_json(args.expected.read_text(encoding="utf-8"))
         if args.expected
         else None
     )
-    # like the canonical JSON, written even when blocked: it explains why
-    (args.out / f"{stem}.report.md").write_text(
-        build_report(project, expected), encoding="utf-8"
-    )
+    names = write_artifacts(project, args.out, args.dxf.stem, expected)
     _exit_if_blocking([i for i in project.issues if i.severity == "blocking"])
-    scene = build_scene(project)
-    (args.out / f"{stem}.glb").write_bytes(scene.export(file_type="glb"))
-    (args.out / f"{stem}.meta.json").write_text(
-        json.dumps(build_meta(project, scene), indent=2) + "\n", encoding="utf-8"
-    )
-    print(
-        f"wrote {stem}.canonical.json, {stem}.glb, {stem}.meta.json, {stem}.report.md to {args.out}"
-    )
+    print(f"wrote {', '.join(sorted(names))} to {args.out}")
 
 
 if __name__ == "__main__":
