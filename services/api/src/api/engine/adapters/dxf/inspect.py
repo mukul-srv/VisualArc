@@ -3,12 +3,13 @@
 from collections import Counter, defaultdict
 from pathlib import Path
 
-import ezdxf
 from ezdxf import bbox, units
 
+from api.engine.adapters.dxf.reader import MAX_DXF_BYTES, load_doc
 
-def build_inventory(path: Path) -> dict:
-    doc = ezdxf.readfile(path)
+
+def build_inventory(path: Path, max_bytes: int = MAX_DXF_BYTES) -> dict:
+    doc = load_doc(path, max_bytes)
     msp = doc.modelspace()
     insunits = doc.header.get("$INSUNITS", 0)
 

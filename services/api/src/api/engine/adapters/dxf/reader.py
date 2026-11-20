@@ -25,6 +25,30 @@ from api.engine.canonical.model import (
 from api.engine.geometry2d.walls import Segment, find_junctions, pair_walls
 
 WALL_LAYER, FLOOR_LAYER = "A-WALL", "A-FLOR"
+# provisional until T21 benchmarks; T7 moves this into settings
+MAX_DXF_BYTES = 50 * 1024 * 1024
+
+
+class InputError(ValueError):
+    """Expected bad input (not a DXF, corrupt, too large): report, don't traceback."""
+
+
+def load_doc(path: Path, max_bytes: int = MAX_DXF_BYTES):
+    if not path.is_file():
+        raise InputError(f"not a readable file: {path}")
+    size = path.stat().st_size
+    if size > max_bytes:
+        raise InputError(
+            f"file is {size / 2**20:.1f} MB, limit {max_bytes / 2**20:g} MB (provisional)"
+        )
+    try:
+        return ezdxf.readfile(path)
+    except ezdxf.DXFStructureError as e:
+        raise InputError(f"corrupt or truncated DXF: {e}") from e
+    except ezdxf.DXFError as e:
+        raise InputError(f"not a DXF file: {e}") from e
+    except (OSError, UnicodeDecodeError) as e:
+        raise InputError(f"not a DXF file or unreadable: {e}") from e
 
 
 def _ref(e) -> SourceRef:
@@ -41,10 +65,12 @@ def _arc_issue(e) -> Issue:
     )
 
 
-def read_dxf(path: Path, wall_height: float | None = None) -> Project:
+def read_dxf(
+    path: Path, wall_height: float | None = None, max_bytes: int = MAX_DXF_BYTES
+) -> Project:
     if wall_height is not None and wall_height <= 0:
         raise ValueError(f"wall height must be > 0 mm, got {wall_height}")
-    doc = ezdxf.readfile(path)
+    doc = load_doc(path, max_bytes)
     project = {"id": path.stem, "source_file": path.name}
 
     insunits = doc.header.get("$INSUNITS", 0)
