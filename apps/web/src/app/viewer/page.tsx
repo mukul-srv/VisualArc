@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { resolveStem } from "@/lib/model-stem";
 
 // Viewer only renders. GLB is already metres, Y-up (ADR-001); no unit/axis fixes here.
-const MODEL_URL = "/models/fixture_a.glb";
 
 export default function ViewerPage() {
   const mount = useRef<HTMLDivElement>(null);
@@ -16,6 +16,11 @@ export default function ViewerPage() {
 
   useEffect(() => {
     const el = mount.current!;
+    const stem = resolveStem(new URLSearchParams(window.location.search).get("model"));
+    if (stem === null) {
+      queueMicrotask(() => setStatus("error: invalid model name (allowed: letters, digits, _ and -)"));
+      return;
+    }
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e22);
     const camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 500);
@@ -44,7 +49,7 @@ export default function ViewerPage() {
     setTop.current = place;
 
     new GLTFLoader().load(
-      MODEL_URL,
+      `/models/${stem}.glb`,
       (gltf) => {
         scene.add(gltf.scene);
         const box = new THREE.Box3().setFromObject(gltf.scene);
@@ -52,10 +57,10 @@ export default function ViewerPage() {
         center = box.getCenter(new THREE.Vector3());
         size = Math.max(s.x, s.z);
         place(false);
-        setStatus(`${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
+        setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
       },
       undefined,
-      (e) => setStatus(`load failed: ${e}`),
+      () => setStatus(`error: could not load /models/${stem}.glb (missing or not a valid GLB). Build it and copy it to apps/web/public/models/`),
     );
 
     renderer.setAnimationLoop(() => renderer.render(scene, camera));
