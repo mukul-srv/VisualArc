@@ -1,0 +1,450 @@
+{
+  "schema_version": "0.2.0",
+  "id": "fixture_b",
+  "units": "mm",
+  "source_file": "fixture_b.dxf",
+  "buildings": [
+    {
+      "id": "bldg-0",
+      "floors": [
+        {
+          "id": "floor-0",
+          "name": "Level 0",
+          "elevation": {
+            "value": 0.0,
+            "unit": "mm",
+            "source": "defaulted"
+          },
+          "walls": [
+            {
+              "id": "wall-001",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  200.0,
+                  100.0
+                ],
+                "end": [
+                  5800.0,
+                  100.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "31"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "37"
+                }
+              ]
+            },
+            {
+              "id": "wall-002",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  100.0,
+                  200.0
+                ],
+                "end": [
+                  100.0,
+                  4800.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "36"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3C"
+                }
+              ]
+            },
+            {
+              "id": "wall-003",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  5900.0,
+                  200.0
+                ],
+                "end": [
+                  5900.0,
+                  2800.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "38"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "32"
+                }
+              ]
+            },
+            {
+              "id": "wall-004",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  3000.0,
+                  2900.0
+                ],
+                "end": [
+                  5800.0,
+                  2900.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "39"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "33"
+                }
+              ]
+            },
+            {
+              "id": "wall-005",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  2900.0,
+                  3000.0
+                ],
+                "end": [
+                  2900.0,
+                  4800.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3A"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "34"
+                }
+              ]
+            },
+            {
+              "id": "wall-006",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  200.0,
+                  4900.0
+                ],
+                "end": [
+                  2800.0,
+                  4900.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3B"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "35"
+                }
+              ]
+            }
+          ],
+          "junctions": [
+            {
+              "id": "junction-001",
+              "type": "junction",
+              "polygon": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  200.0,
+                  0.0
+                ],
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  0.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-001",
+                "wall-002"
+              ]
+            },
+            {
+              "id": "junction-002",
+              "type": "junction",
+              "polygon": [
+                [
+                  5800.0,
+                  0.0
+                ],
+                [
+                  6000.0,
+                  0.0
+                ],
+                [
+                  6000.0,
+                  200.0
+                ],
+                [
+                  5800.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-001",
+                "wall-003"
+              ]
+            },
+            {
+              "id": "junction-003",
+              "type": "junction",
+              "polygon": [
+                [
+                  2800.0,
+                  2800.0
+                ],
+                [
+                  3000.0,
+                  2800.0
+                ],
+                [
+                  3000.0,
+                  3000.0
+                ],
+                [
+                  2800.0,
+                  3000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-004",
+                "wall-005"
+              ]
+            },
+            {
+              "id": "junction-004",
+              "type": "junction",
+              "polygon": [
+                [
+                  5800.0,
+                  2800.0
+                ],
+                [
+                  6000.0,
+                  2800.0
+                ],
+                [
+                  6000.0,
+                  3000.0
+                ],
+                [
+                  5800.0,
+                  3000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-003",
+                "wall-004"
+              ]
+            },
+            {
+              "id": "junction-005",
+              "type": "junction",
+              "polygon": [
+                [
+                  0.0,
+                  4800.0
+                ],
+                [
+                  200.0,
+                  4800.0
+                ],
+                [
+                  200.0,
+                  5000.0
+                ],
+                [
+                  0.0,
+                  5000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-002",
+                "wall-006"
+              ]
+            },
+            {
+              "id": "junction-006",
+              "type": "junction",
+              "polygon": [
+                [
+                  2800.0,
+                  4800.0
+                ],
+                [
+                  3000.0,
+                  4800.0
+                ],
+                [
+                  3000.0,
+                  5000.0
+                ],
+                [
+                  2800.0,
+                  5000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-005",
+                "wall-006"
+              ]
+            }
+          ],
+          "boundaries": [
+            {
+              "id": "fb-001",
+              "type": "floor_boundary",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  5800.0,
+                  200.0
+                ],
+                [
+                  5800.0,
+                  2800.0
+                ],
+                [
+                  2800.0,
+                  2800.0
+                ],
+                [
+                  2800.0,
+                  4800.0
+                ],
+                [
+                  200.0,
+                  4800.0
+                ]
+              ],
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "3D"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "issues": []
+}
