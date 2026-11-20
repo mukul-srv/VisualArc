@@ -29,3 +29,6 @@ Thumbs.db
 
 # local-only project docs
 docs/
+CLAUDE.md
+.claude/rules/
+.claude/playbooks/
