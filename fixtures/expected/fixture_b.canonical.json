@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "id": "fixture_b",
   "units": "mm",
   "source_file": "fixture_b.dxf",
@@ -441,7 +441,8 @@
                 }
               ]
             }
-          ]
+          ],
+          "openings": []
         }
       ]
     }

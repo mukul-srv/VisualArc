@@ -4,11 +4,15 @@ Units: millimetres. Coordinates: plan X/Y, right-handed (ADR-001).
 Every important value is a `Measured` carrying its provenance.
 """
 
+import itertools
+import math
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "0.2.0"
+from api.engine.settings import DEFAULTS
+
+SCHEMA_VERSION = "0.3.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -44,6 +48,18 @@ class LineGeometry(_Model):
     end: Point2
 
 
+def _axis(line: LineGeometry) -> int | None:
+    """0 if the line runs along x, 1 if along y, None if skewed or degenerate."""
+    tol = DEFAULTS.tolerance_mm
+    dx = abs(line.end[0] - line.start[0])
+    dy = abs(line.end[1] - line.start[1])
+    if dy <= tol < dx:
+        return 0
+    if dx <= tol < dy:
+        return 1
+    return None
+
+
 class Wall(_Model):
     id: str
     type: Literal["wall"] = "wall"
@@ -70,6 +86,41 @@ class FloorBoundary(_Model):
     sources: list[SourceRef]
 
 
+# shortcut: model invariants use DEFAULTS.tolerance_mm, not a caller's Settings;
+# pass it via validation context if tolerance ever becomes per-run.
+class Opening(_Model):
+    """Door or window in a host wall (ADR-002 Option B)."""
+
+    id: str  # "opening-001", sorted by (span.start y, x)
+    type: Literal["opening"] = "opening"
+    kind: Literal["door", "window"]  # from the marker's layer
+    wall_id: str  # merged host wall on the same Floor
+    span: LineGeometry  # on host centreline, start = lower coordinate
+    offset: Measured  # host.centreline.start -> span.start
+    width: Measured  # == |span|
+    height: Measured
+    sill_height: Measured  # above floor elevation
+    sources: list[SourceRef] = Field(min_length=1)  # marker first, then jamb lines
+
+    @model_validator(mode="after")
+    def _check(self) -> "Opening":
+        if self.width.value <= 0 or self.height.value <= 0:
+            raise ValueError(f"{self.id}: width and height must be > 0 mm")
+        if self.sill_height.value < 0 or self.offset.value < 0:
+            raise ValueError(f"{self.id}: sill_height and offset must be >= 0 mm")
+        axis = _axis(self.span)
+        if axis is None:
+            raise ValueError(f"{self.id}: span must be axis-aligned and non-degenerate")
+        if self.span.end[axis] < self.span.start[axis]:
+            raise ValueError(f"{self.id}: span must start at the lower coordinate")
+        length = math.dist(self.span.start, self.span.end)
+        if abs(self.width.value - length) > DEFAULTS.tolerance_mm:
+            raise ValueError(
+                f"{self.id}: width {self.width.value} != span length {length}"
+            )
+        return self
+
+
 class Floor(_Model):
     id: str
     name: str
@@ -77,6 +128,45 @@ class Floor(_Model):
     walls: list[Wall] = []
     junctions: list[Junction] = []
     boundaries: list[FloorBoundary] = []
+    openings: list[Opening] = []
+
+    @model_validator(mode="after")
+    def _check_openings(self) -> "Floor":
+        tol = DEFAULTS.tolerance_mm
+        ids = [o.id for o in self.openings]
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"{self.id}: duplicate opening ids")
+        walls = {w.id: w for w in self.walls}
+        runs: dict[str, list[tuple[float, float, str]]] = {}
+        for o in self.openings:
+            w = walls.get(o.wall_id)
+            if w is None:
+                raise ValueError(f"{o.id}: wall {o.wall_id!r} is not on {self.id}")
+            c, axis = w.centreline, _axis(o.span)
+            off = 1 - axis
+            lo, hi = sorted((c.start[axis], c.end[axis]))
+            if (
+                _axis(c) != axis
+                or abs(o.span.start[off] - c.start[off]) > tol
+                or abs(o.span.end[off] - c.start[off]) > tol
+                or o.span.start[axis] < lo - tol
+                or o.span.end[axis] > hi + tol
+            ):
+                raise ValueError(f"{o.id}: span is not within {w.id}'s centreline")
+            if abs(o.offset.value - math.dist(c.start, o.span.start)) > tol:
+                raise ValueError(f"{o.id}: offset != distance from {w.id} start")
+            top = o.sill_height.value + o.height.value
+            if w.height is not None and top > w.height.value + tol:
+                raise ValueError(f"{o.id}: sill + height exceeds {w.id} height")
+            runs.setdefault(w.id, []).append(
+                (o.span.start[axis], o.span.end[axis], o.id)
+            )
+        for spans in runs.values():
+            spans.sort()
+            for (_, hi, a), (lo, _, b) in itertools.pairwise(spans):
+                if lo < hi - tol:
+                    raise ValueError(f"{a} and {b} overlap along their host wall")
+        return self
 
 
 class Building(_Model):

@@ -14,6 +14,12 @@ def test_defaults_match_document_08():
     assert dataclasses.asdict(DEFAULTS) == {
         "wall_layer": "A-WALL",
         "floor_layer": "A-FLOR",
+        "door_layer": "A-DOOR",
+        "window_layer": "A-GLAZ",
+        "default_door_height_mm": 2100.0,
+        "default_door_sill_mm": 0.0,
+        "default_window_height_mm": 1200.0,
+        "default_window_sill_mm": 900.0,
         "wall_thickness_min_mm": 50.0,
         "wall_thickness_max_mm": 600.0,
         "tolerance_mm": 1e-6,
@@ -23,6 +29,20 @@ def test_defaults_match_document_08():
     }
     with pytest.raises(dataclasses.FrozenInstanceError):
         DEFAULTS.tolerance_mm = 1.0
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"default_door_height_mm": 0},
+        {"default_window_height_mm": -1},
+        {"default_door_sill_mm": -1},
+        {"default_window_sill_mm": -0.5},
+    ],
+)
+def test_invalid_opening_defaults_rejected(bad):
+    with pytest.raises(ValueError):
+        Settings(**bad)
 
 
 def _wall(thickness, dy=0.0):

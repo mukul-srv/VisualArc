@@ -15,6 +15,18 @@ class Settings:
     # upper-cases the entity's layer), so these must be written in upper case.
     wall_layer: str = "A-WALL"
     floor_layer: str = "A-FLOR"
+    # Opening marker layers (ADR-002 §1): AIA names; the layer is the opening kind.
+    door_layer: str = "A-DOOR"
+    window_layer: str = "A-GLAZ"
+
+    # Opening height/sill used when no CLI flag supplies them; result is
+    # provenance `defaulted` plus an opening_dimension_defaulted warning
+    # (ADR-002 §5). Common residential values, sill above floor elevation.
+    # PROVISIONAL: unverified against any standard (ADR-002 Q10).
+    default_door_height_mm: float = 2100.0
+    default_door_sill_mm: float = 0.0
+    default_window_height_mm: float = 1200.0
+    default_window_sill_mm: float = 900.0
 
     # Two parallel wall lines pair into a wall only if their distance is within
     # [min, max]. 50 mm admits thin partitions/linings; 600 mm admits thick
@@ -48,6 +60,13 @@ class Settings:
     # total count is still in the message) so one noisy layer, e.g. thousands of
     # TEXT entities, cannot flood the report (T5).
     unmapped_ref_cap: int = 20
+
+    def __post_init__(self) -> None:
+        # ADR-002 §5: reject impossible opening defaults up front, not per opening
+        if min(self.default_door_height_mm, self.default_window_height_mm) <= 0:
+            raise ValueError("default opening heights must be > 0 mm")
+        if min(self.default_door_sill_mm, self.default_window_sill_mm) < 0:
+            raise ValueError("default opening sills must be >= 0 mm")
 
 
 DEFAULTS = Settings()
