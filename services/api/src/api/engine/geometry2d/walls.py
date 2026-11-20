@@ -13,9 +13,7 @@ from shapely.geometry.polygon import orient
 from shapely.ops import polygonize, unary_union
 
 from api.engine.canonical.model import Issue, Point2, SourceRef
-
-TOL = 1e-6  # mm
-THK_MIN, THK_MAX = 50.0, 600.0  # plausible wall thickness range, mm
+from api.engine.settings import DEFAULTS, Settings
 
 
 @dataclass(frozen=True)
@@ -62,19 +60,19 @@ class JunctionPiece:
     wall_ids: list[str]
 
 
-def _axial(s: Segment) -> _Axial | None:
+def _axial(s: Segment, tol: float) -> _Axial | None:
     (x0, y0), (x1, y1) = s.start, s.end
-    if abs(y1 - y0) <= TOL:
+    if abs(y1 - y0) <= tol:
         return _Axial(s, "h", (y0 + y1) / 2, min(x0, x1), max(x0, x1))
-    if abs(x1 - x0) <= TOL:
+    if abs(x1 - x0) <= tol:
         return _Axial(s, "v", (x0 + x1) / 2, min(y0, y1), max(y0, y1))
     return None
 
 
-def _usable(segments: list[Segment]) -> tuple[list[_Axial], list[Issue]]:
+def _usable(segments: list[Segment], tol: float) -> tuple[list[_Axial], list[Issue]]:
     axial, issues = [], []
     for s in segments:
-        if math.dist(s.start, s.end) <= TOL:
+        if math.dist(s.start, s.end) <= tol:
             issues.append(
                 Issue(
                     code="degenerate_segment",
@@ -83,7 +81,7 @@ def _usable(segments: list[Segment]) -> tuple[list[_Axial], list[Issue]]:
                     sources=[s.ref],
                 )
             )
-        elif (a := _axial(s)) is None:
+        elif (a := _axial(s, tol)) is None:
             issues.append(
                 Issue(
                     code="non_orthogonal_segment",
@@ -99,9 +97,11 @@ def _usable(segments: list[Segment]) -> tuple[list[_Axial], list[Issue]]:
 
 
 def pair_walls(
-    segments: list[Segment], thk_min: float = THK_MIN, thk_max: float = THK_MAX
+    segments: list[Segment], settings: Settings = DEFAULTS
 ) -> tuple[list[PairedWall], list[Issue]]:
-    axial, issues = _usable(segments)
+    tol = settings.tolerance_mm
+    thk_min, thk_max = settings.wall_thickness_min_mm, settings.wall_thickness_max_mm
+    axial, issues = _usable(segments, tol)
 
     cands: dict[_Axial, list[_Axial]] = {a: [] for a in axial}
     for i, a in enumerate(axial):
@@ -109,9 +109,9 @@ def pair_walls(
             if a.axis != b.axis:
                 continue
             shared = min(a.hi, b.hi) - max(a.lo, b.lo)
-            if shared <= TOL:  # disjoint or touching end-to-end (split faces)
+            if shared <= tol:  # disjoint or touching end-to-end (split faces)
                 continue
-            if abs(a.c - b.c) <= TOL:
+            if abs(a.c - b.c) <= tol:
                 # duplicate/overlapping line on the same axis: never auto-dedupe
                 issues.append(
                     Issue(
@@ -123,7 +123,7 @@ def pair_walls(
                     )
                 )
                 continue
-            if not thk_min - TOL <= abs(a.c - b.c) <= thk_max + TOL:
+            if not thk_min - tol <= abs(a.c - b.c) <= thk_max + tol:
                 continue
             cands[a].append(b)
             cands[b].append(a)
@@ -134,7 +134,7 @@ def pair_walls(
     ambiguous = set()
     for a in axial:
         offsets = [b.c - a.c for b in cands[a]]
-        if any(abs(o - offsets[0]) > TOL for o in offsets):
+        if any(abs(o - offsets[0]) > tol for o in offsets):
             ambiguous.add(a)
             issues.append(
                 Issue(
@@ -183,7 +183,7 @@ def _ring(p: Polygon) -> list[Point2]:
 
 
 def find_junctions(
-    segments: list[Segment], walls: list[PairedWall], thk_max: float = THK_MAX
+    segments: list[Segment], walls: list[PairedWall], settings: Settings = DEFAULTS
 ) -> tuple[list[JunctionPiece], list[Issue]]:
     """Fill regions enclosed by wall lines that no wall rectangle covers.
 
@@ -192,27 +192,28 @@ def find_junctions(
     """
     if not walls:
         return [], []
-    axial, _ = _usable(segments)  # issues already reported by pair_walls
+    tol, thk_max = settings.tolerance_mm, settings.wall_thickness_max_mm
+    axial, _ = _usable(segments, tol)  # issues already reported by pair_walls
     rects = {w.id: w.rect() for w in walls}
     covered = unary_union(list(rects.values()))
     faces = polygonize(
         unary_union([LineString([a.seg.start, a.seg.end]) for a in axial])
     )
-    material = unary_union([f for f in faces if f.intersection(covered).area > TOL])
+    material = unary_union([f for f in faces if f.intersection(covered).area > tol])
     leftover = material.difference(covered)
 
     parts = [
         g
         for g in getattr(leftover, "geoms", [leftover])
-        if isinstance(g, Polygon) and g.area > TOL
+        if isinstance(g, Polygon) and g.area > tol
     ]
     parts.sort(key=lambda g: (g.bounds[1], g.bounds[0]))
 
     junctions, issues = [], []
     for p in parts:
         x0, y0, x1, y1 = p.bounds
-        touching = [wid for wid, r in rects.items() if r.distance(p) <= TOL]
-        if min(x1 - x0, y1 - y0) <= thk_max + TOL and touching and not p.interiors:
+        touching = [wid for wid, r in rects.items() if r.distance(p) <= tol]
+        if min(x1 - x0, y1 - y0) <= thk_max + tol and touching and not p.interiors:
             junctions.append(
                 JunctionPiece(f"junction-{len(junctions) + 1:03d}", _ring(p), touching)
             )

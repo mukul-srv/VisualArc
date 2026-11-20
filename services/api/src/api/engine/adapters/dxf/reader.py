@@ -25,13 +25,7 @@ from api.engine.canonical.model import (
 )
 from api.engine.geometry2d.floor import floor_issue
 from api.engine.geometry2d.walls import Segment, find_junctions, pair_walls
-
-WALL_LAYER, FLOOR_LAYER = "A-WALL", "A-FLOR"
-# unmapped_layer issues list at most this many entity refs per layer (total in message)
-UNMAPPED_REF_CAP = 20
-# provisional until T21 benchmarks; T7 moves this into settings
-MAX_DXF_BYTES = 50 * 1024 * 1024
-
+from api.engine.settings import DEFAULTS, Settings
 
 # user-facing --units choices -> $INSUNITS code (kept small and explicit)
 USER_UNITS = {
@@ -47,7 +41,7 @@ class InputError(ValueError):
     """Expected bad input (not a DXF, corrupt, too large): report, don't traceback."""
 
 
-def load_doc(path: Path, max_bytes: int = MAX_DXF_BYTES):
+def load_doc(path: Path, max_bytes: int = DEFAULTS.max_dxf_bytes):
     if not path.is_file():
         raise InputError(f"not a readable file: {path}")
     size = path.stat().st_size
@@ -82,12 +76,15 @@ def _arc_issue(e) -> Issue:
 def read_dxf(
     path: Path,
     wall_height: float | None = None,
-    max_bytes: int = MAX_DXF_BYTES,
+    max_bytes: int | None = None,
     user_units: str | None = None,
+    settings: Settings = DEFAULTS,
 ) -> Project:
     if wall_height is not None and wall_height <= 0:
         raise ValueError(f"wall height must be > 0 mm, got {wall_height}")
-    doc = load_doc(path, max_bytes)
+    doc = load_doc(path, settings.max_dxf_bytes if max_bytes is None else max_bytes)
+    wall_layer, floor_layer = settings.wall_layer, settings.floor_layer
+    ref_cap = settings.unmapped_ref_cap
     project = {"id": path.stem, "source_file": path.name}
 
     insunits = doc.header.get("$INSUNITS", 0)
@@ -139,22 +136,22 @@ def read_dxf(
     unmapped: dict[str, list] = {}  # layer -> entities, in drawing order
     for e in doc.modelspace():
         layer, kind = e.dxf.layer.upper(), e.dxftype()
-        if layer not in (WALL_LAYER, FLOOR_LAYER):
+        if layer not in (wall_layer, floor_layer):
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
-        if layer == WALL_LAYER and kind == "LINE":
+        if layer == wall_layer and kind == "LINE":
             segments.append(
                 Segment(e.dxf.handle, e.dxf.layer, mm(e.dxf.start), mm(e.dxf.end))
             )
         elif kind == "LWPOLYLINE" and any(b for *_, b in e.get_points("xyb")):
             issues.append(_arc_issue(e))
-        elif layer == WALL_LAYER and kind == "LWPOLYLINE":
+        elif layer == wall_layer and kind == "LWPOLYLINE":
             pts = [mm(p) for p in e.get_points("xy")]
             ring = pts + pts[:1] if e.closed else pts
             segments += [
                 Segment(e.dxf.handle, e.dxf.layer, a, b) for a, b in pairwise(ring)
             ]
-        elif layer == FLOOR_LAYER and kind == "LWPOLYLINE":
+        elif layer == floor_layer and kind == "LWPOLYLINE":
             pts = [mm(p) for p in e.get_points("xy")]
             if len(pts) > 3 and pts[0] == pts[-1]:
                 pts.pop()  # closed by repeating the first point
@@ -171,7 +168,7 @@ def read_dxf(
                     )
                 )
                 continue
-            if bad := floor_issue(pts, _ref(e)):
+            if bad := floor_issue(pts, _ref(e), settings):
                 issues.append(bad)
                 continue
             boundaries.append(
@@ -193,30 +190,26 @@ def read_dxf(
     for name, ents in unmapped.items():
         counts = Counter(e.dxftype() for e in ents)
         listed = ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
-        more = (
-            f"; first {UNMAPPED_REF_CAP} of {len(ents)} listed"
-            if len(ents) > UNMAPPED_REF_CAP
-            else ""
-        )
+        more = f"; first {ref_cap} of {len(ents)} listed" if len(ents) > ref_cap else ""
         issues.append(
             Issue(
                 code="unmapped_layer",
                 severity="warning",
-                message=f"layer {name} is not a mapped layer ({WALL_LAYER}, "
-                f"{FLOOR_LAYER}); ignored {listed}{more}",
-                sources=[_ref(e) for e in ents[:UNMAPPED_REF_CAP]],
+                message=f"layer {name} is not a mapped layer ({wall_layer}, "
+                f"{floor_layer}); ignored {listed}{more}",
+                sources=[_ref(e) for e in ents[:ref_cap]],
             )
         )
 
-    paired, pair_issues = pair_walls(segments)
-    pieces, junction_issues = find_junctions(segments, paired)
+    paired, pair_issues = pair_walls(segments, settings)
+    pieces, junction_issues = find_junctions(segments, paired, settings)
     issues += pair_issues + junction_issues
     if not paired:
         issues.append(
             Issue(
                 code="no_walls",
                 severity="blocking",
-                message=f"no paired wall lines found on {WALL_LAYER}",
+                message=f"no paired wall lines found on {wall_layer}",
                 # every usable segment is unpaired here; polyline pieces share a ref
                 sources=list(dict.fromkeys(s.ref for s in segments)),
             )

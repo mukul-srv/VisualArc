@@ -5,10 +5,11 @@ from pathlib import Path
 
 from ezdxf import bbox, units
 
-from api.engine.adapters.dxf.reader import MAX_DXF_BYTES, load_doc
+from api.engine.adapters.dxf.reader import load_doc
+from api.engine.settings import DEFAULTS
 
 
-def build_inventory(path: Path, max_bytes: int = MAX_DXF_BYTES) -> dict:
+def build_inventory(path: Path, max_bytes: int = DEFAULTS.max_dxf_bytes) -> dict:
     doc = load_doc(path, max_bytes)
     msp = doc.modelspace()
     insunits = doc.header.get("$INSUNITS", 0)

@@ -5,12 +5,12 @@ from pathlib import Path
 
 from api.engine.adapters.dxf.inspect import build_inventory
 from api.engine.adapters.dxf.reader import (
-    MAX_DXF_BYTES,
     USER_UNITS,
     InputError,
     read_dxf,
 )
 from api.engine.exporters.glb import build_meta, build_scene
+from api.engine.settings import DEFAULTS
 
 
 def _positive_mm(text: str) -> float:
@@ -44,7 +44,7 @@ def _main(argv: list[str] | None) -> None:
         "--max-mb",
         dest="max_bytes",
         type=_max_bytes,
-        default=MAX_DXF_BYTES,
+        default=DEFAULTS.max_dxf_bytes,
         help="input size limit in MB (provisional default 50)",
     )
     p.add_argument("--out", type=Path, help="write JSON here instead of stdout")
@@ -54,7 +54,7 @@ def _main(argv: list[str] | None) -> None:
         "--max-mb",
         dest="max_bytes",
         type=_max_bytes,
-        default=MAX_DXF_BYTES,
+        default=DEFAULTS.max_dxf_bytes,
         help="input size limit in MB (provisional default 50)",
     )
     p.add_argument("--wall-height", type=_positive_mm, help="wall height in mm")
@@ -70,7 +70,7 @@ def _main(argv: list[str] | None) -> None:
         "--max-mb",
         dest="max_bytes",
         type=_max_bytes,
-        default=MAX_DXF_BYTES,
+        default=DEFAULTS.max_dxf_bytes,
         help="input size limit in MB (provisional default 50)",
     )
     p.add_argument("--wall-height", type=_positive_mm, help="wall height in mm")

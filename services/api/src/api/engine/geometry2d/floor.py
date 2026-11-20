@@ -4,13 +4,15 @@ from shapely.geometry import Polygon
 from shapely.validation import explain_validity
 
 from api.engine.canonical.model import Issue, Point2, SourceRef
-from api.engine.geometry2d.walls import TOL
+from api.engine.settings import DEFAULTS, Settings
 
 
-def floor_issue(pts: list[Point2], ref: SourceRef) -> Issue | None:
+def floor_issue(
+    pts: list[Point2], ref: SourceRef, settings: Settings = DEFAULTS
+) -> Issue | None:
     """Blocking issue if the ring self-intersects or has no area; winding is irrelevant."""
     poly = Polygon(pts)
-    if poly.is_valid and poly.area > TOL:
+    if poly.is_valid and poly.area > settings.tolerance_mm:
         return None
     reason = (
         explain_validity(poly)
