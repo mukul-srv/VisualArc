@@ -6,6 +6,9 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { glbUrl, isGenerationId } from "@/lib/api";
 import { resolveStem } from "@/lib/model-stem";
+import { MetadataPanel } from "@/components/MetadataPanel";
+import { openingBox, pickElement } from "@/lib/pick";
+import { describeElement, describeOpening, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
 
 // Viewer only renders. GLB is already metres, Y-up (ADR-001); no unit/axis fixes here.
 
@@ -14,6 +17,7 @@ export default function ViewerPage() {
   const setTop = useRef<(top: boolean) => void>(() => {});
   const [top, setTopState] = useState(false);
   const [status, setStatus] = useState("loading…");
+  const [panel, setPanel] = useState<Panel | null>(null);
 
   useEffect(() => {
     const el = mount.current!;
@@ -54,6 +58,60 @@ export default function ViewerPage() {
     scene.add(new THREE.GridHelper(20, 20)); // 1 cell = 1 m
     scene.add(new THREE.AxesHelper(2)); // R=X, G=Y(up), B=Z
 
+    // --- selection: click (not drag) picks a mesh; a hit inside a wall's aperture picks the opening
+    let model: THREE.Object3D | null = null;
+    let selected: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] } | null = null;
+    let overlay: THREE.Mesh | null = null;
+    const clearSelection = () => {
+      if (selected) selected.mesh.material = selected.original;
+      if (overlay) {
+        scene.remove(overlay);
+        overlay.geometry.dispose();
+        (overlay.material as THREE.Material).dispose();
+      }
+      selected = null;
+      overlay = null;
+    };
+    const showOpening = (o: OpeningData, thicknessMm: number, baseY: number) => {
+      overlay = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.45 }),
+      );
+      const box = openingBox(o, thicknessMm, baseY);
+      box.getCenter(overlay.position);
+      box.getSize(overlay.scale);
+      scene.add(overlay);
+    };
+    const raycaster = new THREE.Raycaster();
+    let down: { x: number; y: number } | null = null;
+    const canvas = renderer.domElement;
+    const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
+    const onUp = (e: PointerEvent) => {
+      if (!down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+      const r = canvas.getBoundingClientRect();
+      raycaster.setFromCamera(
+        new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
+        camera,
+      );
+      clearSelection();
+      const pick = pickElement(model, raycaster.ray);
+      if (!pick) return setPanel(null);
+      const ud = pick.mesh.userData as ElementData;
+      if (pick.opening) {
+        // opening selected: overlay only, so the host wall is not shown as selected too
+        showOpening(pick.opening, ud.thickness?.value ?? 0, pick.baseY);
+        return setPanel(describeOpening(pick.opening));
+      }
+      const mat = (pick.mesh.material as THREE.MeshStandardMaterial).clone();
+      mat.emissive.set(0xffaa00);
+      mat.emissiveIntensity = 0.6;
+      selected = { mesh: pick.mesh, original: pick.mesh.material };
+      pick.mesh.material = mat;
+      setPanel(describeElement(ud));
+    };
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointerup", onUp);
+
     let center = new THREE.Vector3();
     let size = 10;
     const place = (isTop: boolean) => {
@@ -69,6 +127,7 @@ export default function ViewerPage() {
       url,
       (gltf) => {
         scene.add(gltf.scene);
+        model = gltf.scene;
         const box = new THREE.Box3().setFromObject(gltf.scene);
         const s = box.getSize(new THREE.Vector3());
         center = box.getCenter(new THREE.Vector3());
@@ -89,6 +148,9 @@ export default function ViewerPage() {
     window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerup", onUp);
+      clearSelection();
       renderer.setAnimationLoop(null);
       controls.dispose();
       renderer.dispose();
@@ -109,6 +171,20 @@ export default function ViewerPage() {
           {top ? "Perspective" : "Top-down"}
         </button>{" "}
         {status}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          maxWidth: 380,
+          padding: 10,
+          background: "rgba(20,20,24,0.9)",
+          color: "#eee",
+          font: "13px monospace",
+        }}
+      >
+        <MetadataPanel panel={panel} />
       </div>
     </div>
   );

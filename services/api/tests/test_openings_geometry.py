@@ -244,6 +244,8 @@ def test_fixture_openings_glb_roundtrip_and_meta(fo_project, tmp_path):
             assert got["kind"] == o.kind and got["width"]["value"] == o.width.value
             assert got["sill_height"]["source"] == "defaulted"  # provenance kept
             assert got["offset"]["source"] == "source_extracted"
+            assert got["span"]["start"] == list(o.span.start)  # viewer picking needs it
+            assert got["span"]["end"] == list(o.span.end)
     assert n == 7
     out = tmp_path / "o"
     dxf = str(FIX / "fixture_openings.dxf")

@@ -35,7 +35,9 @@ def build_scene(project: Project) -> trimesh.Scene:
             hosted: dict[str, list[dict]] = {}
             for o in floor.openings:  # openings have no node; they ride on the host
                 hosted.setdefault(o.wall_id, []).append(
-                    o.model_dump(mode="json", exclude={"span"})
+                    o.model_dump(
+                        mode="json"
+                    )  # span (plan mm) lets the viewer map a click to it
                 )
             for el in _elements(floor):
                 mesh = meshes[el.id]
