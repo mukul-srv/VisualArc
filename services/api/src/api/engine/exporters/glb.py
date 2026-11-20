@@ -32,6 +32,11 @@ def build_scene(project: Project) -> trimesh.Scene:
     for building in project.buildings:
         for floor in building.floors:
             meshes = build_meshes(floor)
+            hosted: dict[str, list[dict]] = {}
+            for o in floor.openings:  # openings have no node; they ride on the host
+                hosted.setdefault(o.wall_id, []).append(
+                    o.model_dump(mode="json", exclude={"span"})
+                )
             for el in _elements(floor):
                 mesh = meshes[el.id]
                 mesh.apply_transform(PLAN_MM_TO_GLTF_M)  # baked: viewer gets metres
@@ -39,6 +44,8 @@ def build_scene(project: Project) -> trimesh.Scene:
                     "floor_id": floor.id,
                     **el.model_dump(mode="json", exclude={"centreline", "polygon"}),
                 }
+                if el.id in hosted:  # key absent otherwise: pre-T12 GLBs unchanged
+                    mesh.metadata["openings"] = hosted[el.id]
                 scene.add_geometry(mesh, node_name=el.id, geom_name=el.id)
     return scene
 
