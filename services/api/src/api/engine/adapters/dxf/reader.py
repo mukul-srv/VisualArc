@@ -67,6 +67,8 @@ def load_doc(path: Path, max_bytes: int = DEFAULTS.max_dxf_bytes):
         raise InputError(f"not a DXF file: {e}") from e
     except (OSError, UnicodeDecodeError) as e:
         raise InputError(f"not a DXF file or unreadable: {e}") from e
+    except StopIteration as e:  # ezdxf's tag loader runs out inside a header
+        raise InputError("corrupt or truncated DXF: unexpected end of file") from e
 
 
 def _ref(e) -> SourceRef:

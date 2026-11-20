@@ -58,3 +58,13 @@ def test_oversized_rejected_and_flag_overrides(tmp_path, capsys) -> None:
     # generous limit: passes the size check (exit 1 = blocking wall-height issue, not 3)
     code, _ = _run(capsys, "interpret", FIXTURE_A, "--max-mb", "100", "--out", out)
     assert code == 1 and out.exists()
+
+
+def test_dxf_truncated_inside_header_is_input_error(tmp_path):
+    from api.engine.adapters.dxf.reader import InputError, load_doc
+
+    src = Path(__file__).resolve().parents[3] / "fixtures" / "input" / "fixture_a.dxf"
+    p = tmp_path / "t.dxf"
+    p.write_bytes(src.read_bytes()[:300])
+    with pytest.raises(InputError):
+        load_doc(p)
