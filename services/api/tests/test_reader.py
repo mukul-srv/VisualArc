@@ -1,11 +1,12 @@
 import json
+import re
 from pathlib import Path
 
 import ezdxf
 import pytest
 
 from api.cli import main
-from api.engine.adapters.dxf.reader import read_dxf
+from api.engine.adapters.dxf.reader import InputError, read_dxf
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures"
 FIXTURE_A = FIXTURES / "input" / "fixture_a.dxf"
@@ -237,3 +238,133 @@ def test_units_cli_exit_codes(tmp_path: Path, capsys):
         )
         == 1
     )
+
+
+# --- B2: unsupported / malformed $INSUNITS ---------------------------------
+def _hdr(tmp_path: Path, raw: str) -> Path:
+    """Valid DXF whose $INSUNITS value is overwritten as raw text."""
+    path = _dxf(tmp_path, 4, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))])
+    new = "$INSUNITS\n 70\n" + raw
+    text = re.sub(r"\$INSUNITS\s+70\s+\S+", lambda _: new, path.read_text())
+    assert new in text
+    path.write_text(text)
+    return path
+
+
+@pytest.mark.parametrize("code", [21, 22, 99, -1, 10**6])
+def test_unsupported_insunits_blocks_cleanly(tmp_path: Path, code):
+    p = read_dxf(_dxf(tmp_path, code, [((0, 0), (1, 0))]), 3000)
+    assert [i.code for i in p.issues] == ["units_unsupported"] and p.buildings == []
+    assert p.issues[0].severity == "blocking" and str(code) in p.issues[0].message
+
+
+def test_unsupported_insunits_with_units_flag_is_conflict(tmp_path: Path):
+    p = read_dxf(_dxf(tmp_path, 21, [((0, 0), (1, 0))]), 3000, user_units="m")
+    assert [i.code for i in p.issues] == ["units_conflict"]
+
+
+@pytest.mark.parametrize("raw", ["abc", "", "9" * 40])
+def test_malformed_insunits_never_tracebacks(tmp_path: Path, raw):
+    path = _hdr(tmp_path, raw)
+    try:
+        p = read_dxf(path, 3000)
+    except InputError:
+        return  # rejected at load: clean exit 3
+    assert [i.code for i in p.issues] == ["units_unsupported"]
+
+
+def test_unsupported_insunits_cli_exit_1(tmp_path: Path, capsys):
+    path = _dxf(tmp_path, 21, [((0, 0), (1, 0))])
+    for cmd in ("interpret", "build"):
+        out = tmp_path / "o" if cmd == "build" else tmp_path / "o.json"
+        with pytest.raises(SystemExit) as e:
+            main([cmd, str(path), "--wall-height", "3000", "--out", str(out)])
+        assert e.value.code == 1
+    assert "units_unsupported" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as e:
+        main(["interpret", str(_hdr(tmp_path, "abc")), "--wall-height", "3000"])
+    assert e.value.code in (1, 3)
+
+
+# --- B1: OCS / extrusion ----------------------------------------------------
+def _ocs_dxf(tmp_path: Path, name, wall_pts, floor_pts, extrusion=(0, 0, 1)) -> Path:
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    attrs = {"extrusion": extrusion}
+    for a, b in [((0, 0), (4000, 0)), ((0, 200), (4000, 200))]:  # wall (lines = WCS)
+        msp.add_line(a, b, dxfattribs={"layer": "A-WALL"})
+    if wall_pts:
+        msp.add_lwpolyline(wall_pts, dxfattribs={"layer": "A-WALL", **attrs})
+    if floor_pts:
+        msp.add_lwpolyline(
+            floor_pts, close=True, dxfattribs={"layer": "A-FLOR", **attrs}
+        )
+    path = tmp_path / f"{name}.dxf"
+    doc.saveas(path)
+    return path
+
+
+def _geom(p):
+    f = p.buildings[0].floors[0]
+    return (
+        sorted(
+            (w.centreline.start, w.centreline.end, w.thickness.value) for w in f.walls
+        ),
+        [b.polygon for b in f.boundaries],
+    )
+
+
+def test_flipped_extrusion_matches_mirrored_points(tmp_path: Path):
+    floor_wcs = [(0, 0), (-4000, 0), (-4000, 3000), (0, 3000)]  # x < 0 in WCS
+    ref = read_dxf(_ocs_dxf(tmp_path, "ref", None, floor_wcs), 3000)
+    # OCS with extrusion (0,0,-1): world x = -ocs x, so author mirrored x
+    floor_ocs = [(-x, y) for x, y in floor_wcs]
+    got = read_dxf(_ocs_dxf(tmp_path, "got", None, floor_ocs, (0, 0, -1)), 3000)
+    assert _geom(got)[1] == _geom(ref)[1] == [floor_wcs]
+
+
+def test_flipped_extrusion_wall_polyline(tmp_path: Path):
+    # closed rectangle outline on A-WALL: two 200 mm faces; x spans 5000..9000 in WCS
+    wcs = [(5000, 1000), (9000, 1000), (9000, 1200), (5000, 1200)]
+
+    def build(name, pts, ext):
+        doc = ezdxf.new("R2018", setup=False)
+        doc.header["$INSUNITS"] = 4
+        doc.modelspace().add_lwpolyline(
+            pts, close=True, dxfattribs={"layer": "A-WALL", "extrusion": ext}
+        )
+        path = tmp_path / f"{name}.dxf"
+        doc.saveas(path)
+        return read_dxf(path, 3000)
+
+    ref = build("wref", wcs, (0, 0, 1))
+    got = build("wgot", [(-x, y) for x, y in wcs], (0, 0, -1))
+    assert _geom(got) == _geom(ref)
+    assert _geom(ref)[0][0][0][0] == pytest.approx(5000)
+
+
+def test_default_extrusion_unchanged_and_elevation_ignored(tmp_path: Path):
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    for a, b in [((0, 0), (4000, 0)), ((0, 200), (4000, 200))]:
+        msp.add_line(a, b, dxfattribs={"layer": "A-WALL"})
+    msp.add_lwpolyline(
+        [(0, 0), (1000, 0), (1000, 1000)],
+        close=True,
+        dxfattribs={"layer": "A-FLOR", "elevation": 500},
+    )
+    path = tmp_path / "e.dxf"
+    doc.saveas(path)
+    p = read_dxf(path, 3000)
+    assert _geom(p)[1] == [[(0, 0), (1000, 0), (1000, 1000)]]
+
+
+def test_non_z_extrusion_flagged_and_skipped(tmp_path: Path):
+    ring = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
+    path = _ocs_dxf(tmp_path, "x", None, ring, (1, 0, 0))
+    p = read_dxf(path, 3000)
+    (i,) = [i for i in p.issues if i.code == "unsupported_extrusion"]
+    assert i.severity == "warning" and i.sources[0].layer == "A-FLOR"
+    assert i.sources[0].entity_handle and _geom(p)[1] == []

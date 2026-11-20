@@ -63,6 +63,26 @@ def _ref(e) -> SourceRef:
     return SourceRef(layer=e.dxf.layer, entity_handle=e.dxf.handle)
 
 
+def _wcs_xy(e) -> list[tuple[float, float]]:
+    """LWPOLYLINE vertices in world XY (applies OCS extrusion and elevation)."""
+    return [(v.x, v.y) for v in e.vertices_in_wcs()]
+
+
+def _extrusion_issue(e, settings: Settings) -> Issue | None:
+    """Only extrusion (0,0,+-1) maps onto the plan; anything else is not guessed."""
+    x, y, _ = e.dxf.extrusion
+    if abs(x) <= settings.tolerance_mm and abs(y) <= settings.tolerance_mm:
+        return None
+    return Issue(
+        code="unsupported_extrusion",
+        severity="warning",
+        message=f"{e.dxftype()} {e.dxf.handle} has extrusion "
+        f"{tuple(e.dxf.extrusion)} not parallel to Z; cannot be placed in "
+        "the plan, ignored",
+        sources=[_ref(e)],
+    )
+
+
 def _arc_issue(e) -> Issue:
     return Issue(
         code="unsupported_arc",
@@ -70,6 +90,28 @@ def _arc_issue(e) -> Issue:
         message=f"{e.dxftype()} {e.dxf.handle} has arc segments; "
         "unsupported in MVP-0, ignored",
         sources=[_ref(e)],
+    )
+
+
+def _unit_label(code: int) -> str:
+    try:
+        return units.unit_name(code)
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+def _units_unsupported(project: dict, value) -> Project:
+    return Project(
+        **project,
+        issues=[
+            Issue(
+                code="units_unsupported",
+                severity="blocking",
+                message=f"header $INSUNITS={value!r} is not a supported unit "
+                "(supported: mm, cm, m, in, ft); supply a drawing in a supported "
+                "unit. --units only applies when the header is missing",
+            )
+        ],
     )
 
 
@@ -88,6 +130,8 @@ def read_dxf(
     project = {"id": path.stem, "source_file": path.name}
 
     insunits = doc.header.get("$INSUNITS", 0)
+    if isinstance(insunits, bool) or not isinstance(insunits, int):
+        return _units_unsupported(project, insunits)
     user_code = USER_UNITS[user_units] if user_units else None
     if user_code and insunits and insunits != user_code:
         return Project(
@@ -97,7 +141,7 @@ def read_dxf(
                     code="units_conflict",
                     severity="blocking",
                     message=f"--units {user_units} conflicts with header $INSUNITS="
-                    f"{insunits} ({units.unit_name(insunits)}); no override, "
+                    f"{insunits} ({_unit_label(insunits)}); no override, "
                     "fix the drawing or drop --units",
                 )
             ],
@@ -116,7 +160,13 @@ def read_dxf(
     # header agrees with --units: stays source_extracted; only a missing header
     # makes the scale depend on the user
     from_user = not insunits
-    k = units.conversion_factor(user_code if from_user else insunits, units.MM)
+    try:
+        k = units.conversion_factor(user_code if from_user else insunits, units.MM)
+    except (
+        TypeError,
+        ValueError,
+    ):  # e.g. 21 US survey feet, or a code not in the table
+        return _units_unsupported(project, insunits)
 
     def mm(p) -> tuple[float, float]:
         return (p[0] * k, p[1] * k)
@@ -143,16 +193,18 @@ def read_dxf(
             segments.append(
                 Segment(e.dxf.handle, e.dxf.layer, mm(e.dxf.start), mm(e.dxf.end))
             )
+        elif kind == "LWPOLYLINE" and (bad := _extrusion_issue(e, settings)):
+            issues.append(bad)
         elif kind == "LWPOLYLINE" and any(b for *_, b in e.get_points("xyb")):
             issues.append(_arc_issue(e))
         elif layer == wall_layer and kind == "LWPOLYLINE":
-            pts = [mm(p) for p in e.get_points("xy")]
+            pts = [mm(p) for p in _wcs_xy(e)]
             ring = pts + pts[:1] if e.closed else pts
             segments += [
                 Segment(e.dxf.handle, e.dxf.layer, a, b) for a, b in pairwise(ring)
             ]
         elif layer == floor_layer and kind == "LWPOLYLINE":
-            pts = [mm(p) for p in e.get_points("xy")]
+            pts = [mm(p) for p in _wcs_xy(e)]
             if len(pts) > 3 and pts[0] == pts[-1]:
                 pts.pop()  # closed by repeating the first point
             elif not e.closed:
