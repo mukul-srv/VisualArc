@@ -100,6 +100,52 @@ def test_ambiguous_triple_line_is_blocking_not_guessed():
     assert "H1" in {s.entity_handle for i in issues for s in i.sources}
 
 
+def _overlaps(issues):
+    return [
+        (i.severity, sorted(s.entity_handle for s in i.sources))
+        for i in issues
+        if i.code == "overlapping_wall_lines"
+    ]
+
+
+@pytest.mark.parametrize(
+    "dup",
+    [
+        ((0, 0), (1000, 0)),  # exact duplicate
+        ((1000, 0), (0, 0)),  # duplicate drawn reversed
+        ((500, 0), (1500, 0)),  # partial overlap
+        ((200, 0), (700, 0)),  # contained
+    ],
+)
+def test_overlapping_collinear_lines_block(dup):
+    _, _, issues = run([((0, 0), (1000, 0)), ((0, 200), (1000, 200)), dup])
+    assert _overlaps(issues) == [("blocking", ["H0", "H2"])]
+
+
+def test_end_to_end_collinear_lines_not_overlap():
+    walls, _, issues = run(
+        [((0, 0), (1000, 0)), ((1000, 0), (2000, 0)), ((0, 200), (2000, 200))]
+    )
+    assert _overlaps(issues) == [] and len(walls) == 2  # split face, one long face
+
+
+def test_unexplained_region_carries_touching_wall_sources():
+    _, junctions, issues = run(
+        [
+            ((0, 0), (1000, 0)),
+            ((0, 200), (1000, 200)),  # the only wall
+            ((1000, 0), (2000, 0)),
+            ((2000, 0), (2000, 900)),
+            ((2000, 900), (1000, 900)),
+            ((1000, 900), (1000, 200)),
+            ((0, 0), (0, 200)),  # region 1000x900 hangs off the wall: too big
+        ]
+    )
+    (region,) = [i for i in issues if i.code == "unexplained_region"]
+    assert junctions == []
+    assert sorted(s.entity_handle for s in region.sources) == ["H0", "H1"]
+
+
 def test_non_orthogonal_and_degenerate_segments_warn():
     _, _, issues = run([((0, 0), (1000, 500)), ((5, 5), (5, 5))])
     assert codes(issues) == ["degenerate_segment", "non_orthogonal_segment"]

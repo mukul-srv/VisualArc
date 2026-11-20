@@ -15,7 +15,9 @@ FIXTURE_B = FIXTURES / "input" / "fixture_b.dxf"
 
 def test_fixture_b_l_shaped_room():
     p = read_dxf(FIXTURE_B, wall_height=3000)
-    assert p.issues == []
+    assert [(i.code, i.severity) for i in p.issues] == [
+        ("elevation_defaulted", "warning")
+    ]
     f = p.buildings[0].floors[0]
     assert len(f.walls) == 6 and len(f.junctions) == 6  # 5 convex + 1 reflex corner
     assert {w.thickness.value for w in f.walls} == {200}

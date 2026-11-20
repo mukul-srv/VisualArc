@@ -446,5 +446,12 @@
       ]
     }
   ],
-  "issues": []
+  "issues": [
+    {
+      "code": "elevation_defaulted",
+      "severity": "warning",
+      "message": "floor elevation assumed 0 mm; DXF plan carries no elevation",
+      "sources": []
+    }
+  ]
 }

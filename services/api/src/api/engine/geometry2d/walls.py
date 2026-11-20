@@ -108,9 +108,22 @@ def pair_walls(
         for b in axial[i + 1 :]:
             if a.axis != b.axis:
                 continue
-            if not thk_min - TOL <= abs(a.c - b.c) <= thk_max + TOL:
+            shared = min(a.hi, b.hi) - max(a.lo, b.lo)
+            if shared <= TOL:  # disjoint or touching end-to-end (split faces)
                 continue
-            if min(a.hi, b.hi) - max(a.lo, b.lo) <= TOL:
+            if abs(a.c - b.c) <= TOL:
+                # duplicate/overlapping line on the same axis: never auto-dedupe
+                issues.append(
+                    Issue(
+                        code="overlapping_wall_lines",
+                        severity="blocking",
+                        message=f"segments {a.seg.handle} and {b.seg.handle} overlap "
+                        f"by {shared:.1f} mm on the same line; remove the duplicate",
+                        sources=[a.seg.ref, b.seg.ref],
+                    )
+                )
+                continue
+            if not thk_min - TOL <= abs(a.c - b.c) <= thk_max + TOL:
                 continue
             cands[a].append(b)
             cands[b].append(a)
@@ -210,6 +223,9 @@ def find_junctions(
                     severity="warning",
                     message=f"region {x0:.1f},{y0:.1f}..{x1:.1f},{y1:.1f} enclosed by wall "
                     "lines but not a wall or junction; left empty",
+                    sources=[
+                        s.ref for w in walls if w.id in touching for s in w.sources
+                    ],
                 )
             )
     return junctions, issues
