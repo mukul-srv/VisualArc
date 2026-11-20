@@ -100,6 +100,7 @@ def test_cli_build(tmp_path):
         "fixture_a.canonical.json",
         "fixture_a.glb",
         "fixture_a.meta.json",
+        "fixture_a.report.md",
     }
 
 
@@ -108,4 +109,7 @@ def test_cli_build_blocked_without_height(tmp_path):
         main(["build", str(FIXTURE_A), "--out", str(tmp_path)])
     assert exc.value.code == 1
     # evidence kept, no GLB produced from an incomplete model
-    assert {p.name for p in tmp_path.iterdir()} == {"fixture_a.canonical.json"}
+    assert {p.name for p in tmp_path.iterdir()} == {
+        "fixture_a.canonical.json",
+        "fixture_a.report.md",
+    }

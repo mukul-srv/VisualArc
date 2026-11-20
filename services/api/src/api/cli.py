@@ -9,7 +9,9 @@ from api.engine.adapters.dxf.reader import (
     InputError,
     read_dxf,
 )
+from api.engine.canonical.model import Project
 from api.engine.exporters.glb import build_meta, build_scene
+from api.engine.exporters.report import build_report
 from api.engine.settings import DEFAULTS
 
 
@@ -110,6 +112,11 @@ def _main(argv: list[str] | None) -> None:
         help="drawing units; required if the DXF has no $INSUNITS, error if it conflicts",
     )
     p.add_argument("--out", type=Path, required=True, help="output directory")
+    p.add_argument(
+        "--expected",
+        type=Path,
+        help="expected canonical JSON; adds an expected-vs-generated table to the report",
+    )
     args = parser.parse_args(argv)
 
     if args.cmd == "build":
@@ -146,13 +153,24 @@ def _build(args) -> None:
     (args.out / f"{stem}.canonical.json").write_text(
         project.model_dump_json(indent=2) + "\n", encoding="utf-8"
     )
+    expected = (
+        Project.model_validate_json(args.expected.read_text(encoding="utf-8"))
+        if args.expected
+        else None
+    )
+    # like the canonical JSON, written even when blocked: it explains why
+    (args.out / f"{stem}.report.md").write_text(
+        build_report(project, expected), encoding="utf-8"
+    )
     _exit_if_blocking([i for i in project.issues if i.severity == "blocking"])
     scene = build_scene(project)
     (args.out / f"{stem}.glb").write_bytes(scene.export(file_type="glb"))
     (args.out / f"{stem}.meta.json").write_text(
         json.dumps(build_meta(project, scene), indent=2) + "\n", encoding="utf-8"
     )
-    print(f"wrote {stem}.canonical.json, {stem}.glb, {stem}.meta.json to {args.out}")
+    print(
+        f"wrote {stem}.canonical.json, {stem}.glb, {stem}.meta.json, {stem}.report.md to {args.out}"
+    )
 
 
 if __name__ == "__main__":

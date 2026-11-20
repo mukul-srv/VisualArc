@@ -162,7 +162,7 @@ def test_build_blocked_on_bow_tie_floor(tmp_path: Path):
     with pytest.raises(SystemExit) as exc:
         main(["build", str(path), "--wall-height", "3000", "--out", str(out)])
     assert exc.value.code == 1
-    assert {p.name for p in out.iterdir()} == {"t.canonical.json"}
+    assert {p.name for p in out.iterdir()} == {"t.canonical.json", "t.report.md"}
 
 
 def test_no_walls_carries_unpaired_refs(tmp_path: Path):

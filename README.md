@@ -25,7 +25,7 @@ npm run dev                            # http://localhost:3000
 
 ## View a model
 ```bash
-# 1. Build (writes <stem>.canonical.json, <stem>.glb, <stem>.meta.json; stem = DXF filename)
+# 1. Build (writes <stem>.canonical.json, <stem>.glb, <stem>.meta.json, <stem>.report.md (add --expected <canonical.json> for expected-vs-generated); stem = DXF filename)
 cd services/api
 uv run api build ../../fixtures/input/fixture_b.dxf --wall-height 3000 --out ../../apps/web/public/models
 # 2. Run the viewer
