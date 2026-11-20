@@ -8,6 +8,7 @@ import { glbUrl, isGenerationId } from "@/lib/api";
 import { resolveStem } from "@/lib/model-stem";
 import { MetadataPanel } from "@/components/MetadataPanel";
 import { openingBox, pickElement } from "@/lib/pick";
+import { collectColliders, makeDoubleSided, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { describeElement, describeOpening, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
 
 // Viewer only renders. GLB is already metres, Y-up (ADR-001); no unit/axis fixes here.
@@ -15,6 +16,8 @@ import { describeElement, describeOpening, type ElementData, type OpeningData, t
 export default function ViewerPage() {
   const mount = useRef<HTMLDivElement>(null);
   const setTop = useRef<(top: boolean) => void>(() => {});
+  const toggleWalk = useRef<() => void>(() => {});
+  const [walking, setWalking] = useState(false);
   const [top, setTopState] = useState(false);
   const [status, setStatus] = useState("loading…");
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -87,7 +90,7 @@ export default function ViewerPage() {
     const canvas = renderer.domElement;
     const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
     const onUp = (e: PointerEvent) => {
-      if (!down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+      if (walk || !down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
       const r = canvas.getBoundingClientRect();
       raycaster.setFromCamera(
         new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
@@ -111,6 +114,98 @@ export default function ViewerPage() {
     };
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointerup", onUp);
+
+    // --- walk mode (T23): WASD/arrows move, drag looks around, Esc or the button exits
+    const keys = new Set<string>();
+    let walk: {
+      pos: THREE.Vector3;
+      floorY: number;
+      yaw: number;
+      pitch: number;
+      colliders: THREE.Mesh[];
+      restore: () => void;
+      saved: { position: THREE.Vector3; target: THREE.Vector3 };
+    } | null = null;
+    let look: { x: number; y: number } | null = null;
+    const aim = () => {
+      if (!walk) return;
+      camera.position.set(walk.pos.x, walk.floorY + WALK.eye, walk.pos.z);
+      camera.lookAt(
+        camera.position.x - Math.sin(walk.yaw) * Math.cos(walk.pitch),
+        camera.position.y + Math.sin(walk.pitch),
+        camera.position.z - Math.cos(walk.yaw) * Math.cos(walk.pitch),
+      );
+    };
+    const exitWalk = () => {
+      if (!walk) return;
+      walk.restore();
+      keys.clear();
+      camera.position.copy(walk.saved.position);
+      controls.target.copy(walk.saved.target);
+      controls.enabled = true;
+      controls.update();
+      walk = null;
+      setWalking(false);
+    };
+    const enterWalk = () => {
+      if (!model) return;
+      const spawn = spawnPoint(model);
+      if (!spawn) return setStatus("walk mode needs a floor boundary in the model");
+      clearSelection();
+      setPanel(null);
+      const colliders = collectColliders(model);
+      walk = {
+        pos: spawn.pos,
+        floorY: spawn.floorY,
+        yaw: 0,
+        pitch: 0,
+        colliders,
+        restore: makeDoubleSided(colliders),
+        saved: { position: camera.position.clone(), target: controls.target.clone() },
+      };
+      controls.enabled = false;
+      setWalking(true);
+      aim();
+    };
+    toggleWalk.current = () => (walk ? exitWalk() : enterWalk());
+    const onKey = (e: KeyboardEvent, down: boolean) => {
+      if (e.key === "Escape" && down) return exitWalk();
+      if (down && walk) keys.add(e.key.toLowerCase());
+      if (!down) keys.delete(e.key.toLowerCase()); // always, or a key released after Esc sticks
+    };
+    const onKeyDown = (e: KeyboardEvent) => onKey(e, true);
+    const onKeyUp = (e: KeyboardEvent) => onKey(e, false);
+    const onLookDown = (e: PointerEvent) => walk && (look = { x: e.clientX, y: e.clientY });
+    const onLookMove = (e: PointerEvent) => {
+      if (!walk || !look) return;
+      walk.yaw -= (e.clientX - look.x) * 0.005;
+      walk.pitch = Math.max(-1.2, Math.min(1.2, walk.pitch - (e.clientY - look.y) * 0.005));
+      look = { x: e.clientX, y: e.clientY };
+      aim();
+    };
+    const onLookUp = () => (look = null);
+    const onBlur = () => keys.clear(); // focus lost while a key is held: no keyup arrives
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    canvas.addEventListener("pointerdown", onLookDown);
+    canvas.addEventListener("pointermove", onLookMove);
+    window.addEventListener("pointerup", onLookUp);
+    let last = performance.now();
+    const stepWalk = () => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (!walk) return;
+      const f = (keys.has("w") || keys.has("arrowup") ? 1 : 0) - (keys.has("s") || keys.has("arrowdown") ? 1 : 0);
+      const r = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0);
+      if (!f && !r) return;
+      const fx = -Math.sin(walk.yaw);
+      const fz = -Math.cos(walk.yaw);
+      const d = new THREE.Vector2(fx * f - fz * r, fz * f + fx * r).normalize().multiplyScalar(WALK.speed * dt);
+      moveWithCollision(walk.pos, d, walk.floorY, walk.colliders);
+      aim();
+    };
 
     let center = new THREE.Vector3();
     let size = 10;
@@ -139,7 +234,10 @@ export default function ViewerPage() {
       () => setStatus(`error: could not load ${url} (missing, unreachable or not a valid GLB). For API models check the backend is running; for ?model= build it and copy it to apps/web/public/models/`),
     );
 
-    renderer.setAnimationLoop(() => renderer.render(scene, camera));
+    renderer.setAnimationLoop(() => {
+      stepWalk();
+      renderer.render(scene, camera);
+    });
     const onResize = () => {
       camera.aspect = el.clientWidth / el.clientHeight;
       camera.updateProjectionMatrix();
@@ -150,6 +248,13 @@ export default function ViewerPage() {
       window.removeEventListener("resize", onResize);
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointerup", onUp);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      canvas.removeEventListener("pointerdown", onLookDown);
+      canvas.removeEventListener("pointermove", onLookMove);
+      window.removeEventListener("pointerup", onLookUp);
+      exitWalk();
       clearSelection();
       renderer.setAnimationLoop(null);
       controls.dispose();
@@ -163,6 +268,7 @@ export default function ViewerPage() {
       <div ref={mount} style={{ width: "100%", height: "100%" }} />
       <div style={{ position: "absolute", top: 12, left: 12, color: "#eee", font: "14px monospace" }}>
         <button
+          disabled={walking}
           onClick={() => {
             setTopState(!top);
             setTop.current(!top);
@@ -170,7 +276,8 @@ export default function ViewerPage() {
         >
           {top ? "Perspective" : "Top-down"}
         </button>{" "}
-        {status}
+        <button onClick={() => toggleWalk.current()}>{walking ? "Exit walk (Esc)" : "Walk"}</button>{" "}
+        {walking ? "WASD/arrows move, drag to look" : status}
       </div>
       <div
         style={{

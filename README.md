@@ -63,6 +63,9 @@ Open http://localhost:3000, choose a DXF, review the preflight issues (blocking 
 warnings), enter wall height (and units if the DXF has none), then Generate. The viewer
 opens at `/viewer?generation=<id>`: orbit with the mouse, **click** a wall, junction, floor
 or opening to see its dimensions, provenance and source entities.
+Press **Walk** for first-person mode: WASD/arrows to move, drag to look, Esc to exit. You
+collide with the real wall meshes, so doors (sill 0) can be walked through and windows
+(sill 0.9 m) cannot.
 
 To view a locally built GLB instead:
 ```bash
@@ -100,6 +103,8 @@ performance debt: `benchmarks/t21-benchmark-report.md`. Re-run with
 - Two plans drawn in one DXF are treated as one floor, silently.
 - API storage is local disk with no expiry; the API processes requests synchronously (no
   job timeout or worker process), so it is for local use, not public hosting.
+- Walk mode probes at fixed heights: a window with a sill below 0.3 m and a head above 1.6 m
+  behaves like a door; no stairs or multi-floor navigation.
 - The viewer is validated by manual inspection and by loading the served GLB in tests; there
   is no automated browser/WebGL test.
 
