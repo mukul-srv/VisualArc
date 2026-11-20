@@ -1,0 +1,996 @@
+{
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD",
+    "logical_cores": 16,
+    "ram_gib": 15.2,
+    "python": "3.12.6",
+    "packages": {
+      "ezdxf": "1.4.5",
+      "shapely": "2.2.0",
+      "trimesh": "5.2.1",
+      "pydantic": "2.14.4"
+    },
+    "git_commit": "3c738e0",
+    "date": "2026-11-20"
+  },
+  "scale": [
+    {
+      "tiles": 1,
+      "grid": "1x1",
+      "dxf_bytes": 27057,
+      "entities": 52,
+      "entity_kinds": {
+        "LINE": 39,
+        "LWPOLYLINE": 10,
+        "ARC": 3
+      },
+      "times_s": {
+        "parse": 0.0175,
+        "read_total": 0.0192,
+        "interpret": 0.0017,
+        "geometry3d": 0.0169,
+        "glb_export": 0.002,
+        "meta": 0.0042,
+        "report": 0.0002,
+        "canonical_json": 0.0001,
+        "total": 0.0425
+      },
+      "peak_rss_mb": 74.1,
+      "glb_bytes": 20600,
+      "canonical_json_bytes": 11489,
+      "report_bytes": 4789,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 10,
+        "junctions": 8,
+        "floor boundaries": 3,
+        "openings": 7
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 350,
+      "time_stats": {
+        "total": {
+          "median": 0.042,
+          "min": 0.04,
+          "max": 0.043
+        },
+        "parse": {
+          "median": 0.008,
+          "min": 0.008,
+          "max": 0.018
+        },
+        "interpret": {
+          "median": 0.011,
+          "min": 0.002,
+          "max": 0.012
+        },
+        "geometry3d": {
+          "median": 0.016,
+          "min": 0.015,
+          "max": 0.017
+        },
+        "glb_export": {
+          "median": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        }
+      },
+      "peak_rss_mb_median": 74.1,
+      "peak_rss_mb_max": 74.1,
+      "runs": 3,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 4,
+      "grid": "2x2",
+      "dxf_bytes": 51817,
+      "entities": 208,
+      "entity_kinds": {
+        "LINE": 156,
+        "LWPOLYLINE": 40,
+        "ARC": 12
+      },
+      "times_s": {
+        "parse": 0.0236,
+        "read_total": 0.1749,
+        "interpret": 0.1513,
+        "geometry3d": 0.0531,
+        "glb_export": 0.006,
+        "meta": 0.0163,
+        "report": 0.0005,
+        "canonical_json": 0.0004,
+        "total": 0.2507
+      },
+      "peak_rss_mb": 75.9,
+      "glb_bytes": 76356,
+      "canonical_json_bytes": 43195,
+      "report_bytes": 13846,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 40,
+        "junctions": 32,
+        "floor boundaries": 12,
+        "openings": 28
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 1400,
+      "time_stats": {
+        "total": {
+          "median": 0.243,
+          "min": 0.24,
+          "max": 0.251
+        },
+        "parse": {
+          "median": 0.015,
+          "min": 0.013,
+          "max": 0.024
+        },
+        "interpret": {
+          "median": 0.154,
+          "min": 0.151,
+          "max": 0.156
+        },
+        "geometry3d": {
+          "median": 0.051,
+          "min": 0.051,
+          "max": 0.053
+        },
+        "glb_export": {
+          "median": 0.006,
+          "min": 0.006,
+          "max": 0.007
+        }
+      },
+      "peak_rss_mb_median": 75.9,
+      "peak_rss_mb_max": 75.9,
+      "runs": 3,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 9,
+      "grid": "3x3",
+      "dxf_bytes": 93852,
+      "entities": 468,
+      "entity_kinds": {
+        "LINE": 351,
+        "LWPOLYLINE": 90,
+        "ARC": 27
+      },
+      "times_s": {
+        "parse": 0.0326,
+        "read_total": 1.2631,
+        "interpret": 1.2306,
+        "geometry3d": 0.1103,
+        "glb_export": 0.0129,
+        "meta": 0.0348,
+        "report": 0.0011,
+        "canonical_json": 0.0007,
+        "total": 1.4222
+      },
+      "peak_rss_mb": 78.8,
+      "glb_bytes": 170104,
+      "canonical_json_bytes": 94086,
+      "report_bytes": 28984,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 90,
+        "junctions": 72,
+        "floor boundaries": 27,
+        "openings": 63
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 3150,
+      "time_stats": {
+        "total": {
+          "median": 1.474,
+          "min": 1.422,
+          "max": 1.611
+        },
+        "parse": {
+          "median": 0.026,
+          "min": 0.023,
+          "max": 0.033
+        },
+        "interpret": {
+          "median": 1.293,
+          "min": 1.231,
+          "max": 1.426
+        },
+        "geometry3d": {
+          "median": 0.11,
+          "min": 0.109,
+          "max": 0.113
+        },
+        "glb_export": {
+          "median": 0.013,
+          "min": 0.012,
+          "max": 0.013
+        }
+      },
+      "peak_rss_mb_median": 78.7,
+      "peak_rss_mb_max": 78.8,
+      "runs": 3,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 16,
+      "grid": "4x4",
+      "dxf_bytes": 152893,
+      "entities": 832,
+      "entity_kinds": {
+        "LINE": 624,
+        "LWPOLYLINE": 160,
+        "ARC": 48
+      },
+      "times_s": {
+        "parse": 0.0449,
+        "read_total": 6.2691,
+        "interpret": 6.2242,
+        "geometry3d": 0.2501,
+        "glb_export": 0.0234,
+        "meta": 0.07,
+        "report": 0.0016,
+        "canonical_json": 0.0012,
+        "total": 6.6143
+      },
+      "peak_rss_mb": 80.9,
+      "glb_bytes": 301480,
+      "canonical_json_bytes": 164453,
+      "report_bytes": 49912,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 160,
+        "junctions": 128,
+        "floor boundaries": 48,
+        "openings": 112
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 5600,
+      "time_stats": {
+        "total": {
+          "median": 6.614,
+          "min": 6.481,
+          "max": 7.227
+        },
+        "parse": {
+          "median": 0.037,
+          "min": 0.036,
+          "max": 0.045
+        },
+        "interpret": {
+          "median": 6.224,
+          "min": 6.137,
+          "max": 6.88
+        },
+        "geometry3d": {
+          "median": 0.224,
+          "min": 0.223,
+          "max": 0.25
+        },
+        "glb_export": {
+          "median": 0.023,
+          "min": 0.022,
+          "max": 0.024
+        }
+      },
+      "peak_rss_mb_median": 81.1,
+      "peak_rss_mb_max": 81.2,
+      "runs": 3,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 25,
+      "grid": "5x5",
+      "dxf_bytes": 228946,
+      "entities": 1300,
+      "entity_kinds": {
+        "LINE": 975,
+        "LWPOLYLINE": 250,
+        "ARC": 75
+      },
+      "times_s": {
+        "parse": 0.0593,
+        "read_total": 23.1495,
+        "interpret": 23.0901,
+        "geometry3d": 0.2932,
+        "glb_export": 0.0344,
+        "meta": 0.0935,
+        "report": 0.0024,
+        "canonical_json": 0.0018,
+        "total": 23.573
+      },
+      "peak_rss_mb": 85.9,
+      "glb_bytes": 470860,
+      "canonical_json_bytes": 255017,
+      "report_bytes": 76816,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 250,
+        "junctions": 200,
+        "floor boundaries": 75,
+        "openings": 175
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 8750,
+      "time_stats": {
+        "total": {
+          "median": 22.777,
+          "min": 22.603,
+          "max": 23.573
+        },
+        "parse": {
+          "median": 0.053,
+          "min": 0.05,
+          "max": 0.059
+        },
+        "interpret": {
+          "median": 22.291,
+          "min": 22.123,
+          "max": 23.09
+        },
+        "geometry3d": {
+          "median": 0.295,
+          "min": 0.293,
+          "max": 0.299
+        },
+        "glb_export": {
+          "median": 0.037,
+          "min": 0.034,
+          "max": 0.039
+        }
+      },
+      "peak_rss_mb_median": 85.8,
+      "peak_rss_mb_max": 85.9,
+      "runs": 3,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 36,
+      "grid": "6x6",
+      "dxf_bytes": 322003,
+      "entities": 1872,
+      "entity_kinds": {
+        "LINE": 1404,
+        "LWPOLYLINE": 360,
+        "ARC": 108
+      },
+      "times_s": {
+        "parse": 0.0819,
+        "read_total": 62.3801,
+        "interpret": 62.2982,
+        "geometry3d": 0.4158,
+        "glb_export": 0.0512,
+        "meta": 0.1353,
+        "report": 0.0034,
+        "canonical_json": 0.0025,
+        "total": 62.9857
+      },
+      "peak_rss_mb": 91.2,
+      "glb_bytes": 677984,
+      "canonical_json_bytes": 365776,
+      "report_bytes": 109700,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 360,
+        "junctions": 288,
+        "floor boundaries": 108,
+        "openings": 252
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 12600,
+      "time_stats": {
+        "total": {
+          "median": 62.986,
+          "min": 62.986,
+          "max": 62.986
+        },
+        "parse": {
+          "median": 0.082,
+          "min": 0.082,
+          "max": 0.082
+        },
+        "interpret": {
+          "median": 62.298,
+          "min": 62.298,
+          "max": 62.298
+        },
+        "geometry3d": {
+          "median": 0.416,
+          "min": 0.416,
+          "max": 0.416
+        },
+        "glb_export": {
+          "median": 0.051,
+          "min": 0.051,
+          "max": 0.051
+        }
+      },
+      "peak_rss_mb_median": 91.2,
+      "peak_rss_mb_max": 91.2,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 49,
+      "grid": "7x7",
+      "dxf_bytes": 432070,
+      "entities": 2548,
+      "entity_kinds": {
+        "LINE": 1911,
+        "LWPOLYLINE": 490,
+        "ARC": 147
+      },
+      "times_s": {
+        "parse": 0.1104,
+        "read_total": 154.9042,
+        "interpret": 154.7938,
+        "geometry3d": 0.5932,
+        "glb_export": 0.0719,
+        "meta": 0.1868,
+        "report": 0.0053,
+        "canonical_json": 0.0036,
+        "total": 155.7614
+      },
+      "peak_rss_mb": 95.8,
+      "glb_bytes": 922232,
+      "canonical_json_bytes": 496727,
+      "report_bytes": 148560,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 490,
+        "junctions": 392,
+        "floor boundaries": 147,
+        "openings": 343
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 17150,
+      "time_stats": {
+        "total": {
+          "median": 155.761,
+          "min": 155.761,
+          "max": 155.761
+        },
+        "parse": {
+          "median": 0.11,
+          "min": 0.11,
+          "max": 0.11
+        },
+        "interpret": {
+          "median": 154.794,
+          "min": 154.794,
+          "max": 154.794
+        },
+        "geometry3d": {
+          "median": 0.593,
+          "min": 0.593,
+          "max": 0.593
+        },
+        "glb_export": {
+          "median": 0.072,
+          "min": 0.072,
+          "max": 0.072
+        }
+      },
+      "peak_rss_mb_median": 95.8,
+      "peak_rss_mb_max": 95.8,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 64,
+      "grid": "8x8",
+      "dxf_bytes": 559147,
+      "entities": 3328,
+      "entity_kinds": {
+        "LINE": 2496,
+        "LWPOLYLINE": 640,
+        "ARC": 192
+      },
+      "times_s": {
+        "parse": 0.1615,
+        "read_total": 339.0454,
+        "interpret": 338.8839,
+        "geometry3d": 0.7425,
+        "glb_export": 0.1402,
+        "meta": 0.2419,
+        "report": 0.0061,
+        "canonical_json": 0.0053,
+        "total": 340.176
+      },
+      "peak_rss_mb": 98.8,
+      "glb_bytes": 1205060,
+      "canonical_json_bytes": 647872,
+      "report_bytes": 193397,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 640,
+        "junctions": 512,
+        "floor boundaries": 192,
+        "openings": 448
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 22400,
+      "time_stats": {
+        "total": {
+          "median": 340.176,
+          "min": 340.176,
+          "max": 340.176
+        },
+        "parse": {
+          "median": 0.162,
+          "min": 0.162,
+          "max": 0.162
+        },
+        "interpret": {
+          "median": 338.884,
+          "min": 338.884,
+          "max": 338.884
+        },
+        "geometry3d": {
+          "median": 0.743,
+          "min": 0.743,
+          "max": 0.743
+        },
+        "glb_export": {
+          "median": 0.14,
+          "min": 0.14,
+          "max": 0.14
+        }
+      },
+      "peak_rss_mb_median": 98.8,
+      "peak_rss_mb_max": 98.8,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 100,
+      "grid": "10x10",
+      "error": "timeout after 1200 s"
+    }
+  ],
+  "extent": [
+    {
+      "offset_mm": 0,
+      "dxf_bytes": 27057,
+      "entities": 52,
+      "entity_kinds": {
+        "LINE": 39,
+        "LWPOLYLINE": 10,
+        "ARC": 3
+      },
+      "times_s": {
+        "parse": 0.0194,
+        "read_total": 0.0219,
+        "interpret": 0.0025,
+        "geometry3d": 0.0182,
+        "glb_export": 0.002,
+        "meta": 0.0043,
+        "report": 0.0002,
+        "canonical_json": 0.0009,
+        "total": 0.0466
+      },
+      "peak_rss_mb": 74.0,
+      "glb_bytes": 20596,
+      "canonical_json_bytes": 11485,
+      "report_bytes": 4785,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 10,
+        "junctions": 8,
+        "floor boundaries": 3,
+        "openings": 7
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 350,
+      "time_stats": {
+        "total": {
+          "median": 0.047,
+          "min": 0.047,
+          "max": 0.047
+        },
+        "parse": {
+          "median": 0.019,
+          "min": 0.019,
+          "max": 0.019
+        },
+        "interpret": {
+          "median": 0.003,
+          "min": 0.003,
+          "max": 0.003
+        },
+        "geometry3d": {
+          "median": 0.018,
+          "min": 0.018,
+          "max": 0.018
+        },
+        "glb_export": {
+          "median": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        }
+      },
+      "peak_rss_mb_median": 74.0,
+      "peak_rss_mb_max": 74.0,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "offset_mm": 100000.0,
+      "dxf_bytes": 27663,
+      "entities": 52,
+      "entity_kinds": {
+        "LINE": 39,
+        "LWPOLYLINE": 10,
+        "ARC": 3
+      },
+      "times_s": {
+        "parse": 0.0195,
+        "read_total": 0.027,
+        "interpret": 0.0075,
+        "geometry3d": 0.0195,
+        "glb_export": 0.0021,
+        "meta": 0.005,
+        "report": 0.0003,
+        "canonical_json": 0.0002,
+        "total": 0.0539
+      },
+      "peak_rss_mb": 73.7,
+      "glb_bytes": 20724,
+      "canonical_json_bytes": 11885,
+      "report_bytes": 4795,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 10,
+        "junctions": 8,
+        "floor boundaries": 3,
+        "openings": 7
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 350,
+      "time_stats": {
+        "total": {
+          "median": 0.054,
+          "min": 0.054,
+          "max": 0.054
+        },
+        "parse": {
+          "median": 0.019,
+          "min": 0.019,
+          "max": 0.019
+        },
+        "interpret": {
+          "median": 0.007,
+          "min": 0.007,
+          "max": 0.007
+        },
+        "geometry3d": {
+          "median": 0.019,
+          "min": 0.019,
+          "max": 0.019
+        },
+        "glb_export": {
+          "median": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        }
+      },
+      "peak_rss_mb_median": 73.7,
+      "peak_rss_mb_max": 73.7,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "offset_mm": 1000000.0,
+      "dxf_bytes": 27905,
+      "entities": 52,
+      "entity_kinds": {
+        "LINE": 39,
+        "LWPOLYLINE": 10,
+        "ARC": 3
+      },
+      "times_s": {
+        "parse": 0.0149,
+        "read_total": 0.0185,
+        "interpret": 0.0036,
+        "geometry3d": 0.0153,
+        "glb_export": 0.0018,
+        "meta": 0.0042,
+        "report": 0.0002,
+        "canonical_json": 0.0001,
+        "total": 0.0399
+      },
+      "peak_rss_mb": 73.9,
+      "glb_bytes": 20784,
+      "canonical_json_bytes": 12043,
+      "report_bytes": 4797,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 10,
+        "junctions": 8,
+        "floor boundaries": 3,
+        "openings": 7
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 350,
+      "time_stats": {
+        "total": {
+          "median": 0.04,
+          "min": 0.04,
+          "max": 0.04
+        },
+        "parse": {
+          "median": 0.015,
+          "min": 0.015,
+          "max": 0.015
+        },
+        "interpret": {
+          "median": 0.004,
+          "min": 0.004,
+          "max": 0.004
+        },
+        "geometry3d": {
+          "median": 0.015,
+          "min": 0.015,
+          "max": 0.015
+        },
+        "glb_export": {
+          "median": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        }
+      },
+      "peak_rss_mb_median": 73.9,
+      "peak_rss_mb_max": 73.9,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "offset_mm": 10000000.0,
+      "dxf_bytes": 28147,
+      "entities": 52,
+      "entity_kinds": {
+        "LINE": 39,
+        "LWPOLYLINE": 10,
+        "ARC": 3
+      },
+      "times_s": {
+        "parse": 0.0152,
+        "read_total": 0.0187,
+        "interpret": 0.0035,
+        "geometry3d": 0.0166,
+        "glb_export": 0.0018,
+        "meta": 0.0043,
+        "report": 0.0002,
+        "canonical_json": 0.0001,
+        "total": 0.0415
+      },
+      "peak_rss_mb": 73.9,
+      "glb_bytes": 20684,
+      "canonical_json_bytes": 12201,
+      "report_bytes": 4799,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 10,
+        "junctions": 8,
+        "floor boundaries": 3,
+        "openings": 7
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 350,
+      "time_stats": {
+        "total": {
+          "median": 0.042,
+          "min": 0.042,
+          "max": 0.042
+        },
+        "parse": {
+          "median": 0.015,
+          "min": 0.015,
+          "max": 0.015
+        },
+        "interpret": {
+          "median": 0.004,
+          "min": 0.004,
+          "max": 0.004
+        },
+        "geometry3d": {
+          "median": 0.017,
+          "min": 0.017,
+          "max": 0.017
+        },
+        "glb_export": {
+          "median": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        }
+      },
+      "peak_rss_mb_median": 73.9,
+      "peak_rss_mb_max": 73.9,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "offset_mm": 100000000.0,
+      "dxf_bytes": 28389,
+      "entities": 52,
+      "entity_kinds": {
+        "LINE": 39,
+        "LWPOLYLINE": 10,
+        "ARC": 3
+      },
+      "times_s": {
+        "parse": 0.0186,
+        "read_total": 0.0193,
+        "interpret": 0.0007,
+        "geometry3d": 0.0161,
+        "glb_export": 0.0019,
+        "meta": 0.0042,
+        "report": 0.0002,
+        "canonical_json": 0.0001,
+        "total": 0.0417
+      },
+      "peak_rss_mb": 73.7,
+      "glb_bytes": 20560,
+      "canonical_json_bytes": 12359,
+      "report_bytes": 4801,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 10,
+        "junctions": 8,
+        "floor boundaries": 3,
+        "openings": 7
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 350,
+      "time_stats": {
+        "total": {
+          "median": 0.042,
+          "min": 0.042,
+          "max": 0.042
+        },
+        "parse": {
+          "median": 0.019,
+          "min": 0.019,
+          "max": 0.019
+        },
+        "interpret": {
+          "median": 0.001,
+          "min": 0.001,
+          "max": 0.001
+        },
+        "geometry3d": {
+          "median": 0.016,
+          "min": 0.016,
+          "max": 0.016
+        },
+        "glb_export": {
+          "median": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        }
+      },
+      "peak_rss_mb_median": 73.7,
+      "peak_rss_mb_max": 73.7,
+      "runs": 1,
+      "all_counts_match": true
+    }
+  ]
+}

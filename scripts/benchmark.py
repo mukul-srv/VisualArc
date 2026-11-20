@@ -69,11 +69,13 @@ def peak_rss_bytes() -> int | None:
 
 def child(dxf: Path, expect_tiles: int) -> dict:
     """One measured pipeline run in this process."""
+    import dataclasses
     from collections import Counter
 
     from api.engine.adapters.dxf.reader import load_doc, read_dxf
     from api.engine.exporters.glb import build_meta, build_scene
     from api.engine.exporters.report import build_report
+    from api.engine.settings import DEFAULTS
 
     if os.environ.get("BENCH_NO_PLUGS"):
         # DIAGNOSTIC ONLY: disables the O(W^3) gap_closed_by_jamb_pair check to expose
@@ -86,13 +88,22 @@ def child(dxf: Path, expect_tiles: int) -> dict:
     clock = time.perf_counter
 
     s = clock()
-    doc = load_doc(dxf)
+    doc = load_doc(dxf, 10**9)
     t["parse"] = clock() - s
     kinds = Counter(e.dxftype() for e in doc.modelspace())
     del doc
 
     s = clock()
-    project = read_dxf(dxf, 3000)
+    # the benchmark deliberately runs ABOVE the enforced limits (they exist because of it)
+    big = 10**9
+    uncapped = dataclasses.replace(
+        DEFAULTS,
+        max_dxf_bytes=big,
+        max_entities=big,
+        max_wall_segments=big,
+        max_opening_markers=big,
+    )
+    project = read_dxf(dxf, 3000, settings=uncapped)
     t["read_total"] = clock() - s
     t["interpret"] = t["read_total"] - t["parse"]  # read_dxf re-parses internally
 
@@ -225,7 +236,7 @@ def main() -> None:
     ap.add_argument("--child", nargs=2, metavar=("DXF", "TILES"))
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--max-seconds", type=float, default=600)
-    ap.add_argument("--out", type=Path, default=HERE.parent / "docs" / "benchmarks")
+    ap.add_argument("--out", type=Path, default=HERE.parent / "benchmarks")
     ap.add_argument(
         "--diagnostic-no-plugs",
         action="store_true",

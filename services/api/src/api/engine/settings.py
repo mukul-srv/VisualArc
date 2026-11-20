@@ -52,9 +52,16 @@ class Settings:
     # silently flattened onto the plan.
     extrusion_tolerance: float = 1e-6
 
-    # Input files larger than this are rejected before parsing (T4).
-    # PROVISIONAL until T21 benchmarks; CLI --max-mb overrides per run.
-    max_dxf_bytes: int = 50 * 1024 * 1024
+    # Input limits (T4, T21a). All PROVISIONAL (approved at MC-8 for the local MVP):
+    # derived from synthetic, regular benchmark fixtures only, not validated against
+    # representative drawings or hosted infrastructure. Interpretation time grows
+    # ~cubically with wall pieces (known debt: docs T21 report), so what is capped is
+    # what drives cost. Rejected before interpretation, as InputError (exit 3 / 422).
+    # File size is a backstop (~170 B/entity in the fixtures); CLI --max-mb overrides.
+    max_dxf_bytes: int = 5 * 1024 * 1024
+    max_entities: int = 5000  # all modelspace entities; backstop
+    max_wall_segments: int = 600  # LINEs + polyline edges on the wall layer (~7 s)
+    max_opening_markers: int = 120  # LWPOLYLINEs on door/window layers (ratio-derived)
 
     # An unmapped_layer issue lists at most this many entity refs per layer (the
     # total count is still in the message) so one noisy layer, e.g. thousands of

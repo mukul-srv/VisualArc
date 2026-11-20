@@ -71,6 +71,42 @@ def load_doc(path: Path, max_bytes: int = DEFAULTS.max_dxf_bytes):
         raise InputError("corrupt or truncated DXF: unexpected end of file") from e
 
 
+def check_complexity(doc, settings: Settings = DEFAULTS) -> None:
+    """Reject drawings above the provisional complexity limits (T21a), BEFORE the
+    expensive interpretation. Counts what drives cost: wall-layer segments (a
+    polyline contributes its edges) and opening markers, plus total entities."""
+    msp = doc.modelspace()
+    if len(msp) > settings.max_entities:
+        raise InputError(
+            f"drawing has {len(msp)} entities, limit is {settings.max_entities} "
+            "(provisional; see the T21 benchmark report)"
+        )
+    opening_layers = {settings.door_layer, settings.window_layer}
+    segments = markers = 0
+    for e in msp:
+        layer, kind = e.dxf.layer.upper(), e.dxftype()
+        if layer == settings.wall_layer:
+            if kind == "LINE":
+                segments += 1
+            elif kind == "LWPOLYLINE":
+                segments += len(e) if e.closed else len(e) - 1
+        elif layer in opening_layers and kind == "LWPOLYLINE":
+            markers += 1
+    for count, limit, what in (
+        (
+            segments,
+            settings.max_wall_segments,
+            f"wall segments on {settings.wall_layer}",
+        ),
+        (markers, settings.max_opening_markers, "opening markers"),
+    ):
+        if count > limit:
+            raise InputError(
+                f"drawing has {count} {what}, limit is {limit} "
+                "(provisional; see the T21 benchmark report)"
+            )
+
+
 def _ref(e) -> SourceRef:
     return SourceRef(layer=e.dxf.layer, entity_handle=e.dxf.handle)
 
@@ -157,6 +193,7 @@ def read_dxf(
     if window_sill is not None and window_sill < 0:
         raise ValueError(f"window sill must be >= 0 mm, got {window_sill}")
     doc = load_doc(path, settings.max_dxf_bytes if max_bytes is None else max_bytes)
+    check_complexity(doc, settings)
     wall_layer, floor_layer = settings.wall_layer, settings.floor_layer
     ref_cap = settings.unmapped_ref_cap
     project = {"id": path.stem, "source_file": path.name}

@@ -1,0 +1,470 @@
+{
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD",
+    "logical_cores": 16,
+    "ram_gib": 15.2,
+    "python": "3.12.6",
+    "packages": {
+      "ezdxf": "1.4.5",
+      "shapely": "2.2.0",
+      "trimesh": "5.2.1",
+      "pydantic": "2.14.4"
+    },
+    "git_commit": "3c738e0",
+    "date": "2026-11-20"
+  },
+  "scale": [
+    {
+      "tiles": 4,
+      "grid": "2x2",
+      "dxf_bytes": 51817,
+      "entities": 208,
+      "entity_kinds": {
+        "LINE": 156,
+        "LWPOLYLINE": 40,
+        "ARC": 12
+      },
+      "times_s": {
+        "parse": 0.0242,
+        "read_total": 0.0915,
+        "interpret": 0.0673,
+        "geometry3d": 0.0519,
+        "glb_export": 0.0059,
+        "meta": 0.0185,
+        "report": 0.0005,
+        "canonical_json": 0.0004,
+        "total": 0.1683
+      },
+      "peak_rss_mb": 75.8,
+      "glb_bytes": 76356,
+      "canonical_json_bytes": 43195,
+      "report_bytes": 13846,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 40,
+        "junctions": 32,
+        "floor boundaries": 12,
+        "openings": 28
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 1400,
+      "time_stats": {
+        "total": {
+          "median": 0.168,
+          "min": 0.168,
+          "max": 0.168
+        },
+        "parse": {
+          "median": 0.024,
+          "min": 0.024,
+          "max": 0.024
+        },
+        "interpret": {
+          "median": 0.067,
+          "min": 0.067,
+          "max": 0.067
+        },
+        "geometry3d": {
+          "median": 0.052,
+          "min": 0.052,
+          "max": 0.052
+        },
+        "glb_export": {
+          "median": 0.006,
+          "min": 0.006,
+          "max": 0.006
+        }
+      },
+      "peak_rss_mb_median": 75.8,
+      "peak_rss_mb_max": 75.8,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 16,
+      "grid": "4x4",
+      "dxf_bytes": 152893,
+      "entities": 832,
+      "entity_kinds": {
+        "LINE": 624,
+        "LWPOLYLINE": 160,
+        "ARC": 48
+      },
+      "times_s": {
+        "parse": 0.0443,
+        "read_total": 1.1226,
+        "interpret": 1.0783,
+        "geometry3d": 0.2318,
+        "glb_export": 0.0239,
+        "meta": 0.0618,
+        "report": 0.0015,
+        "canonical_json": 0.0011,
+        "total": 1.4416
+      },
+      "peak_rss_mb": 81.3,
+      "glb_bytes": 301480,
+      "canonical_json_bytes": 164453,
+      "report_bytes": 49912,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 160,
+        "junctions": 128,
+        "floor boundaries": 48,
+        "openings": 112
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 5600,
+      "time_stats": {
+        "total": {
+          "median": 1.442,
+          "min": 1.442,
+          "max": 1.442
+        },
+        "parse": {
+          "median": 0.044,
+          "min": 0.044,
+          "max": 0.044
+        },
+        "interpret": {
+          "median": 1.078,
+          "min": 1.078,
+          "max": 1.078
+        },
+        "geometry3d": {
+          "median": 0.232,
+          "min": 0.232,
+          "max": 0.232
+        },
+        "glb_export": {
+          "median": 0.024,
+          "min": 0.024,
+          "max": 0.024
+        }
+      },
+      "peak_rss_mb_median": 81.3,
+      "peak_rss_mb_max": 81.3,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 36,
+      "grid": "6x6",
+      "dxf_bytes": 322003,
+      "entities": 1872,
+      "entity_kinds": {
+        "LINE": 1404,
+        "LWPOLYLINE": 360,
+        "ARC": 108
+      },
+      "times_s": {
+        "parse": 0.0854,
+        "read_total": 5.7792,
+        "interpret": 5.6938,
+        "geometry3d": 0.4372,
+        "glb_export": 0.0525,
+        "meta": 0.1409,
+        "report": 0.0037,
+        "canonical_json": 0.0027,
+        "total": 6.4135
+      },
+      "peak_rss_mb": 91.6,
+      "glb_bytes": 677984,
+      "canonical_json_bytes": 365776,
+      "report_bytes": 109700,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 360,
+        "junctions": 288,
+        "floor boundaries": 108,
+        "openings": 252
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 12600,
+      "time_stats": {
+        "total": {
+          "median": 6.413,
+          "min": 6.413,
+          "max": 6.413
+        },
+        "parse": {
+          "median": 0.085,
+          "min": 0.085,
+          "max": 0.085
+        },
+        "interpret": {
+          "median": 5.694,
+          "min": 5.694,
+          "max": 5.694
+        },
+        "geometry3d": {
+          "median": 0.437,
+          "min": 0.437,
+          "max": 0.437
+        },
+        "glb_export": {
+          "median": 0.052,
+          "min": 0.052,
+          "max": 0.052
+        }
+      },
+      "peak_rss_mb_median": 91.6,
+      "peak_rss_mb_max": 91.6,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 64,
+      "grid": "8x8",
+      "dxf_bytes": 559147,
+      "entities": 3328,
+      "entity_kinds": {
+        "LINE": 2496,
+        "LWPOLYLINE": 640,
+        "ARC": 192
+      },
+      "times_s": {
+        "parse": 0.1418,
+        "read_total": 20.2517,
+        "interpret": 20.1099,
+        "geometry3d": 0.7774,
+        "glb_export": 0.1503,
+        "meta": 0.2493,
+        "report": 0.006,
+        "canonical_json": 0.0045,
+        "total": 21.4346
+      },
+      "peak_rss_mb": 100.8,
+      "glb_bytes": 1205060,
+      "canonical_json_bytes": 647872,
+      "report_bytes": 193397,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 640,
+        "junctions": 512,
+        "floor boundaries": 192,
+        "openings": 448
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 22400,
+      "time_stats": {
+        "total": {
+          "median": 21.435,
+          "min": 21.435,
+          "max": 21.435
+        },
+        "parse": {
+          "median": 0.142,
+          "min": 0.142,
+          "max": 0.142
+        },
+        "interpret": {
+          "median": 20.11,
+          "min": 20.11,
+          "max": 20.11
+        },
+        "geometry3d": {
+          "median": 0.777,
+          "min": 0.777,
+          "max": 0.777
+        },
+        "glb_export": {
+          "median": 0.15,
+          "min": 0.15,
+          "max": 0.15
+        }
+      },
+      "peak_rss_mb_median": 100.8,
+      "peak_rss_mb_max": 100.8,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 100,
+      "grid": "10x10",
+      "dxf_bytes": 866081,
+      "entities": 5200,
+      "entity_kinds": {
+        "LINE": 3900,
+        "LWPOLYLINE": 1000,
+        "ARC": 300
+      },
+      "times_s": {
+        "parse": 0.2216,
+        "read_total": 53.7697,
+        "interpret": 53.5481,
+        "geometry3d": 1.3799,
+        "glb_export": 0.1868,
+        "meta": 0.4643,
+        "report": 0.0164,
+        "canonical_json": 0.0109,
+        "total": 55.817
+      },
+      "peak_rss_mb": 117.5,
+      "glb_bytes": 1886536,
+      "canonical_json_bytes": 1012250,
+      "report_bytes": 303448,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 1000,
+        "junctions": 800,
+        "floor boundaries": 300,
+        "openings": 700
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 35000,
+      "time_stats": {
+        "total": {
+          "median": 55.817,
+          "min": 55.817,
+          "max": 55.817
+        },
+        "parse": {
+          "median": 0.222,
+          "min": 0.222,
+          "max": 0.222
+        },
+        "interpret": {
+          "median": 53.548,
+          "min": 53.548,
+          "max": 53.548
+        },
+        "geometry3d": {
+          "median": 1.38,
+          "min": 1.38,
+          "max": 1.38
+        },
+        "glb_export": {
+          "median": 0.187,
+          "min": 0.187,
+          "max": 0.187
+        }
+      },
+      "peak_rss_mb_median": 117.5,
+      "peak_rss_mb_max": 117.5,
+      "runs": 1,
+      "all_counts_match": true
+    },
+    {
+      "tiles": 144,
+      "grid": "12x12",
+      "dxf_bytes": 1244599,
+      "entities": 7488,
+      "entity_kinds": {
+        "LINE": 5616,
+        "LWPOLYLINE": 1440,
+        "ARC": 432
+      },
+      "times_s": {
+        "parse": 0.3548,
+        "read_total": 124.7819,
+        "interpret": 124.4271,
+        "geometry3d": 1.7383,
+        "glb_export": 0.2838,
+        "meta": 0.556,
+        "report": 0.0148,
+        "canonical_json": 0.013,
+        "total": 127.3747
+      },
+      "peak_rss_mb": 136.1,
+      "glb_bytes": 2723628,
+      "canonical_json_bytes": 1461823,
+      "report_bytes": 441011,
+      "issues": {
+        "warning": 4
+      },
+      "issue_codes": {
+        "opening_symbol_ignored": 1,
+        "opening_dimension_defaulted": 2,
+        "elevation_defaulted": 1
+      },
+      "counts": {
+        "walls": 1440,
+        "junctions": 1152,
+        "floor boundaries": 432,
+        "openings": 1008
+      },
+      "counts_match_expected": true,
+      "max_thickness_error_mm": 0.0,
+      "all_solids_watertight": true,
+      "triangles": 50400,
+      "time_stats": {
+        "total": {
+          "median": 127.375,
+          "min": 127.375,
+          "max": 127.375
+        },
+        "parse": {
+          "median": 0.355,
+          "min": 0.355,
+          "max": 0.355
+        },
+        "interpret": {
+          "median": 124.427,
+          "min": 124.427,
+          "max": 124.427
+        },
+        "geometry3d": {
+          "median": 1.738,
+          "min": 1.738,
+          "max": 1.738
+        },
+        "glb_export": {
+          "median": 0.284,
+          "min": 0.284,
+          "max": 0.284
+        }
+      },
+      "peak_rss_mb_median": 136.1,
+      "peak_rss_mb_max": 136.1,
+      "runs": 1,
+      "all_counts_match": true
+    }
+  ],
+  "extent": []
+}

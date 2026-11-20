@@ -24,7 +24,10 @@ def test_defaults_match_document_08():
         "wall_thickness_max_mm": 600.0,
         "tolerance_mm": 1e-6,
         "extrusion_tolerance": 1e-6,
-        "max_dxf_bytes": 50 * 2**20,
+        "max_dxf_bytes": 5 * 2**20,
+        "max_entities": 5000,
+        "max_wall_segments": 600,
+        "max_opening_markers": 120,
         "unmapped_ref_cap": 20,
     }
     with pytest.raises(dataclasses.FrozenInstanceError):
