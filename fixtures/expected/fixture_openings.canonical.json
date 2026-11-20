@@ -1,0 +1,1209 @@
+{
+  "schema_version": "0.3.0",
+  "id": "fixture_openings",
+  "units": "mm",
+  "source_file": "fixture_openings.dxf",
+  "buildings": [
+    {
+      "id": "bldg-0",
+      "floors": [
+        {
+          "id": "floor-0",
+          "name": "Level 0",
+          "elevation": {
+            "value": 0.0,
+            "unit": "mm",
+            "source": "defaulted"
+          },
+          "walls": [
+            {
+              "id": "wall-001",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  200.0,
+                  100.0
+                ],
+                "end": [
+                  3200.0,
+                  100.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "33"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "37"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "34"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "38"
+                }
+              ]
+            },
+            {
+              "id": "wall-002",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  3300.0,
+                  100.0
+                ],
+                "end": [
+                  6300.0,
+                  100.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "34"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "39"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "35"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3A"
+                }
+              ]
+            },
+            {
+              "id": "wall-003",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  6400.0,
+                  100.0
+                ],
+                "end": [
+                  9400.0,
+                  100.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "35"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3B"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "36"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3C"
+                }
+              ]
+            },
+            {
+              "id": "wall-004",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  100.0,
+                  200.0
+                ],
+                "end": [
+                  100.0,
+                  3800.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "41"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "43"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "42"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "44"
+                }
+              ]
+            },
+            {
+              "id": "wall-005",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  3250.0,
+                  200.0
+                ],
+                "end": [
+                  3250.0,
+                  3800.0
+                ]
+              },
+              "thickness": {
+                "value": 100.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "49"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "4B"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "4A"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "4C"
+                }
+              ]
+            },
+            {
+              "id": "wall-006",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  6350.0,
+                  200.0
+                ],
+                "end": [
+                  6350.0,
+                  3800.0
+                ]
+              },
+              "thickness": {
+                "value": 100.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "4D"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "4F"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "4E"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "50"
+                }
+              ]
+            },
+            {
+              "id": "wall-007",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  9500.0,
+                  200.0
+                ],
+                "end": [
+                  9500.0,
+                  3800.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "45"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "47"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "46"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "48"
+                }
+              ]
+            },
+            {
+              "id": "wall-008",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  200.0,
+                  3900.0
+                ],
+                "end": [
+                  3200.0,
+                  3900.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3D"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "40"
+                }
+              ]
+            },
+            {
+              "id": "wall-009",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  3300.0,
+                  3900.0
+                ],
+                "end": [
+                  6300.0,
+                  3900.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3E"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "40"
+                }
+              ]
+            },
+            {
+              "id": "wall-010",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  6400.0,
+                  3900.0
+                ],
+                "end": [
+                  9400.0,
+                  3900.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3F"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "40"
+                }
+              ]
+            }
+          ],
+          "junctions": [
+            {
+              "id": "junction-001",
+              "type": "junction",
+              "polygon": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  200.0,
+                  0.0
+                ],
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  0.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-001",
+                "wall-004"
+              ]
+            },
+            {
+              "id": "junction-002",
+              "type": "junction",
+              "polygon": [
+                [
+                  3200.0,
+                  0.0
+                ],
+                [
+                  3300.0,
+                  0.0
+                ],
+                [
+                  3300.0,
+                  200.0
+                ],
+                [
+                  3200.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-001",
+                "wall-002",
+                "wall-005"
+              ]
+            },
+            {
+              "id": "junction-003",
+              "type": "junction",
+              "polygon": [
+                [
+                  6300.0,
+                  0.0
+                ],
+                [
+                  6400.0,
+                  0.0
+                ],
+                [
+                  6400.0,
+                  200.0
+                ],
+                [
+                  6300.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-002",
+                "wall-003",
+                "wall-006"
+              ]
+            },
+            {
+              "id": "junction-004",
+              "type": "junction",
+              "polygon": [
+                [
+                  9400.0,
+                  0.0
+                ],
+                [
+                  9600.0,
+                  0.0
+                ],
+                [
+                  9600.0,
+                  200.0
+                ],
+                [
+                  9400.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-003",
+                "wall-007"
+              ]
+            },
+            {
+              "id": "junction-005",
+              "type": "junction",
+              "polygon": [
+                [
+                  0.0,
+                  3800.0
+                ],
+                [
+                  200.0,
+                  3800.0
+                ],
+                [
+                  200.0,
+                  4000.0
+                ],
+                [
+                  0.0,
+                  4000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-004",
+                "wall-008"
+              ]
+            },
+            {
+              "id": "junction-006",
+              "type": "junction",
+              "polygon": [
+                [
+                  3200.0,
+                  3800.0
+                ],
+                [
+                  3300.0,
+                  3800.0
+                ],
+                [
+                  3300.0,
+                  4000.0
+                ],
+                [
+                  3200.0,
+                  4000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-005",
+                "wall-008",
+                "wall-009"
+              ]
+            },
+            {
+              "id": "junction-007",
+              "type": "junction",
+              "polygon": [
+                [
+                  6300.0,
+                  3800.0
+                ],
+                [
+                  6400.0,
+                  3800.0
+                ],
+                [
+                  6400.0,
+                  4000.0
+                ],
+                [
+                  6300.0,
+                  4000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-006",
+                "wall-009",
+                "wall-010"
+              ]
+            },
+            {
+              "id": "junction-008",
+              "type": "junction",
+              "polygon": [
+                [
+                  9400.0,
+                  3800.0
+                ],
+                [
+                  9600.0,
+                  3800.0
+                ],
+                [
+                  9600.0,
+                  4000.0
+                ],
+                [
+                  9400.0,
+                  4000.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-007",
+                "wall-010"
+              ]
+            }
+          ],
+          "boundaries": [
+            {
+              "id": "fb-001",
+              "type": "floor_boundary",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  3200.0,
+                  200.0
+                ],
+                [
+                  3200.0,
+                  3800.0
+                ],
+                [
+                  200.0,
+                  3800.0
+                ]
+              ],
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "64"
+                }
+              ]
+            },
+            {
+              "id": "fb-002",
+              "type": "floor_boundary",
+              "polygon": [
+                [
+                  3300.0,
+                  200.0
+                ],
+                [
+                  6300.0,
+                  200.0
+                ],
+                [
+                  6300.0,
+                  3800.0
+                ],
+                [
+                  3300.0,
+                  3800.0
+                ]
+              ],
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "65"
+                }
+              ]
+            },
+            {
+              "id": "fb-003",
+              "type": "floor_boundary",
+              "polygon": [
+                [
+                  6400.0,
+                  200.0
+                ],
+                [
+                  9400.0,
+                  200.0
+                ],
+                [
+                  9400.0,
+                  3800.0
+                ],
+                [
+                  6400.0,
+                  3800.0
+                ]
+              ],
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "66"
+                }
+              ]
+            }
+          ],
+          "openings": [
+            {
+              "id": "opening-001",
+              "type": "opening",
+              "kind": "window",
+              "wall_id": "wall-001",
+              "span": {
+                "kind": "line",
+                "start": [
+                  1200.0,
+                  100.0
+                ],
+                "end": [
+                  1700.0,
+                  100.0
+                ]
+              },
+              "offset": {
+                "value": 1000.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "width": {
+                "value": 500.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 1200.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sill_height": {
+                "value": 900.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-GLAZ",
+                  "entity_handle": "51"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "52"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "53"
+                }
+              ]
+            },
+            {
+              "id": "opening-002",
+              "type": "opening",
+              "kind": "window",
+              "wall_id": "wall-002",
+              "span": {
+                "kind": "line",
+                "start": [
+                  4400.0,
+                  100.0
+                ],
+                "end": [
+                  5600.0,
+                  100.0
+                ]
+              },
+              "offset": {
+                "value": 1100.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "width": {
+                "value": 1200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 1200.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sill_height": {
+                "value": 900.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-GLAZ",
+                  "entity_handle": "54"
+                }
+              ]
+            },
+            {
+              "id": "opening-003",
+              "type": "opening",
+              "kind": "door",
+              "wall_id": "wall-003",
+              "span": {
+                "kind": "line",
+                "start": [
+                  7500.0,
+                  100.0
+                ],
+                "end": [
+                  8400.0,
+                  100.0
+                ]
+              },
+              "offset": {
+                "value": 1100.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "width": {
+                "value": 900.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 2100.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sill_height": {
+                "value": 0.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-DOOR",
+                  "entity_handle": "55"
+                }
+              ]
+            },
+            {
+              "id": "opening-004",
+              "type": "opening",
+              "kind": "door",
+              "wall_id": "wall-005",
+              "span": {
+                "kind": "line",
+                "start": [
+                  3250.0,
+                  1000.0
+                ],
+                "end": [
+                  3250.0,
+                  1900.0
+                ]
+              },
+              "offset": {
+                "value": 800.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "width": {
+                "value": 900.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 2100.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sill_height": {
+                "value": 0.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-DOOR",
+                  "entity_handle": "56"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "57"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "58"
+                }
+              ]
+            },
+            {
+              "id": "opening-005",
+              "type": "opening",
+              "kind": "window",
+              "wall_id": "wall-004",
+              "span": {
+                "kind": "line",
+                "start": [
+                  100.0,
+                  1500.0
+                ],
+                "end": [
+                  100.0,
+                  2400.0
+                ]
+              },
+              "offset": {
+                "value": 1300.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "width": {
+                "value": 900.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 1200.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sill_height": {
+                "value": 900.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-GLAZ",
+                  "entity_handle": "59"
+                }
+              ]
+            },
+            {
+              "id": "opening-006",
+              "type": "opening",
+              "kind": "window",
+              "wall_id": "wall-007",
+              "span": {
+                "kind": "line",
+                "start": [
+                  9500.0,
+                  1500.0
+                ],
+                "end": [
+                  9500.0,
+                  2700.0
+                ]
+              },
+              "offset": {
+                "value": 1300.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "width": {
+                "value": 1200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 1200.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sill_height": {
+                "value": 900.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-GLAZ",
+                  "entity_handle": "5A"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "5B"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "5C"
+                }
+              ]
+            },
+            {
+              "id": "opening-007",
+              "type": "opening",
+              "kind": "door",
+              "wall_id": "wall-006",
+              "span": {
+                "kind": "line",
+                "start": [
+                  6350.0,
+                  2000.0
+                ],
+                "end": [
+                  6350.0,
+                  2800.0
+                ]
+              },
+              "offset": {
+                "value": 1800.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "width": {
+                "value": 800.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 2100.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sill_height": {
+                "value": 0.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-DOOR",
+                  "entity_handle": "5D"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "code": "opening_symbol_ignored",
+      "severity": "warning",
+      "message": "opening layer A-DOOR: ignored decorative 3 ARC, 3 LINE (swings, leaves, glass, tags are never geometry)",
+      "sources": [
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "5E"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "5F"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "60"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "61"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "62"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "63"
+        }
+      ]
+    },
+    {
+      "code": "opening_dimension_defaulted",
+      "severity": "warning",
+      "message": "3 door opening(s): height 2100 mm, sill 0 mm from provisional Settings defaults (not in the DXF)",
+      "sources": [
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "55"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "56"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-DOOR",
+          "entity_handle": "5D"
+        }
+      ]
+    },
+    {
+      "code": "opening_dimension_defaulted",
+      "severity": "warning",
+      "message": "4 window opening(s): height 1200 mm, sill 900 mm from provisional Settings defaults (not in the DXF)",
+      "sources": [
+        {
+          "format": "dxf",
+          "layer": "A-GLAZ",
+          "entity_handle": "51"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-GLAZ",
+          "entity_handle": "54"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-GLAZ",
+          "entity_handle": "59"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-GLAZ",
+          "entity_handle": "5A"
+        }
+      ]
+    },
+    {
+      "code": "elevation_defaulted",
+      "severity": "warning",
+      "message": "floor elevation assumed 0 mm; DXF plan carries no elevation",
+      "sources": []
+    }
+  ]
+}

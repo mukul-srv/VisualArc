@@ -1,9 +1,12 @@
 """DXF -> canonical Project, MVP-0 convention.
 
 Walls = paired parallel LINE/LWPOLYLINE segments on A-WALL; floors = closed
-LWPOLYLINE on A-FLOR. Everything is converted to mm via $INSUNITS.
+LWPOLYLINE on A-FLOR; openings = closed rectangular LWPOLYLINE markers on
+A-DOOR/A-GLAZ filling wall gaps (ADR-002). Everything is converted to mm via
+$INSUNITS.
 """
 
+import math
 from collections import Counter
 from itertools import pairwise
 from pathlib import Path
@@ -24,7 +27,14 @@ from api.engine.canonical.model import (
     Wall,
 )
 from api.engine.geometry2d.floor import floor_issue
-from api.engine.geometry2d.walls import Segment, find_junctions, pair_walls
+from api.engine.geometry2d.openings import (
+    Marker,
+    build_openings,
+    marker_rect,
+    on_marker_boundary,
+    resolve_openings,
+)
+from api.engine.geometry2d.walls import Segment
 from api.engine.settings import DEFAULTS, Settings
 
 # user-facing --units choices -> $INSUNITS code (kept small and explicit)
@@ -86,6 +96,12 @@ def _extrusion_issue(e, settings: Settings) -> Issue | None:
     )
 
 
+def _is_closed(e, tol: float) -> bool:
+    """Closed flag, or first vertex repeated at the end."""
+    pts = e.get_points("xy")
+    return bool(e.closed) or (len(pts) > 1 and math.dist(pts[0], pts[-1]) <= tol)
+
+
 def _arc_issue(e) -> Issue:
     return Issue(
         code="unsupported_arc",
@@ -124,10 +140,20 @@ def read_dxf(
     wall_height: float | None = None,
     max_bytes: int | None = None,
     user_units: str | None = None,
+    door_height: float | None = None,
+    window_height: float | None = None,
+    window_sill: float | None = None,
     settings: Settings = DEFAULTS,
 ) -> Project:
-    if wall_height is not None and wall_height <= 0:
-        raise ValueError(f"wall height must be > 0 mm, got {wall_height}")
+    for name, v in (
+        ("wall height", wall_height),
+        ("door height", door_height),
+        ("window height", window_height),
+    ):
+        if v is not None and v <= 0:
+            raise ValueError(f"{name} must be > 0 mm, got {v}")
+    if window_sill is not None and window_sill < 0:
+        raise ValueError(f"window sill must be >= 0 mm, got {window_sill}")
     doc = load_doc(path, settings.max_dxf_bytes if max_bytes is None else max_bytes)
     wall_layer, floor_layer = settings.wall_layer, settings.floor_layer
     ref_cap = settings.unmapped_ref_cap
@@ -188,8 +214,53 @@ def read_dxf(
     segments: list[Segment] = []
     boundaries: list[FloorBoundary] = []
     unmapped: dict[str, list] = {}  # layer -> entities, in drawing order
+    opening_kind = {settings.door_layer: "door", settings.window_layer: "window"}
+    markers: list[Marker] = []
+    decorative: dict[str, list] = {}  # opening layer -> ignored symbol entities
+    swings = []  # ARCs on the door layer (orphan check)
     for e in doc.modelspace():
         layer, kind = e.dxf.layer.upper(), e.dxftype()
+        if layer in opening_kind:  # ADR-002 §2
+            if kind == "INSERT":
+                issues.append(
+                    Issue(
+                        code="unsupported_opening_block",
+                        severity="blocking",
+                        message=f"INSERT {e.dxf.handle} (block {e.dxf.name}) on "
+                        f"{e.dxf.layer}: opening blocks are not read; draw a closed "
+                        "rectangular LWPOLYLINE marker filling the wall gap",
+                        sources=[_ref(e)],
+                    )
+                )
+            elif kind == "LWPOLYLINE" and _is_closed(e, settings.tolerance_mm):
+                pts = [mm(p) for p in _wcs_xy(e)]
+                if math.dist(pts[0], pts[-1]) <= settings.tolerance_mm:
+                    pts.pop()  # closed by repeating the first vertex
+                rect = (
+                    None
+                    if _extrusion_issue(e, settings)
+                    or any(b for *_, b in e.get_points("xyb"))
+                    else marker_rect(pts, settings.tolerance_mm)
+                )
+                if rect is None:
+                    issues.append(
+                        Issue(
+                            code="invalid_opening_marker",
+                            severity="blocking",
+                            message=f"closed LWPOLYLINE {e.dxf.handle} on "
+                            f"{e.dxf.layer} is not an opening marker: needs exactly "
+                            "4 distinct vertices, axis-aligned edges, no bulges, "
+                            "extrusion parallel to Z",
+                            sources=[_ref(e)],
+                        )
+                    )
+                else:
+                    markers.append(Marker(opening_kind[layer], _ref(e), rect))
+            else:
+                decorative.setdefault(e.dxf.layer, []).append(e)
+                if kind == "ARC" and layer == settings.door_layer:
+                    swings.append(e)
+            continue
         if layer not in (wall_layer, floor_layer):
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
@@ -256,10 +327,36 @@ def read_dxf(
                 sources=[_ref(e) for e in ents[:ref_cap]],
             )
         )
+    for name, ents in decorative.items():
+        counts = Counter(e.dxftype() for e in ents)
+        listed = ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
+        more = f"; first {ref_cap} of {len(ents)} listed" if len(ents) > ref_cap else ""
+        issues.append(
+            Issue(
+                code="opening_symbol_ignored",
+                severity="warning",
+                message=f"opening layer {name}: ignored decorative {listed} "
+                f"(swings, leaves, glass, tags are never geometry){more}",
+                sources=[_ref(e) for e in ents[:ref_cap]],
+            )
+        )
+    for e in swings:
+        centre = mm(e.ocs().to_wcs(e.dxf.center))
+        if not on_marker_boundary(centre, markers, settings.tolerance_mm):
+            issues.append(
+                Issue(
+                    code="orphan_door_swing",
+                    severity="warning",
+                    message=f"door-layer ARC {e.dxf.handle} centred at "
+                    f"({centre[0]:g}, {centre[1]:g}) is not on any opening marker; "
+                    "possible unmarked door",
+                    sources=[_ref(e)],
+                )
+            )
 
-    paired, pair_issues = pair_walls(segments, settings)
-    pieces, junction_issues = find_junctions(segments, paired, settings)
-    issues += pair_issues + junction_issues
+    res = resolve_openings(segments, markers, settings)
+    paired, pieces = res.walls, res.junctions
+    issues += res.issues
     if not paired:
         issues.append(
             Issue(
@@ -267,7 +364,7 @@ def read_dxf(
                 severity="blocking",
                 message=f"no paired wall lines found on {wall_layer}",
                 # every usable segment is unpaired here; polyline pieces share a ref
-                sources=list(dict.fromkeys(s.ref for s in segments)),
+                sources=list(dict.fromkeys(s.ref for s in res.segments)),
             )
         )
 
@@ -282,6 +379,14 @@ def read_dxf(
                 message="DXF has no wall height; supply --wall-height (mm)",
             )
         )
+    openings, opening_issues = build_openings(
+        res.openings,
+        wall_height,
+        {"door": (door_height, None), "window": (window_height, window_sill)},
+        from_user,
+        settings,
+    )
+    issues += opening_issues
 
     walls = [
         Wall(
@@ -313,6 +418,7 @@ def read_dxf(
         walls=walls,
         junctions=junctions,
         boundaries=boundaries,
+        openings=openings,
     )
     return Project(
         **project, buildings=[Building(id="bldg-0", floors=[floor])], issues=issues

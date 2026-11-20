@@ -43,7 +43,7 @@ class PairedWall:
     start: Point2
     end: Point2
     thickness: float
-    sources: tuple[Segment, Segment]
+    sources: tuple[Segment, ...]  # 2 face segments; more after an opening merge
 
     def rect(self) -> Polygon:
         h = self.thickness / 2
@@ -58,6 +58,11 @@ class JunctionPiece:
     id: str
     polygon: list[Point2]
     wall_ids: list[str]
+
+
+def wall_order(start: Point2, end: Point2) -> tuple[float, float, float, float]:
+    """Wall id order: by start (y, x), then end (y, x)."""
+    return (start[1], start[0], end[1], end[0])
 
 
 def _axial(s: Segment, tol: float) -> _Axial | None:
@@ -170,7 +175,7 @@ def pair_walls(
             lower, upper = sorted((a, b), key=lambda s: s.c)
             raw.append((start, end, abs(a.c - b.c), (lower.seg, upper.seg)))
 
-    raw.sort(key=lambda r: (r[0][1], r[0][0], r[1][1], r[1][0]))
+    raw.sort(key=lambda r: wall_order(r[0], r[1]))
     walls = [PairedWall(f"wall-{n:03d}", *r) for n, r in enumerate(raw, 1)]
     return walls, issues
 

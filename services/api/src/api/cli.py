@@ -20,6 +20,34 @@ def _positive_mm(text: str) -> float:
     return v
 
 
+def _nonneg_mm(text: str) -> float:
+    v = float(text)
+    if v < 0:
+        raise argparse.ArgumentTypeError("must be >= 0 mm")
+    return v
+
+
+def _opening_flags(p) -> None:
+    # ADR-002 §5: one value per kind; omitted -> Settings default, `defaulted`
+    p.add_argument("--door-height", type=_positive_mm, help="door height in mm")
+    p.add_argument("--window-height", type=_positive_mm, help="window height in mm")
+    p.add_argument(
+        "--window-sill", type=_nonneg_mm, help="window sill above floor in mm"
+    )
+
+
+def _read(args):
+    return read_dxf(
+        args.dxf,
+        args.wall_height,
+        args.max_bytes,
+        args.units,
+        door_height=args.door_height,
+        window_height=args.window_height,
+        window_sill=args.window_sill,
+    )
+
+
 def _max_bytes(text: str) -> int:
     v = float(text)
     if v <= 0:
@@ -58,6 +86,7 @@ def _main(argv: list[str] | None) -> None:
         help="input size limit in MB (provisional default 50)",
     )
     p.add_argument("--wall-height", type=_positive_mm, help="wall height in mm")
+    _opening_flags(p)
     p.add_argument(
         "--units",
         choices=list(USER_UNITS),
@@ -74,6 +103,7 @@ def _main(argv: list[str] | None) -> None:
         help="input size limit in MB (provisional default 50)",
     )
     p.add_argument("--wall-height", type=_positive_mm, help="wall height in mm")
+    _opening_flags(p)
     p.add_argument(
         "--units",
         choices=list(USER_UNITS),
@@ -90,7 +120,7 @@ def _main(argv: list[str] | None) -> None:
     if args.cmd == "inspect":
         text = json.dumps(build_inventory(args.dxf, args.max_bytes), indent=2) + "\n"
     else:
-        project = read_dxf(args.dxf, args.wall_height, args.max_bytes, args.units)
+        project = _read(args)
         text = project.model_dump_json(indent=2) + "\n"
         blocking = [i for i in project.issues if i.severity == "blocking"]
 
@@ -109,7 +139,7 @@ def _exit_if_blocking(blocking) -> None:
 
 
 def _build(args) -> None:
-    project = read_dxf(args.dxf, args.wall_height, args.max_bytes, args.units)
+    project = _read(args)
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.dxf.stem
     # canonical JSON always written: it is the evidence for why a build was blocked
