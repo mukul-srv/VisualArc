@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { glbUrl, isGenerationId } from "@/lib/api";
 import { resolveStem } from "@/lib/model-stem";
 
 // Viewer only renders. GLB is already metres, Y-up (ADR-001); no unit/axis fixes here.
@@ -16,10 +17,26 @@ export default function ViewerPage() {
 
   useEffect(() => {
     const el = mount.current!;
-    const stem = resolveStem(new URLSearchParams(window.location.search).get("model"));
-    if (stem === null) {
-      queueMicrotask(() => setStatus("error: invalid model name (allowed: letters, digits, _ and -)"));
-      return;
+    const query = new URLSearchParams(window.location.search);
+    // ?generation=<id> loads an API-generated model; ?model=<stem> a local /models file
+    const generation = query.get("generation");
+    let stem: string | null = null;
+    let url: string;
+    if (generation !== null) {
+      if (!isGenerationId(generation)) {
+        queueMicrotask(() => setStatus("error: invalid generation id"));
+        return;
+      }
+      stem = `generation ${generation.slice(0, 8)}`;
+      url = glbUrl(generation);
+    } else {
+      const name = resolveStem(query.get("model"));
+      if (name === null) {
+        queueMicrotask(() => setStatus("error: invalid model name (allowed: letters, digits, _ and -)"));
+        return;
+      }
+      stem = name;
+      url = `/models/${name}.glb`;
     }
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e22);
@@ -49,7 +66,7 @@ export default function ViewerPage() {
     setTop.current = place;
 
     new GLTFLoader().load(
-      `/models/${stem}.glb`,
+      url,
       (gltf) => {
         scene.add(gltf.scene);
         const box = new THREE.Box3().setFromObject(gltf.scene);
@@ -60,7 +77,7 @@ export default function ViewerPage() {
         setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
       },
       undefined,
-      () => setStatus(`error: could not load /models/${stem}.glb (missing or not a valid GLB). Build it and copy it to apps/web/public/models/`),
+      () => setStatus(`error: could not load ${url} (missing, unreachable or not a valid GLB). For API models check the backend is running; for ?model= build it and copy it to apps/web/public/models/`),
     );
 
     renderer.setAnimationLoop(() => renderer.render(scene, camera));

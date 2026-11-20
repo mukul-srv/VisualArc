@@ -33,3 +33,17 @@ cd ../../apps/web && npm run dev
 # 3. Open http://localhost:3000/viewer?model=fixture_b   (default: fixture_a)
 ```
 `--wall-height` (mm) is required when the DXF carries no height. `--out` can be any directory; the `.glb` must end up in `apps/web/public/models/` (git-ignored). The stem may contain only `A-Z a-z 0-9 _ -`.
+
+## Upload workflow (browser)
+
+```
+# terminal 1
+cd services/api && uv run uvicorn api.main:app --reload
+# terminal 2
+cd apps/web && npm run dev
+```
+
+Open http://localhost:3000, choose a DXF, review the preflight issues, enter
+wall height (and units if the DXF has none), then Generate. The viewer opens at
+`/viewer?generation=<id>`. Set `NEXT_PUBLIC_API_URL` (web) / `API_CORS_ORIGINS`
+and `API_DATA_DIR` (API) to change the defaults.

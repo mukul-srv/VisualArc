@@ -45,7 +45,7 @@ async def create_upload(request: Request) -> dict:
         project = read_dxf(path)
     except InputError as e:
         path.unlink(missing_ok=True)
-        raise HTTPException(422, str(e)) from e
+        raise HTTPException(422, str(e).replace(str(path), "the uploaded file")) from e
     except BaseException:
         path.unlink(missing_ok=True)  # size limit, client disconnect, bug: no orphan
         raise

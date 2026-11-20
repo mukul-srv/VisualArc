@@ -84,3 +84,8 @@ def test_client_filename_never_used_as_path(client, tmp_path):
     )
     assert r.status_code == 201
     assert all(p.parent == tmp_path for p in _stored(tmp_path))
+
+
+def test_error_message_does_not_leak_server_path(client, tmp_path):
+    r = client.post(URL, content=b"hello, not a dxf")
+    assert str(tmp_path) not in r.text and r.status_code == 422

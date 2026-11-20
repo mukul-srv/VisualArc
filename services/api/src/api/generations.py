@@ -55,7 +55,9 @@ def create_generation(req: GenerationRequest):
             window_sill=req.window_sill,
         )
     except InputError as e:
-        raise HTTPException(422, str(e)) from e
+        raise HTTPException(
+            422, str(e).replace(str(upload_path(req.upload_id)), "the uploaded file")
+        ) from e
     issues = [i.model_dump(mode="json") for i in project.issues]
     if has_blocking(project):  # nothing is stored: the client fixes inputs and retries
         return JSONResponse(
