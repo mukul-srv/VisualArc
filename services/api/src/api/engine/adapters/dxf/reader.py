@@ -33,6 +33,16 @@ UNMAPPED_REF_CAP = 20
 MAX_DXF_BYTES = 50 * 1024 * 1024
 
 
+# user-facing --units choices -> $INSUNITS code (kept small and explicit)
+USER_UNITS = {
+    "mm": units.MM,
+    "cm": units.CM,
+    "m": units.M,
+    "in": units.IN,
+    "ft": units.FT,
+}
+
+
 class InputError(ValueError):
     """Expected bad input (not a DXF, corrupt, too large): report, don't traceback."""
 
@@ -70,7 +80,10 @@ def _arc_issue(e) -> Issue:
 
 
 def read_dxf(
-    path: Path, wall_height: float | None = None, max_bytes: int = MAX_DXF_BYTES
+    path: Path,
+    wall_height: float | None = None,
+    max_bytes: int = MAX_DXF_BYTES,
+    user_units: str | None = None,
 ) -> Project:
     if wall_height is not None and wall_height <= 0:
         raise ValueError(f"wall height must be > 0 mm, got {wall_height}")
@@ -78,23 +91,49 @@ def read_dxf(
     project = {"id": path.stem, "source_file": path.name}
 
     insunits = doc.header.get("$INSUNITS", 0)
-    if not insunits:
+    user_code = USER_UNITS[user_units] if user_units else None
+    if user_code and insunits and insunits != user_code:
+        return Project(
+            **project,
+            issues=[
+                Issue(
+                    code="units_conflict",
+                    severity="blocking",
+                    message=f"--units {user_units} conflicts with header $INSUNITS="
+                    f"{insunits} ({units.unit_name(insunits)}); no override, "
+                    "fix the drawing or drop --units",
+                )
+            ],
+        )
+    if not insunits and not user_code:
         return Project(
             **project,
             issues=[
                 Issue(
                     code="units_missing",
                     severity="blocking",
-                    message="$INSUNITS is not set; units must be supplied, refusing to guess",
+                    message="$INSUNITS is not set; supply --units, refusing to guess",
                 )
             ],
         )
-    k = units.conversion_factor(insunits, units.MM)
+    # header agrees with --units: stays source_extracted; only a missing header
+    # makes the scale depend on the user
+    from_user = not insunits
+    k = units.conversion_factor(user_code if from_user else insunits, units.MM)
 
     def mm(p) -> tuple[float, float]:
         return (p[0] * k, p[1] * k)
 
     issues: list[Issue] = []
+    if from_user:
+        issues.append(
+            Issue(
+                code="units_user_provided",
+                severity="warning",
+                message=f"$INSUNITS is not set; scaled to mm using user-supplied "
+                f"--units {user_units}",
+            )
+        )
     segments: list[Segment] = []
     boundaries: list[FloorBoundary] = []
     unmapped: dict[str, list] = {}  # layer -> entities, in drawing order
@@ -199,7 +238,10 @@ def read_dxf(
         Wall(
             id=w.id,
             centreline=LineGeometry(start=w.start, end=w.end),
-            thickness=Measured(value=w.thickness, source="source_extracted"),
+            thickness=Measured(
+                value=w.thickness,
+                source="user_provided" if from_user else "source_extracted",
+            ),
             height=height,
             sources=[s.ref for s in w.sources],
         )

@@ -4,7 +4,12 @@ import sys
 from pathlib import Path
 
 from api.engine.adapters.dxf.inspect import build_inventory
-from api.engine.adapters.dxf.reader import MAX_DXF_BYTES, InputError, read_dxf
+from api.engine.adapters.dxf.reader import (
+    MAX_DXF_BYTES,
+    USER_UNITS,
+    InputError,
+    read_dxf,
+)
 from api.engine.exporters.glb import build_meta, build_scene
 
 
@@ -53,6 +58,11 @@ def _main(argv: list[str] | None) -> None:
         help="input size limit in MB (provisional default 50)",
     )
     p.add_argument("--wall-height", type=_positive_mm, help="wall height in mm")
+    p.add_argument(
+        "--units",
+        choices=list(USER_UNITS),
+        help="drawing units; required if the DXF has no $INSUNITS, error if it conflicts",
+    )
     p.add_argument("--out", type=Path, help="write JSON here instead of stdout")
     p = sub.add_parser("build", help="DXF -> canonical JSON + GLB + meta report")
     p.add_argument("dxf", type=Path)
@@ -64,6 +74,11 @@ def _main(argv: list[str] | None) -> None:
         help="input size limit in MB (provisional default 50)",
     )
     p.add_argument("--wall-height", type=_positive_mm, help="wall height in mm")
+    p.add_argument(
+        "--units",
+        choices=list(USER_UNITS),
+        help="drawing units; required if the DXF has no $INSUNITS, error if it conflicts",
+    )
     p.add_argument("--out", type=Path, required=True, help="output directory")
     args = parser.parse_args(argv)
 
@@ -75,7 +90,7 @@ def _main(argv: list[str] | None) -> None:
     if args.cmd == "inspect":
         text = json.dumps(build_inventory(args.dxf, args.max_bytes), indent=2) + "\n"
     else:
-        project = read_dxf(args.dxf, args.wall_height, args.max_bytes)
+        project = read_dxf(args.dxf, args.wall_height, args.max_bytes, args.units)
         text = project.model_dump_json(indent=2) + "\n"
         blocking = [i for i in project.issues if i.severity == "blocking"]
 
@@ -94,7 +109,7 @@ def _exit_if_blocking(blocking) -> None:
 
 
 def _build(args) -> None:
-    project = read_dxf(args.dxf, args.wall_height, args.max_bytes)
+    project = read_dxf(args.dxf, args.wall_height, args.max_bytes, args.units)
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.dxf.stem
     # canonical JSON always written: it is the evidence for why a build was blocked

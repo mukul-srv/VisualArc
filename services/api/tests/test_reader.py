@@ -174,3 +174,66 @@ def test_no_walls_carries_unpaired_refs(tmp_path: Path):
 def test_bad_height_rejected():
     with pytest.raises(ValueError):
         read_dxf(FIXTURE_A, wall_height=0)
+
+
+def _eq_walls(p):
+    (w,) = p.buildings[0].floors[0].walls
+    return w
+
+
+def test_units_flag_scales_unitless_like_mm(tmp_path: Path):
+    ref = read_dxf(
+        _dxf(tmp_path, 4, [((0, 0), (1000, 0)), ((0, 200), (1000, 200))]), 3000
+    )
+    got = read_dxf(
+        _dxf(tmp_path, 0, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))]),
+        3000,
+        user_units="m",
+    )
+    a, b = _eq_walls(ref), _eq_walls(got)
+    assert b.centreline.start == pytest.approx(a.centreline.start, abs=1e-9)
+    assert b.centreline.end == pytest.approx(a.centreline.end, abs=1e-9)
+    assert b.thickness.value == pytest.approx(a.thickness.value, abs=1e-9)
+    assert b.thickness.source == "user_provided"
+    assert "units_user_provided" in [i.code for i in got.issues]
+
+
+def test_units_conflict_blocks(tmp_path: Path):
+    p = read_dxf(_dxf(tmp_path, 4, [((0, 0), (1, 0))]), 3000, user_units="m")
+    assert [i.code for i in p.issues] == ["units_conflict"] and p.buildings == []
+    assert "4" in p.issues[0].message and "m" in p.issues[0].message
+
+
+def test_units_matching_header_accepted(tmp_path: Path):
+    p = read_dxf(
+        _dxf(tmp_path, 6, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))]),
+        3000,
+        user_units="m",
+    )
+    assert not [i for i in p.issues if i.code.startswith("units_")]
+    assert _eq_walls(p).thickness.source == "source_extracted"
+
+
+def test_units_cli_exit_codes(tmp_path: Path, capsys):
+    unitless = _dxf(tmp_path, 0, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))])
+    out = tmp_path / "o.json"
+    base = ["interpret", str(unitless), "--wall-height", "3000", "--out", str(out)]
+
+    def code(args):
+        with pytest.raises(SystemExit) as e:
+            main(args)
+        return e.value.code
+
+    assert code(base) == 1  # units_missing
+    with pytest.raises(SystemExit) as e:
+        main(base + ["--units", "~"])
+    assert e.value.code == 2
+    main(base + ["--units", "m"])  # no SystemExit: ok
+    assert (
+        code(
+            base[:1]
+            + [str(_dxf(tmp_path, 4, [((0, 0), (1, 0))]))]
+            + ["--units", "m", "--wall-height", "3000", "--out", str(out)]
+        )
+        == 1
+    )
