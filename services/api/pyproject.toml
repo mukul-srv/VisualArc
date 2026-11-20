@@ -1,0 +1,32 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "srivastavamukul", email = "msrivastavamukul@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "ezdxf>=1.4.5",
+    "fastapi>=0.165.0",
+    "mapbox-earcut>=2.1.0",
+    "pydantic>=2.14.4",
+    "shapely>=2.2.0",
+    "trimesh>=5.2.1",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+api = "api.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]
