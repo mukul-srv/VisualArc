@@ -33,6 +33,13 @@ class Settings:
     # polygons and junction/leftover regions.
     tolerance_mm: float = 1e-6
 
+    # Extrusion (OCS normal) counts as parallel to Z when |x| and |y| are within
+    # this. Unitless direction cosine, NOT millimetres, so it must not share
+    # tolerance_mm. 1e-6 absorbs float round-off in a normalised vector while a
+    # 1e-4 tilt (about 0.006 deg, but ~0.1 mm over 1 m) is flagged rather than
+    # silently flattened onto the plan.
+    extrusion_tolerance: float = 1e-6
+
     # Input files larger than this are rejected before parsing (T4).
     # PROVISIONAL until T21 benchmarks; CLI --max-mb overrides per run.
     max_dxf_bytes: int = 50 * 1024 * 1024

@@ -1,7 +1,9 @@
 import json
+import re
 from pathlib import Path
 
 import ezdxf
+import pytest
 
 from api.cli import main
 from api.engine.adapters.dxf.inspect import build_inventory
@@ -36,3 +38,43 @@ def test_unitless_dxf_reports_no_unit_name(tmp_path: Path) -> None:
     inv = build_inventory(path)
     assert inv["units"] == {"insunits": 0, "name": None}
     assert inv["extents"] is None
+
+
+def _with_insunits(tmp_path: Path, raw: str) -> Path:
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    path = tmp_path / "u.dxf"
+    doc.saveas(path)
+    text = re.sub(
+        r"\$INSUNITS\s+70\s+\S+",
+        lambda _: "$INSUNITS\n 70\n" + raw,
+        path.read_text(),
+    )
+    path.write_text(text)
+    return path
+
+
+@pytest.mark.parametrize(
+    "raw, name",
+    [
+        ("4", "Millimeters"),
+        ("0", None),
+        ("21", "USSurveyFeet"),  # known to ezdxf, unsupported by the reader
+        ("99", "unknown"),
+        ("-1", "unknown"),
+        ("1" + "0" * 40, "unknown"),
+    ],
+)
+def test_inspect_units_never_fail(tmp_path: Path, raw: str, name) -> None:
+    path = _with_insunits(tmp_path, raw)
+    assert build_inventory(path)["units"] == {"insunits": int(raw), "name": name}
+    out = tmp_path / "o.json"
+    main(["inspect", str(path), "--out", str(out)])  # exit 0: no SystemExit
+    assert json.loads(out.read_text())["units"]["name"] == name
+
+
+@pytest.mark.parametrize("raw", ["abc", ""])
+def test_inspect_malformed_insunits_is_clean_exit_3(tmp_path: Path, raw: str) -> None:
+    with pytest.raises(SystemExit) as e:
+        main(["inspect", str(_with_insunits(tmp_path, raw))])
+    assert e.value.code == 3

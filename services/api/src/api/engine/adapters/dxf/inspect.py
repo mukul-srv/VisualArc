@@ -3,9 +3,9 @@
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from ezdxf import bbox, units
+from ezdxf import bbox
 
-from api.engine.adapters.dxf.reader import load_doc
+from api.engine.adapters.dxf.reader import _unit_label, load_doc
 from api.engine.settings import DEFAULTS
 
 
@@ -27,8 +27,9 @@ def build_inventory(path: Path, max_bytes: int = DEFAULTS.max_dxf_bytes) -> dict
         "dxf_version": doc.dxfversion,
         "units": {
             "insunits": insunits,
-            # 0 = unitless: caller must supply units, never assume
-            "name": units.unit_name(insunits) if insunits else None,
+            # 0 = unitless: caller must supply units, never assume. Unlisted codes
+            # are described as "unknown" (inventory never blocks).
+            "name": _unit_label(insunits) if insunits else None,
         },
         "layers": sorted(layer.dxf.name for layer in doc.layers),
         "entity_counts": dict(sorted(counts.items())),

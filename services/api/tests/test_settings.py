@@ -17,6 +17,7 @@ def test_defaults_match_document_08():
         "wall_thickness_min_mm": 50.0,
         "wall_thickness_max_mm": 600.0,
         "tolerance_mm": 1e-6,
+        "extrusion_tolerance": 1e-6,
         "max_dxf_bytes": 50 * 2**20,
         "unmapped_ref_cap": 20,
     }
@@ -81,3 +82,23 @@ def test_reader_size_limit_from_settings(tmp_path: Path):
         read_dxf(path, 3000, settings=Settings(max_dxf_bytes=100))
     # explicit max_bytes (the CLI --max-mb path) still overrides settings
     assert read_dxf(path, 3000, max_bytes=10**9, settings=Settings(max_dxf_bytes=100))
+
+
+def test_extrusion_tolerance_is_configurable(tmp_path: Path):
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    doc.modelspace().add_lwpolyline(
+        [(0, 0), (1000, 0), (1000, 1000)],
+        close=True,
+        dxfattribs={"layer": "A-FLOR", "extrusion": (1e-4, 0, 1)},
+    )
+    path = tmp_path / "tilt.dxf"
+    doc.saveas(path)
+    codes = lambda p: [i.code for i in p.issues]
+    assert "unsupported_extrusion" in codes(read_dxf(path, 3000))
+    wide = Settings(extrusion_tolerance=1e-3)
+    assert "unsupported_extrusion" not in codes(read_dxf(path, 3000, settings=wide))
+    # unrelated to tolerance_mm: widening that does not accept the tilt
+    assert "unsupported_extrusion" in codes(
+        read_dxf(path, 3000, settings=Settings(tolerance_mm=1.0))
+    )

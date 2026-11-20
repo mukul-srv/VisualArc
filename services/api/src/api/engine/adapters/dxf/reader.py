@@ -71,7 +71,10 @@ def _wcs_xy(e) -> list[tuple[float, float]]:
 def _extrusion_issue(e, settings: Settings) -> Issue | None:
     """Only extrusion (0,0,+-1) maps onto the plan; anything else is not guessed."""
     x, y, _ = e.dxf.extrusion
-    if abs(x) <= settings.tolerance_mm and abs(y) <= settings.tolerance_mm:
+    if (
+        abs(x) <= settings.extrusion_tolerance
+        and abs(y) <= settings.extrusion_tolerance
+    ):
         return None
     return Issue(
         code="unsupported_extrusion",
@@ -94,8 +97,9 @@ def _arc_issue(e) -> Issue:
 
 
 def _unit_label(code: int) -> str:
+    # ezdxf's unit_name maps every unlisted code to "unitless", which misleads
     try:
-        return units.unit_name(code)
+        return units.InsertUnits(code).name
     except (TypeError, ValueError):
         return "unknown"
 
