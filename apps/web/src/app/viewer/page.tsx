@@ -153,7 +153,8 @@ export default function ViewerPage() {
       setWalking(false);
     };
     const enterWalk = () => {
-      if (!model || camera === ortho) return; // walk starts from 3D only
+      if (!model) return;
+      if (camera === ortho) return setStatus("switch to Perspective to walk");
       const spawn = spawnPoint(model);
       if (!spawn) return setStatus("walk mode needs a floor boundary in the model");
       clearSelection();
