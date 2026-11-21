@@ -64,6 +64,25 @@ def test_duplicate_name_and_elevation_rejected_nothing_appended(client):
     assert len(client.get(f"{P}/{pid}").json()["floors"]) == 1
 
 
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_elevation_rejected_nothing_appended(client, token):
+    pid = _pid(client)
+    uid = _upload(client, "fixture_a.dxf")
+    # raw body: the test client's json= cannot encode NaN/inf
+    body = f'{{"upload_id": "{uid}", "floor_name": "G", "elevation": {token}, "wall_height": 3000, "ceiling_height": 3000}}'
+    r = client.post(f"{P}/{pid}/floors", content=body, headers={"content-type": "application/json"})
+    assert r.status_code == 422
+    assert client.get(f"{P}/{pid}").json()["floors"] == []
+
+
+def test_non_finite_bounded_height_rejected_on_generations(client):
+    uid = _upload(client, "fixture_a.dxf")
+    body = f'{{"upload_id": "{uid}", "wall_height": Infinity}}'
+    r = client.post("/api/v1/generations", content=body, headers={"content-type": "application/json"})
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["input"] == "inf"
+
+
 def test_blocking_issue_is_409_and_nothing_appended(client):
     pid = _pid(client)
     r = client.post(

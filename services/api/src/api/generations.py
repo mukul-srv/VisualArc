@@ -30,12 +30,12 @@ _STEM = "model"
 class GenerationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     upload_id: str
-    wall_height: float | None = Field(None, gt=0, description="mm")
-    ceiling_height: float | None = Field(None, gt=0, description="mm")
+    wall_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    ceiling_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     units: Literal[tuple(USER_UNITS)] | None = None  # type: ignore[valid-type]
-    door_height: float | None = Field(None, gt=0, description="mm")
-    window_height: float | None = Field(None, gt=0, description="mm")
-    window_sill: float | None = Field(None, ge=0, description="mm")
+    door_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    window_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
 
 
 def _dir(generation_id: str):

@@ -24,7 +24,7 @@ class ProjectRequest(BaseModel):
 
 class FloorRequest(GenerationRequest):
     floor_name: str = Field(min_length=1, max_length=100)
-    elevation: float = Field(description="mm")
+    elevation: float = Field(allow_inf_nan=False, description="mm")
 
 
 def _path(pid: str):
