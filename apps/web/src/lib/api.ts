@@ -1,3 +1,4 @@
+import type { Floor } from "./project";
 import type { SourceRef } from "./selection";
 
 // Thin client for the FastAPI backend. fetch is injectable so tests need no server.
@@ -85,6 +86,29 @@ export const generate = (params: GenerationParams, f: Fetch = fetch) =>
       body: JSON.stringify(params),
     }),
   );
+
+const post = (path: string, body: unknown, f: Fetch) =>
+  f(`${API_BASE}/api/v1${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export const createProject = (name: string, f: Fetch = fetch) =>
+  send<{ project_id: string }>(() => post("/projects", { name }, f));
+
+export type FloorParams = GenerationParams & { floor_name: string; elevation: number };
+export const addFloor = (projectId: string, params: FloorParams, f: Fetch = fetch) =>
+  send<{ floor: Floor; generation_id: string; issues: Issue[] }>(() =>
+    post(`/projects/${projectId}/floors`, params, f),
+  );
+
+export const getProject = (projectId: string, f: Fetch = fetch) =>
+  send<{ manifest: unknown }>(async () => {
+    const res = await f(`${API_BASE}/api/v1/projects/${projectId}`);
+    // wrap so the shared `send` can spread it; the caller validates with parseManifest
+    return res.ok ? new Response(JSON.stringify({ manifest: await res.json() })) : res;
+  });
 
 export const glbUrl = (generationId: string) =>
   `${API_BASE}/api/v1/generations/${generationId}/artifacts/glb`;

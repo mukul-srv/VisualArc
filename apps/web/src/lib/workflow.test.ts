@@ -99,6 +99,33 @@ test("success path: openings fixture -> viewer-loadable GLB with metadata", asyn
   expect((await fetch(`${base}/api/v1/generations/${gen.generation_id}/artifacts/secret`)).status).toBe(404);
 });
 
+test("2-floor project: create, add floors, manifest, each floor GLB sits at its elevation", async () => {
+  const { parseManifest, sortFloors } = await import("./project");
+  const c = await api.createProject("House");
+  if (!c.ok) throw new Error(c.message);
+  const h = { wall_height: 3000, ceiling_height: 3000 };
+  const add = async (file: string, floor_name: string, elevation: number) => {
+    const up = await api.uploadDxf(fixture(file));
+    if (!up.ok) throw new Error(up.message);
+    return api.addFloor(c.project_id, { upload_id: up.upload_id, floor_name, elevation, ...h });
+  };
+  const upper = await add("fixture_openings.dxf", "First", 3200);
+  const ground = await add("fixture_a.dxf", "Ground", 0);
+  if (!upper.ok || !ground.ok) throw new Error("floor not added");
+  expect(await add("fixture_b.dxf", "ground", 6400)).toMatchObject({ ok: false, kind: "rejected" }); // duplicate name
+
+  const got = await api.getProject(c.project_id);
+  if (!got.ok) throw new Error(got.message);
+  const m = parseManifest(got.manifest)!;
+  expect(sortFloors(m.floors).map((f) => f.name)).toEqual(["Ground", "First"]); // by elevation, not creation
+  expect(m.floors).toHaveLength(2); // the rejected add left nothing behind
+  for (const f of m.floors) {
+    expect(f.elevation.source).toBe("user_provided");
+    const box = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(f.generation_id))).scene);
+    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000, 3); // elevation is already in the GLB
+  }
+});
+
 test("failure paths: non-DXF rejected cleanly; unknown upload and generation are 404", async () => {
   const bad = await api.uploadDxf(new Blob(["not a dxf at all"]));
   expect(bad).toMatchObject({ ok: false, kind: "rejected" });
