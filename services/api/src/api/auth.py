@@ -14,7 +14,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -313,7 +313,10 @@ async def fetch_profile(provider: str, request: Request) -> OAuthProfile:
 
 def _safe_next(value: str | None) -> str:
     # same-site relative path only, so the callback cannot redirect off-site
-    return value if value and value.startswith("/") and not value.startswith("//") else "/"
+    if not value or "\\" in value or "%5c" in value.lower() or not value.startswith("/") or value.startswith("//"):
+        return "/"
+    parts = urlsplit(value)
+    return value if not parts.scheme and not parts.netloc else "/"
 
 
 @router.get("/providers")
@@ -333,9 +336,12 @@ def _fail(message: str) -> RedirectResponse:
     return RedirectResponse(f"/login?{urlencode({'error': message})}", status_code=302)
 
 
-def user_for_profile(provider: str, p: OAuthProfile) -> UserRow | None:
-    """The account for this provider identity: existing link, else existing user with the
-    same VERIFIED email (linked), else a new OAuth-only user. None if no verified email."""
+def user_for_profile(provider: str, p: OAuthProfile) -> UserRow | str:
+    """The account for this provider identity: existing link, else an existing OAuth-only
+    user with the same VERIFIED email (linked), else a new OAuth-only user. Returns an
+    error code instead when there is no verified email ("no_verified_email") or the email
+    belongs to a password account ("email_exists"): register never verifies email, so
+    auto-linking there would allow pre-account takeover."""
     with session() as db:
         link = db.scalar(
             select(OAuthAccountRow).where(
@@ -346,9 +352,11 @@ def user_for_profile(provider: str, p: OAuthProfile) -> UserRow | None:
         if link is not None:
             return db.get(UserRow, link.user_id)
         if not p.email or not p.email_verified:
-            return None
+            return "no_verified_email"
         email = p.email.strip().lower()
         user = db.scalar(select(UserRow).where(UserRow.email == email))
+        if user is not None and user.password_hash is not None:
+            return "email_exists"
         if user is None:
             user = UserRow(
                 id=new_id(), email=email, password_hash=None,
@@ -363,7 +371,7 @@ def user_for_profile(provider: str, p: OAuthProfile) -> UserRow | None:
         return user
 
 
-@router.get("/oauth/{provider}/callback")
+@router.get("/oauth/{provider}/callback", dependencies=[Depends(rate_limit)])
 async def oauth_callback(provider: str, request: Request):
     _client(provider)  # 404/503 before anything else
     try:
@@ -371,8 +379,8 @@ async def oauth_callback(provider: str, request: Request):
     except Exception:  # noqa: BLE001  bad/denied/expired code, provider outage: back to the login page
         return _fail(f"{provider} sign-in failed")
     user = user_for_profile(provider, profile)
-    if user is None:
-        return _fail(f"{provider} did not provide a verified email address")
+    if isinstance(user, str):
+        return _fail(user)
     resp = RedirectResponse(_safe_next(request.session.pop("next", "/")), status_code=302)
     _set_cookie(resp, create_session(user.id))
     return resp

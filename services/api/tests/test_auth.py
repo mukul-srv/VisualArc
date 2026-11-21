@@ -225,15 +225,48 @@ def test_oauth_callback_creates_user_and_session(client, providers, monkeypatch)
     assert c2.get(f"{A}/me").json()["id"] == me["id"]
 
 
-def test_oauth_links_existing_user_by_verified_email(client, providers, monkeypatch):
-    uid = _register(client, "link@example.com").json()["id"]
-    _profile(monkeypatch, email="link@example.com")
+def test_oauth_links_existing_oauth_only_user_by_verified_email(client, providers, monkeypatch):
+    with session() as db:
+        db.add(UserRow(id="a" * 32, email="link@example.com", password_hash=None, display_name="l"))
+        db.commit()
+    _profile(monkeypatch, provider_user_id="link-1", email="link@example.com")
     c2 = TestClient(app)
     c2.get(f"{A}/oauth/github/callback", follow_redirects=False)
-    assert c2.get(f"{A}/me").json()["id"] == uid
+    assert c2.get(f"{A}/me").json()["id"] == "a" * 32
     with session() as db:
-        link = db.scalar(select(OAuthAccountRow).where(OAuthAccountRow.user_id == uid))
-        assert (link.provider, link.provider_user_id) == ("github", "123")
+        link = db.scalar(select(OAuthAccountRow).where(OAuthAccountRow.user_id == "a" * 32))
+        assert (link.provider, link.provider_user_id) == ("github", "link-1")
+
+
+def test_oauth_never_links_to_password_account(client, providers, monkeypatch):
+    # register does not verify email, so linking would allow pre-account takeover
+    uid = _register(client, "pw@example.com").json()["id"]
+    _profile(monkeypatch, provider_user_id="pw-1", email="pw@example.com")
+    c2 = TestClient(app)
+    r = c2.get(f"{A}/oauth/github/callback", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/login?error=email_exists"
+    assert c2.get(f"{A}/me").status_code == 401
+    with session() as db:
+        assert db.scalar(select(OAuthAccountRow).where(OAuthAccountRow.user_id == uid)) is None
+        assert len(db.scalars(select(UserRow).where(UserRow.email == "pw@example.com")).all()) == 1
+
+
+def test_oauth_callback_with_bad_state_is_rejected(client, providers):
+    with session() as db:
+        before = len(db.scalars(select(UserRow)).all())
+    # no login step first (no state in the session) and a forged state; no network is reached
+    for qs in ("code=x&state=forged", "code=x"):
+        r = client.get(f"{A}/oauth/github/callback?{qs}", follow_redirects=False)
+        assert r.status_code == 302 and r.headers["location"].startswith("/login?error=")
+    assert client.get(f"{A}/me").status_code == 401
+    with session() as db:
+        assert len(db.scalars(select(UserRow)).all()) == before
+
+
+def test_oauth_callback_is_rate_limited(client, providers, monkeypatch):
+    monkeypatch.setenv("AUTH_RATE_LIMIT_PER_MIN", "2")
+    codes = [client.get(f"{A}/oauth/github/callback?code=x", follow_redirects=False).status_code for _ in range(3)]
+    assert codes == [302, 302, 429]
 
 
 def test_oauth_unverified_email_never_links(client, providers, monkeypatch):
@@ -259,3 +292,5 @@ def test_safe_next_blocks_open_redirect():
     assert auth._safe_next("//evil.example") == "/"
     assert auth._safe_next("https://evil.example") == "/"
     assert auth._safe_next(None) == "/"
+    assert auth._safe_next(r"/\evil.example") == "/"
+    assert auth._safe_next("/%5Cevil.example") == "/"

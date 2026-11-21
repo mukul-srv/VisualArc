@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import { AuthFormView } from "./AuthForm";
+import { AuthFormView, OAUTH_ERRORS } from "./AuthForm";
 
 const base = { next: "/viewer", errors: [] as string[] };
 
@@ -28,4 +28,8 @@ test("register form adds a name field and a minimum password length; errors are 
   expect(html).toContain('minLength="10"');
   expect(html).toContain('role="alert"');
   expect(html).toContain("Continue with Google");
+});
+
+test("oauth callback error codes map to readable messages", () => {
+  expect(OAUTH_ERRORS.email_exists).toBe("An account with this email exists. Sign in with your password.");
 });

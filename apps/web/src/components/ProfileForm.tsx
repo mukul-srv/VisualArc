@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { logout, me, MIN_PASSWORD, updateProfile, type User } from "@/lib/auth";
+import { logout, me, MIN_PASSWORD, updateProfile, type User } from "../lib/auth";
+import { RetryNotice } from "./RequireAuth";
 import styles from "./auth.module.css";
 
 export function ProfileForm() {
@@ -11,14 +12,16 @@ export function ProfileForm() {
   const [name, setName] = useState("");
   const [pw, setPw] = useState({ current: "", next: "" });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     me().then((r) => {
-      if (!r.ok) return;
+      if (!r.ok) return setLoadError(r.message);
       setUser(r);
       setName(r.display_name);
     });
-  }, []);
+  }, [attempt]);
 
   async function save(body: Parameters<typeof updateProfile>[0], done: string) {
     const r = await updateProfile(body);
@@ -29,6 +32,17 @@ export function ProfileForm() {
     setMsg({ ok: r.ok, text: r.ok ? done : r.message });
   }
 
+  if (!user && loadError) {
+    return (
+      <RetryNotice
+        message={loadError}
+        onRetry={() => {
+          setLoadError(null);
+          setAttempt(attempt + 1);
+        }}
+      />
+    );
+  }
   if (!user) return <p role="status">Loading…</p>;
   return (
     <main className={styles.card}>

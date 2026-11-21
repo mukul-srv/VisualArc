@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { credentialErrors, getProviders, login, oauthUrl, register, safeNext, type Providers } from "../lib/auth";
 import styles from "./auth.module.css";
 
+// OAuth callback error codes (?error=) -> text; anything else is shown as given.
+export const OAUTH_ERRORS: Record<string, string> = {
+  email_exists: "An account with this email exists. Sign in with your password.",
+  no_verified_email: "The provider did not share a verified email address.",
+};
+
 const LABEL = { github: "GitHub", google: "Google" } as const;
 
 // Presentational: provider buttons only for configured providers.
@@ -90,7 +96,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL
     setNext(safeNext(q.get("next")));
     const oauthError = q.get("error");
-    if (oauthError) setErrors([oauthError]);
+    if (oauthError) setErrors([OAUTH_ERRORS[oauthError] ?? oauthError]);
     getProviders().then(setProviders);
   }, []);
 
