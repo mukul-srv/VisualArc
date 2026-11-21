@@ -89,3 +89,25 @@ def test_client_filename_never_used_as_path(client, tmp_path):
 def test_error_message_does_not_leak_server_path(client, tmp_path):
     r = client.post(URL, content=b"hello, not a dxf")
     assert str(tmp_path) not in r.text and r.status_code == 422
+
+
+def test_db_failure_leaves_no_orphan_blob(tmp_path, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    monkeypatch.setenv("API_DATA_DIR", str(tmp_path))
+
+    def boom(self):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(Session, "commit", boom)
+    dxf = (Path(__file__).resolve().parents[3] / "fixtures" / "input" / "fixture_a.dxf").read_bytes()
+    with pytest.raises(RuntimeError):
+        TestClient(app).post("/api/v1/uploads", content=dxf)
+    assert list(tmp_path.glob("*.dxf")) == []
+
+
+def test_artifact_get_for_unknown_generation_creates_no_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("API_DATA_DIR", str(tmp_path))
+    r = TestClient(app).get(f"/api/v1/generations/{'a' * 32}/artifacts/glb")
+    assert r.status_code == 404
+    assert not (tmp_path / "generations").exists()

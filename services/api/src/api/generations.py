@@ -11,10 +11,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.db import GenerationRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.canonical.model import Project
 from api.pipeline import has_blocking, write_artifacts
-from api.storage import data_dir, new_id, upload_path, valid_id
+from api.storage import blob_path, new_id, upload_path, valid_id
 
 router = APIRouter(prefix="/api/v1")
 
@@ -39,8 +40,8 @@ class GenerationRequest(BaseModel):
     window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
 
 
-def _dir(generation_id: str):
-    return data_dir() / "generations" / generation_id
+def _prefix(generation_id: str) -> str:
+    return f"generations/{generation_id}"
 
 
 def read_project(req: GenerationRequest, **floor) -> Project:
@@ -74,7 +75,10 @@ def run_generation(req: GenerationRequest, **floor) -> tuple[str | None, list[di
     if has_blocking(project):  # nothing is stored: the client fixes inputs and retries
         return None, issues
     gid = new_id()
-    write_artifacts(project, _dir(gid), _STEM)
+    write_artifacts(project, blob_path(f"{_prefix(gid)}/{_STEM}.glb").parent, _STEM)
+    with session() as db:
+        db.add(GenerationRow(id=gid, blob_prefix=_prefix(gid)))
+        db.commit()
     return gid, issues
 
 
@@ -104,7 +108,7 @@ def get_artifact(generation_id: str, name: str):
     if not valid_id(generation_id) or name not in ARTIFACTS:
         raise HTTPException(404, "not found")
     suffix, media = ARTIFACTS[name]
-    path = _dir(generation_id) / f"{_STEM}.{suffix}"
+    path = blob_path(f"{_prefix(generation_id)}/{_STEM}.{suffix}")
     if not path.is_file():
         raise HTTPException(404, "not found")
     return FileResponse(path, media_type=media)

@@ -69,6 +69,7 @@ def main(argv: list[str] | None = None) -> None:
 def _main(argv: list[str] | None) -> None:
     parser = argparse.ArgumentParser(prog="api")
     sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("import-projects", help="import legacy project.json files into the DB")
     p = sub.add_parser("inspect", help="DXF inventory as JSON")
     p.add_argument("dxf", type=Path)
     p.add_argument(
@@ -120,6 +121,12 @@ def _main(argv: list[str] | None) -> None:
     )
     args = parser.parse_args(argv)
 
+    if args.cmd == "import-projects":
+        from api.importer import import_projects
+
+        imported, skipped = import_projects()
+        print(f"imported {imported}, skipped {skipped}")
+        return
     if args.cmd == "build":
         _build(args)
         return
