@@ -13,13 +13,14 @@ export type Issue = {
 export type Preflight = {
   upload_id: string;
   issues: Issue[];
-  needs: ("wall_height" | "units")[];
+  needs: ("wall_height" | "ceiling_height" | "units")[];
   inventory: { layers: string[]; entity_counts: Record<string, number> };
 };
 
 export type GenerationParams = {
   upload_id: string;
   wall_height?: number;
+  ceiling_height?: number;
   units?: string;
   door_height?: number;
   window_height?: number;

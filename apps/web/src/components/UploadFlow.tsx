@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { generate, uploadDxf, type Failure, type Issue, type Preflight } from "@/lib/api";
-import { buildRequest, splitIssues, UNITS, type FormValues } from "@/lib/params";
+import { buildRequest, ceilingReady, setCeilingHeight, setWallHeight, splitIssues, UNITS, type FormValues } from "@/lib/params";
 import { IssueList } from "./IssueList";
 
-const EMPTY: FormValues = { wallHeight: "", units: "", doorHeight: "", windowHeight: "", windowSill: "" };
+const EMPTY: FormValues = { wallHeight: "", ceilingHeight: "", ceilingConfirmed: false, units: "", doorHeight: "", windowHeight: "", windowSill: "" };
 // Blocking issues the parameter form itself resolves; they must not lock the button.
-const FORM_RESOLVABLE = ["wall_height_missing", "units_missing"];
+const FORM_RESOLVABLE = ["wall_height_missing", "ceiling_height_missing", "units_missing"];
 
 export function UploadFlow() {
   const router = useRouter();
@@ -19,10 +19,22 @@ export function UploadFlow() {
   const [failure, setFailure] = useState<Failure | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<Issue[] | null>(null);
 
-  const field = (k: keyof FormValues, label: string, hint = "") => (
+  const field = (k: Exclude<keyof FormValues, "ceilingConfirmed">, label: string, hint = "") => (
     <label style={{ display: "block", margin: "6px 0" }}>
       {label}{" "}
-      <input value={form[k]} inputMode="decimal" onChange={(e) => setForm({ ...form, [k]: e.target.value })} />{" "}
+      <input
+        value={form[k] as string}
+        inputMode="decimal"
+        onChange={(e) =>
+          setForm(
+            k === "wallHeight"
+              ? setWallHeight(form, e.target.value)
+              : k === "ceilingHeight"
+                ? setCeilingHeight(form, e.target.value)
+                : { ...form, [k]: e.target.value },
+          )
+        }
+      />{" "}
       {hint}
     </label>
   );
@@ -79,6 +91,17 @@ export function UploadFlow() {
           <IssueList issues={shown} />
           <h2>Parameters</h2>
           {field("wallHeight", "Wall height (mm)", pre.needs.includes("wall_height") ? "required" : "")}
+          {field("ceilingHeight", "Ceiling height (mm)", pre.needs.includes("ceiling_height") ? "required" : "")}
+          {form.ceilingHeight.trim() !== "" && (
+            <label style={{ display: "block", margin: "6px 0" }}>
+              <input
+                type="checkbox"
+                checked={form.ceilingConfirmed}
+                onChange={(e) => setForm({ ...form, ceilingConfirmed: e.target.checked })}
+              />{" "}
+              I confirm the ceiling height is {form.ceilingHeight} mm (prefilled from the wall height; not assumed)
+            </label>
+          )}
           <label style={{ display: "block", margin: "6px 0" }}>
             Drawing units{" "}
             <select value={form.units} onChange={(e) => setForm({ ...form, units: e.target.value })}>
@@ -98,7 +121,7 @@ export function UploadFlow() {
               ))}
             </ul>
           )}
-          <button disabled={busy || unresolvable.length > 0} onClick={onGenerate}>
+          <button disabled={busy || unresolvable.length > 0 || !ceilingReady(pre, form)} onClick={onGenerate}>
             Generate 3D model
           </button>
           {unresolvable.length > 0 && <p>Fix the blocking issues in the drawing and upload it again.</p>}

@@ -68,14 +68,14 @@ afterAll(() => {
 test("success path: openings fixture -> viewer-loadable GLB with metadata", async () => {
   const up = await api.uploadDxf(fixture("fixture_openings.dxf"));
   if (!up.ok) throw new Error(up.message);
-  expect(up.needs).toEqual(["wall_height"]); // preflight asks; nothing is guessed
+  expect(up.needs).toEqual(["ceiling_height", "wall_height"]); // preflight asks; nothing is guessed
 
   // blocked first: structured issues reach the web client intact
   const blocked = await api.generate({ upload_id: up.upload_id });
   expect(blocked).toMatchObject({ ok: false, kind: "blocked" });
   expect(!blocked.ok && blocked.issues.map((i) => i.code)).toContain("wall_height_missing");
 
-  const gen = await api.generate({ upload_id: up.upload_id, wall_height: 3000 });
+  const gen = await api.generate({ upload_id: up.upload_id, wall_height: 3000, ceiling_height: 3000 });
   if (!gen.ok) throw new Error(gen.message);
   expect(api.isGenerationId(gen.generation_id)).toBe(true);
 
@@ -104,7 +104,7 @@ test("failure paths: non-DXF rejected cleanly; unknown upload and generation are
   expect(bad).toMatchObject({ ok: false, kind: "rejected" });
   expect(!bad.ok && bad.message).not.toMatch(/Traceback|[A-Za-z]:\\|\/tmp\//);
 
-  const unknown = await api.generate({ upload_id: "0".repeat(32), wall_height: 3000 });
+  const unknown = await api.generate({ upload_id: "0".repeat(32), wall_height: 3000, ceiling_height: 3000 });
   expect(unknown).toMatchObject({ ok: false, kind: "error" });
   expect((await fetch(api.glbUrl("0".repeat(32)))).status).toBe(404);
 });

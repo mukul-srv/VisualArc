@@ -15,7 +15,7 @@ beforeAll(async () => {
   const out = mkdtempSync(path.join(tmpdir(), "glb-smoke-"));
   execFileSync(
     "uv",
-    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input/fixture_a.dxf"), "--wall-height", "3000", "--out", out],
+    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input/fixture_a.dxf"), "--wall-height", "3000", "--ceiling-height", "3000", "--out", out],
     { cwd: path.join(root, "services/api"), stdio: "pipe" },
   );
   const buf = readFileSync(path.join(out, "fixture_a.glb"));
@@ -24,7 +24,7 @@ beforeAll(async () => {
   const f = JSON.parse(
     readFileSync(path.join(root, "fixtures/expected/fixture_a.canonical.json"), "utf8"),
   ).buildings[0].floors[0];
-  ids = [...f.walls, ...f.junctions, ...f.boundaries].map((e: { id: string }) => e.id);
+  ids = [...f.walls, ...f.junctions, ...f.boundaries, ...f.ceilings].map((e: { id: string }) => e.id);
 }, 120_000);
 
 test("fixture A: node/mesh names match canonical element ids", () => {
