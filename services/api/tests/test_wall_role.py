@@ -37,7 +37,7 @@ def _codes(p, code):
 
 def test_layer_roles_fixture_g():
     g = _gen("make_fixture_g")
-    p = read_dxf(INPUT / "fixture_g.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_g.dxf", 3000, ceiling_height=3000)
     assert not [i for i in p.issues if i.severity == "blocking"]
     assert not _codes(p, "wall_role_inferred")
     for w in _walls(p):
@@ -50,7 +50,7 @@ def test_layer_roles_fixture_g():
 
 def test_inference_fixture_a_perimeter_exterior_partition_interior():
     a = _gen("make_fixture_a")
-    p = read_dxf(INPUT / "fixture_a.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_a.dxf", 3000, ceiling_height=3000)
     walls = _walls(p)
     assert {w.role_source for w in walls} == {"inferred"}
     for w in walls:
@@ -66,7 +66,7 @@ def test_inference_fixture_a_perimeter_exterior_partition_interior():
 
 
 def test_inference_fixture_b_all_exterior():
-    p = read_dxf(INPUT / "fixture_b.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_b.dxf", 3000, ceiling_height=3000)
     assert {w.role for w in _walls(p)} == {"exterior"}
 
 
@@ -77,8 +77,8 @@ def test_inference_on_fixture_g_geometry_when_layers_flattened(tmp_path):
         e.dxf.layer = "A-WALL"
     path = tmp_path / "flat.dxf"
     doc.saveas(path)
-    p = read_dxf(path, 3000)
-    layered = {w.id: w.role for w in _walls(read_dxf(INPUT / "fixture_g.dxf", 3000))}
+    p = read_dxf(path, 3000, ceiling_height=3000)
+    layered = {w.id: w.role for w in _walls(read_dxf(INPUT / "fixture_g.dxf", 3000, ceiling_height=3000))}
     assert {w.id: w.role for w in _walls(p)} == layered
     assert {w.role_source for w in _walls(p)} == {"inferred"}
     assert len(_codes(p, "wall_role_inferred")) == 1
@@ -91,7 +91,7 @@ def test_mixed_layered_and_plain_walls_warns_only_for_plain(tmp_path):
             e.dxf.layer = "A-WALL"
     path = tmp_path / "mixed.dxf"
     doc.saveas(path)
-    p = read_dxf(path, 3000)
+    p = read_dxf(path, 3000, ceiling_height=3000)
     by = {w.role_source for w in _walls(p)}
     assert by == {"source_extracted", "inferred"}
     (warn,) = _codes(p, "wall_role_inferred")
@@ -107,7 +107,7 @@ def test_conflicting_role_layers_block_and_cite_both_sources(tmp_path):
     b = msp.add_line((0, 200), (3000, 200), dxfattribs={"layer": "A-WALL-INTR"})
     path = tmp_path / "c.dxf"
     doc.saveas(path)
-    p = read_dxf(path, 3000)
+    p = read_dxf(path, 3000, ceiling_height=3000)
     (issue,) = _codes(p, "wall_role_conflict")
     assert issue.severity == "blocking"
     assert {s.entity_handle for s in issue.sources} == {a.dxf.handle, b.dxf.handle}
@@ -127,13 +127,13 @@ def test_role_layer_mapping_is_configurable(tmp_path):
         e.dxf.layer = "MY-OUT" if e.dxf.layer == "A-WALL-EXTR" else "MY-IN"
     path = tmp_path / "m.dxf"
     doc.saveas(path)
-    p = read_dxf(path, 3000, settings=s)
+    p = read_dxf(path, 3000, ceiling_height=3000, settings=s)
     assert {w.role_source for w in _walls(p)} == {"source_extracted"}
     assert {w.role for w in _walls(p)} == {"exterior", "interior"}
 
 
 def test_role_reaches_glb_metadata_and_meta():
-    p = read_dxf(INPUT / "fixture_g.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_g.dxf", 3000, ceiling_height=3000)
     scene = build_scene(p)
     meta = build_meta(p, scene)
     for w in _walls(p):

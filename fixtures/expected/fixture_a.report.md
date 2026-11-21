@@ -1,7 +1,7 @@
 # Verification report: fixture_a
 
 - Source file: `fixture_a.dxf`
-- Schema version: 0.4.0
+- Schema version: 0.5.0
 - Units: mm
 - Result: **OK** (0 blocking, 2 warnings)
 

@@ -23,7 +23,7 @@ def _upload(client, name="fixture_a.dxf") -> str:
 
 
 def test_generation_success_serves_usable_glb(client):
-    r = client.post(GEN, json={"upload_id": _upload(client), "wall_height": 3000})
+    r = client.post(GEN, json={"upload_id": _upload(client), "wall_height": 3000, "ceiling_height": 3000})
     assert r.status_code == 201
     body = r.json()
     assert set(body["artifacts"]) == {"glb", "meta", "canonical", "report"}
@@ -45,7 +45,7 @@ def test_missing_height_blocked_409_with_structured_issues(client, tmp_path):
 def test_openings_parameters_are_applied(client):
     uid = _upload(client, "fixture_openings.dxf")
     r = client.post(
-        GEN, json={"upload_id": uid, "wall_height": 3000, "door_height": 2000}
+        GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 3000, "door_height": 2000}
     )
     assert r.status_code == 201
     canon = client.get(r.json()["artifacts"]["canonical"]).json()
@@ -59,11 +59,11 @@ def test_openings_parameters_are_applied(client):
 @pytest.mark.parametrize(
     "body, status",
     [
-        ({"upload_id": "0" * 32, "wall_height": 3000}, 404),
-        ({"upload_id": "../../etc/passwd", "wall_height": 3000}, 404),
+        ({"upload_id": "0" * 32, "wall_height": 3000, "ceiling_height": 3000}, 404),
+        ({"upload_id": "../../etc/passwd", "wall_height": 3000, "ceiling_height": 3000}, 404),
         ({"upload_id": "x", "wall_height": -1}, 422),
-        ({"upload_id": "x", "wall_height": 3000, "units": "parsecs"}, 422),
-        ({"upload_id": "x", "wall_height": 3000, "bogus": 1}, 422),
+        ({"upload_id": "x", "wall_height": 3000, "ceiling_height": 3000, "units": "parsecs"}, 422),
+        ({"upload_id": "x", "wall_height": 3000, "ceiling_height": 3000, "bogus": 1}, 422),
     ],
 )
 def test_bad_requests(client, body, status):
@@ -84,10 +84,10 @@ def test_unitless_needs_units_then_succeeds(client, tmp_path):
     uid = client.post("/api/v1/uploads", content=buf.getvalue().encode()).json()[
         "upload_id"
     ]
-    r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000})
+    r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 3000})
     assert r.status_code == 409
     assert "units_missing" in {i["code"] for i in r.json()["issues"]}
-    r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "units": "m"})
+    r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 3000, "units": "m"})
     assert r.status_code == 201
 
 
@@ -103,3 +103,15 @@ def test_unitless_needs_units_then_succeeds(client, tmp_path):
 )
 def test_artifact_unknown_or_traversal_is_404(client, gid, name):
     assert client.get(f"{GEN}/{gid}/artifacts/{name}").status_code == 404
+
+
+def test_missing_ceiling_height_blocked_409_then_ok(client):
+    uid = _upload(client)
+    r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000})
+    assert r.status_code == 409
+    assert {i["code"] for i in r.json()["issues"]} == {
+        "ceiling_height_missing", "elevation_defaulted", "wall_role_inferred"
+    }
+    r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 2600})
+    assert r.status_code == 201
+    assert client.post(GEN, json={"upload_id": uid, "ceiling_height": 0}).status_code == 422

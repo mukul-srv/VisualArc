@@ -93,7 +93,7 @@ def _handles(refs):
 
 def test_1_worked_example_exact_values(tmp_path):
     d = worked_example(Drawing())
-    p = read_dxf(d.save(tmp_path), wall_height=2700)
+    p = read_dxf(d.save(tmp_path), wall_height=2700, ceiling_height=2700)
     f, h = _floor(p), d.h
 
     (w,) = f.walls
@@ -128,6 +128,7 @@ def test_1_worked_example_exact_values(tmp_path):
         "unpaired_segment": 2,
         "elevation_defaulted": 1,
         "wall_role_inferred": 1,
+        "ceiling_not_built": 1,  # worked example draws no A-FLOR boundary
     }
     assert not _codes(p, "blocking")
     unpaired = [i for i in p.issues if i.code == "unpaired_segment"]
@@ -165,7 +166,7 @@ def _wall_with_gap(d: Drawing, g0, g1, jambs=True, t=200, length=5000):
 def test_2_narrow_window_jambs_consumed_no_plug(tmp_path):
     d = _wall_with_gap(Drawing(), 2000, 2500)
     d.rect("G", 2000, 0, 2500, 200, "A-GLAZ")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     (w,) = _floor(p).walls  # no 500 mm perpendicular plug wall
     assert (w.centreline.start, w.centreline.end) == ((0, 100), (5000, 100))
     (o,) = _floor(p).openings
@@ -176,7 +177,7 @@ def test_2_narrow_window_jambs_consumed_no_plug(tmp_path):
 
 def test_2_narrow_jambs_without_marker_block(tmp_path):
     d = _wall_with_gap(Drawing(), 2000, 2500)
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "gap_closed_by_jamb_pair")
     assert issue.severity == "blocking"
     assert {d.h["j1"], d.h["j2"]} <= set(_handles(issue.sources))
@@ -201,7 +202,7 @@ GAP_PTS = [(1000, 0), (1900, 0), (1900, 200), (1000, 200)]
 def test_3_marker_mismatch(tmp_path, marker):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     d.rect("M", *marker, "A-DOOR")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "opening_marker_mismatch")
     assert issue.severity == "blocking" and d.h["M"] in _handles(issue.sources)
     assert "+0.01 mm" in issue.message or "-0.01 mm" in issue.message
@@ -218,7 +219,7 @@ def test_3_marker_overlapping_wall_is_blocking(tmp_path, marker):
     # follows §4.3 order (material first). Either way: blocking, no opening.
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     d.rect("M", *marker, "A-DOOR")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert _codes(p, "blocking") == {"opening_marker_without_gap": 1}
     assert not _floor(p).openings and len(_floor(p).walls) == 2
 
@@ -231,7 +232,7 @@ def test_4_marker_on_unbroken_wall(tmp_path):
     d.line("b", (0, 0), (5000, 0))
     d.line("t", (0, 200), (5000, 200))
     d.rect("M", 1000, 0, 1900, 200, "A-DOOR")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert _issue(p, "opening_marker_without_gap").severity == "blocking"
     assert len(_floor(p).walls) == 1 and not _floor(p).openings
 
@@ -239,7 +240,7 @@ def test_4_marker_on_unbroken_wall(tmp_path):
 def test_4_marker_in_free_space(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     d.rect("M", 1000, 3000, 1900, 3200, "A-GLAZ")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert _issue(p, "opening_marker_outside_wall").severity == "blocking"
     assert "unmarked_wall_gap" in _codes(p)
 
@@ -250,7 +251,7 @@ def test_4_marker_over_two_gaps(tmp_path):
         for x0, x1 in ((0, 1000), (1900, 3000), (3600, 5000)):
             d.line(f"{x0}-{y}", (x0, y), (x1, y))
     d.rect("M", 1000, 0, 3600, 200, "A-GLAZ")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert _codes(p, "blocking") == {"opening_spans_multiple_gaps": 1}
     assert len(_floor(p).walls) == 3 and not _floor(p).openings
 
@@ -262,7 +263,7 @@ def test_5_door_and_window_on_one_gap(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900)
     d.rect("D", *GAP, "A-DOOR")
     d.rect("W", *GAP, "A-GLAZ")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "multiple_opening_markers")
     assert issue.severity == "blocking"
     assert {d.h["D"], d.h["W"]} <= set(_handles(issue.sources))
@@ -276,7 +277,7 @@ def test_6_flanking_walls_differ_in_thickness(tmp_path):
     d.line("b0", (1900, 0), (3000, 0))
     d.line("b1", (1900, 150), (3000, 150))
     d.rect("M", *GAP, "A-DOOR")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert _codes(p, "blocking") == {"opening_host_mismatch": 1}
     assert not _floor(p).openings
 
@@ -289,7 +290,7 @@ def test_7_one_face_continuous(tmp_path, marked):
     d.line("t2", (1900, 200), (5000, 200))
     if marked:
         d.rect("M", *GAP, "A-DOOR")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "partial_wall_gap")
     assert issue.severity == "blocking" and d.h["long"] in _handles(issue.sources)
     assert not _floor(p).openings and len(_floor(p).walls) == 2
@@ -302,14 +303,14 @@ def test_7_wall_line_on_marker_long_edge_is_not_a_jamb(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900)
     d.line("across", (1000, 0), (1900, 0))
     d.rect("M", *GAP, "A-DOOR")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert _codes(p, "blocking")
     assert not _floor(p).openings
 
 
 def test_8_unmarked_gap_is_a_warning(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "unmarked_wall_gap")
     assert issue.severity == "warning" and not _codes(p, "blocking")
     assert len(_floor(p).walls) == 2 and not _floor(p).openings
@@ -323,7 +324,7 @@ def test_9_insert_on_door_layer(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     d.doc.blocks.new("DOOR")
     e = d.msp.add_blockref("DOOR", (1000, 0), dxfattribs={"layer": "A-DOOR"})
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "unsupported_opening_block")
     assert issue.severity == "blocking" and _handles(issue.sources) == [e.dxf.handle]
     assert "unmapped_layer" not in _codes(p)
@@ -342,7 +343,7 @@ def test_9_insert_on_door_layer(tmp_path):
 def test_9_invalid_marker(tmp_path, pts, kw):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     e = d.msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": "A-GLAZ", **kw})
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "invalid_opening_marker")
     assert issue.severity == "blocking" and _handles(issue.sources) == [e.dxf.handle]
     assert not _floor(p).openings
@@ -351,14 +352,14 @@ def test_9_invalid_marker(tmp_path, pts, kw):
 def test_9_marker_closed_by_repeated_vertex_is_valid(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     d.msp.add_lwpolyline(GAP_PTS + GAP_PTS[:1], dxfattribs={"layer": "A-DOOR"})
-    (o,) = _floor(read_dxf(d.save(tmp_path), 2700)).openings
+    (o,) = _floor(read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)).openings
     assert o.width.value == 900
 
 
 def test_10_orphan_swing_and_symbols_never_geometry(tmp_path):
     plain = _wall_with_gap(Drawing(), 1000, 1900)
     plain.rect("D", *GAP, "A-DOOR")
-    ref = read_dxf(plain.save(tmp_path, "plain.dxf"), 2700)
+    ref = read_dxf(plain.save(tmp_path, "plain.dxf"), 2700, ceiling_height=2700)
 
     d = _wall_with_gap(Drawing(), 1000, 1900)
     d.rect("D", *GAP, "A-DOOR")
@@ -369,7 +370,7 @@ def test_10_orphan_swing_and_symbols_never_geometry(tmp_path):
     d.msp.add_text("D01", dxfattribs={"layer": "A-DOOR"})
     d.msp.add_lwpolyline([(0, 0), (500, 500)], dxfattribs={"layer": "A-DOOR"})
     d.line("glass", (1000, 100), (1900, 100), "A-GLAZ")
-    p = read_dxf(d.save(tmp_path), 2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
 
     orphan = _issue(p, "orphan_door_swing")
     assert orphan.severity == "warning"
@@ -392,7 +393,7 @@ def test_10_symbol_refs_capped(tmp_path):
     d = Drawing()
     for k in range(25):
         d.line(f"s{k}", (0, 5000 + k), (100, 5000 + k), "A-GLAZ")
-    issue = _issue(read_dxf(d.save(tmp_path), 2700), "opening_symbol_ignored")
+    issue = _issue(read_dxf(d.save(tmp_path), 2700, ceiling_height=2700), "opening_symbol_ignored")
     assert "25 LINE" in issue.message and "first 20 of 25" in issue.message
     assert _handles(issue.sources) == [d.h[f"s{k}"] for k in range(20)]
 
@@ -404,7 +405,7 @@ def test_11_window_exceeds_wall_height(tmp_path):
     path = worked_example(Drawing()).save(tmp_path)
     out = tmp_path / "o.json"
     with pytest.raises(SystemExit) as exc:
-        main(["interpret", str(path), "--wall-height", "2700", "--window-sill", "1800",
+        main(["interpret", str(path), "--wall-height", "2700", "--ceiling-height", "2700", "--window-sill", "1800",
               "--window-height", "1200", "--out", str(out)])  # fmt: skip
     assert exc.value.code == 1
     p = json.loads(out.read_text())
@@ -415,7 +416,7 @@ def test_11_window_exceeds_wall_height(tmp_path):
 
 def test_11_flags_are_user_provided(tmp_path):
     path = worked_example(Drawing()).save(tmp_path)
-    p = read_dxf(path, 2700, door_height=2000, window_height=1000, window_sill=600)
+    p = read_dxf(path, 2700, ceiling_height=2700, door_height=2000, window_height=1000, window_sill=600)
     door, window = _floor(p).openings
     assert (door.height.value, door.height.source) == (2000, "user_provided")
     assert (door.sill_height.value, door.sill_height.source) == (0, "defaulted")
@@ -431,7 +432,7 @@ def test_11_flags_are_user_provided(tmp_path):
 
 def test_11_equal_to_wall_height_is_allowed(tmp_path):
     path = worked_example(Drawing()).save(tmp_path)
-    p = read_dxf(path, 2700, window_height=1800, window_sill=900)
+    p = read_dxf(path, 2700, ceiling_height=2700, window_height=1800, window_sill=900)
     assert len(_floor(p).openings) == 2 and not _codes(p, "blocking")
 
 
@@ -442,7 +443,7 @@ def test_11_equal_to_wall_height_is_allowed(tmp_path):
 def test_11_cli_rejects_bad_flags(tmp_path, flag, value):
     path = worked_example(Drawing()).save(tmp_path)
     with pytest.raises(SystemExit) as exc:
-        main(["interpret", str(path), "--wall-height", "2700", flag, value])
+        main(["interpret", str(path), "--wall-height", "2700", "--ceiling-height", "2700", flag, value])
     assert exc.value.code == 2
 
 
@@ -450,13 +451,13 @@ def test_11_reader_rejects_bad_values(tmp_path):
     path = worked_example(Drawing()).save(tmp_path)
     for kw in ({"door_height": 0}, {"window_height": -1}, {"window_sill": -1}):
         with pytest.raises(ValueError):
-            read_dxf(path, 2700, **kw)
+            read_dxf(path, 2700, ceiling_height=2700, **kw)
 
 
 def test_11_window_sill_zero_accepted_by_cli(tmp_path):
     path = worked_example(Drawing()).save(tmp_path)
     out = tmp_path / "o.json"
-    main(["interpret", str(path), "--wall-height", "2700", "--window-sill", "0",
+    main(["interpret", str(path), "--wall-height", "2700", "--ceiling-height", "2700", "--window-sill", "0",
           "--out", str(out)])  # fmt: skip
     (_, w) = json.loads(out.read_text())["buildings"][0]["floors"][0]["openings"]
     assert w["sill_height"] == {"value": 0.0, "unit": "mm", "source": "user_provided"}
@@ -467,8 +468,8 @@ def test_11_window_sill_zero_accepted_by_cli(tmp_path):
 
 def test_12_lower_case_layers_identical(tmp_path):
     (tmp_path / "u").mkdir()
-    upper = read_dxf(worked_example(Drawing()).save(tmp_path / "u"), 2700)
-    lower = read_dxf(worked_example(Drawing(case=str.lower)).save(tmp_path), 2700)
+    upper = read_dxf(worked_example(Drawing()).save(tmp_path / "u"), 2700, ceiling_height=2700)
+    lower = read_dxf(worked_example(Drawing(case=str.lower)).save(tmp_path), 2700, ceiling_height=2700)
     dump = lambda p: json.loads(p.model_dump_json().upper())
     assert dump(lower) == dump(upper)
     assert _floor(lower).openings[0].sources[0].layer == "a-door"
@@ -476,7 +477,7 @@ def test_12_lower_case_layers_identical(tmp_path):
 
 def test_13_units_flag_makes_width_and_offset_user_provided(tmp_path):
     d = worked_example(Drawing(insunits=0))
-    p = read_dxf(d.save(tmp_path), 2700, user_units="mm")
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700, user_units="mm")
     for o in _floor(p).openings:
         assert o.width.source == o.offset.source == "user_provided"
     assert [o.width.value for o in _floor(p).openings] == [900, 600]
@@ -488,7 +489,7 @@ def test_13_units_scale_openings(tmp_path):
         d.line(f"{n}1", (0, y), (1, y))
         d.line(f"{n}2", (1.9, y), (5, y))
     d.rect("D", 1, 0, 1.9, 0.2, "A-DOOR")
-    (o,) = _floor(read_dxf(d.save(tmp_path), 2700)).openings
+    (o,) = _floor(read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)).openings
     assert o.width.value == pytest.approx(900, abs=1e-6)
     assert o.offset.value == pytest.approx(1000, abs=1e-6)
     assert o.width.source == "source_extracted"

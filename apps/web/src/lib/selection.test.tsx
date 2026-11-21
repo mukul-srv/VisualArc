@@ -37,7 +37,7 @@ beforeAll(async () => {
   const out = mkdtempSync(path.join(tmpdir(), "sel-"));
   execFileSync(
     "uv",
-    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input/fixture_openings.dxf"), "--wall-height", "3000", "--out", out],
+    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input/fixture_openings.dxf"), "--wall-height", "3000", "--ceiling-height", "3000", "--out", out],
     { cwd: path.join(root, "services/api"), stdio: "pipe" },
   );
   const buf = readFileSync(path.join(out, "fixture_openings.glb"));
@@ -158,4 +158,17 @@ test("ray at solid wall beside an aperture selects the wall, not the opening", (
 
 test("ray that misses everything picks nothing", () => {
   expect(pickElement(scene, new THREE.Ray(new THREE.Vector3(100, 100, 100), new THREE.Vector3(0, 1, 0)))).toBeNull();
+});
+
+test("describeElement handles a ceiling with inferred elevation provenance", () => {
+  const p = describeElement({
+    id: "ceiling-001",
+    type: "ceiling",
+    floor_id: "floor-0",
+    elevation: { value: 3000, unit: "mm", source: "inferred" },
+    sources: [{ layer: "A-FLOR", entity_handle: "3D" }],
+  });
+  expect(p.title).toBe("Ceiling");
+  expect(p.rows).toContainEqual({ label: "Elevation", value: "3000 mm", provenance: "inferred" });
+  expect(p.sources).toEqual(["A-FLOR:3D"]);
 });

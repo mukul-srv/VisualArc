@@ -9,7 +9,7 @@ import { resolveStem } from "@/lib/model-stem";
 import { MetadataPanel } from "@/components/MetadataPanel";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
-import { collectColliders, makeDoubleSided, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
+import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
 
@@ -192,6 +192,7 @@ export default function ViewerPage() {
     const exitWalk = () => {
       if (!walk) return;
       walk.restore();
+      persp.layers.disable(CEILING_LAYER);
       keys.clear();
       camera.position.copy(walk.saved.position);
       controls.target.copy(walk.saved.target);
@@ -218,6 +219,7 @@ export default function ViewerPage() {
         restore: makeDoubleSided(colliders),
         saved: { position: camera.position.clone(), target: controls.target.clone() },
       };
+      persp.layers.enable(CEILING_LAYER); // ceilings are drawn only while walking
       controls.enabled = false;
       setWalking(true);
       aim();
@@ -301,7 +303,8 @@ export default function ViewerPage() {
       (gltf) => {
         scene.add(gltf.scene);
         model = gltf.scene;
-        const box = new THREE.Box3().setFromObject(gltf.scene);
+        layerCeilings(model);
+        const box = modelBox(model);
         const s = box.getSize(new THREE.Vector3());
         center = box.getCenter(new THREE.Vector3());
         size = Math.max(s.x, s.z);

@@ -9,7 +9,8 @@ import path from "node:path";
 import { beforeAll, expect, test } from "vitest";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { collectColliders, makeDoubleSided, moveWithCollision, spawnPoint, WALK } from "./walk";
+import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "./walk";
+import { pickElement } from "./pick";
 
 const root = path.resolve(__dirname, "../../../..");
 type Canon = {
@@ -24,7 +25,7 @@ async function load(name: string, expected: string): Promise<Loaded> {
   const out = mkdtempSync(path.join(tmpdir(), "walk-"));
   execFileSync(
     "uv",
-    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input", `${name}.dxf`), "--wall-height", "3000", "--out", out],
+    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input", `${name}.dxf`), "--wall-height", "3000", "--ceiling-height", "3000", "--out", out],
     { cwd: path.join(root, "services/api"), stdio: "pipe" },
   );
   const buf = readFileSync(path.join(out, `${name}.glb`));
@@ -191,4 +192,25 @@ test("walking into the reflex corner keeps the body radius off the walls", () =>
     pos.copy(before);
   }
   expect(bad).toEqual([]);
+});
+
+test("ceilings: hidden layer is not picked, does not move the spawn, and does not enter the box", () => {
+  const f = fixtures.a;
+  const ceilings: THREE.Object3D[] = [];
+  f.scene.traverse((o) => o.userData?.type === "ceiling" && ceilings.push(o));
+  expect(ceilings.length).toBe(f.canon.boundaries.length);
+  const before = spawnPoint(f.scene)!;
+  layerCeilings(f.scene);
+  const s = spawnPoint(f.scene)!;
+  expect(s.floorY).toBe(before.floorY);
+  expect(s.floorY).toBeLessThan(0.001); // the floor, not the ceiling elevation
+  // straight down from above the ceiling: must land on the floor boundary, not the ceiling
+  const pick = pickElement(f.scene, new THREE.Ray(new THREE.Vector3(s.pos.x, 10, s.pos.z), new THREE.Vector3(0, -1, 0)));
+  expect(pick?.mesh.userData.type).toBe("floor_boundary");
+  // a camera draws them only once the layer is enabled (walk mode)
+  const cam = new THREE.PerspectiveCamera();
+  expect(ceilings.every((c) => !cam.layers.test(c.layers))).toBe(true);
+  cam.layers.enable(CEILING_LAYER);
+  expect(ceilings.every((c) => cam.layers.test(c.layers))).toBe(true);
+  expect(modelBox(f.scene).max.y).toBeLessThanOrEqual(3.0 + 1e-9);
 });

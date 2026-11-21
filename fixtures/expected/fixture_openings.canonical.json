@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.4.0",
+  "schema_version": "0.5.0",
   "id": "fixture_openings",
   "units": "mm",
   "source_file": "fixture_openings.dxf",
@@ -14,6 +14,11 @@
             "value": 0.0,
             "unit": "mm",
             "source": "defaulted"
+          },
+          "ceiling_height": {
+            "value": 3000.0,
+            "unit": "mm",
+            "source": "user_provided"
           },
           "walls": [
             {
@@ -1124,6 +1129,110 @@
                   "format": "dxf",
                   "layer": "A-DOOR",
                   "entity_handle": "5D"
+                }
+              ]
+            }
+          ],
+          "ceilings": [
+            {
+              "id": "ceiling-001",
+              "type": "ceiling",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  3200.0,
+                  200.0
+                ],
+                [
+                  3200.0,
+                  3800.0
+                ],
+                [
+                  200.0,
+                  3800.0
+                ]
+              ],
+              "elevation": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "64"
+                }
+              ]
+            },
+            {
+              "id": "ceiling-002",
+              "type": "ceiling",
+              "polygon": [
+                [
+                  3300.0,
+                  200.0
+                ],
+                [
+                  6300.0,
+                  200.0
+                ],
+                [
+                  6300.0,
+                  3800.0
+                ],
+                [
+                  3300.0,
+                  3800.0
+                ]
+              ],
+              "elevation": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "65"
+                }
+              ]
+            },
+            {
+              "id": "ceiling-003",
+              "type": "ceiling",
+              "polygon": [
+                [
+                  6400.0,
+                  200.0
+                ],
+                [
+                  9400.0,
+                  200.0
+                ],
+                [
+                  9400.0,
+                  3800.0
+                ],
+                [
+                  6400.0,
+                  3800.0
+                ]
+              ],
+              "elevation": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "66"
                 }
               ]
             }

@@ -118,7 +118,7 @@ WALLS = [
 def floor_project():
     from api.engine.adapters.dxf.reader import read_dxf
 
-    return read_dxf(DXF, wall_height=3000)
+    return read_dxf(DXF, wall_height=3000, ceiling_height=3000)
 
 
 def test_reader_merges_walls_around_openings(floor_project):
@@ -169,6 +169,6 @@ def test_snapshot(tmp_path):
     from api.cli import main
 
     out = tmp_path / "o.json"
-    main(["interpret", str(DXF), "--wall-height", "3000", "--out", str(out)])
+    main(["interpret", str(DXF), "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)])
     expected = DXF.parents[1] / "expected" / "fixture_openings.canonical.json"
     assert json.loads(out.read_text()) == json.loads(expected.read_text())

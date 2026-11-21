@@ -35,11 +35,11 @@ def _counts(project):
 
 
 def test_per_tile_counts_match_fixture_openings():
-    assert _counts(read_dxf(INPUT / "fixture_openings.dxf", 3000)) == PER_TILE
+    assert _counts(read_dxf(INPUT / "fixture_openings.dxf", 3000, ceiling_height=3000)) == PER_TILE
 
 
 def test_committed_fixture_d_is_nine_tiles_with_exact_counts():
-    p = read_dxf(INPUT / "fixture_d.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_d.dxf", 3000, ceiling_height=3000)
     assert [i.severity for i in p.issues].count("blocking") == 0
     assert _counts(p) == {k: v * 9 for k, v in PER_TILE.items()}
     thick = {w.thickness.value for w in p.buildings[0].floors[0].walls}
@@ -50,8 +50,8 @@ def test_committed_fixture_d_is_nine_tiles_with_exact_counts():
 def test_far_from_origin_geometry_is_unchanged(tmp_path, offset):
     """Extent probe: translating the plan must not change walls or openings."""
     make_d.make(1, 1, tmp_path / "t.dxf", offset_mm=offset)
-    p = read_dxf(tmp_path / "t.dxf", 3000)
-    ref = read_dxf(INPUT / "fixture_openings.dxf", 3000)
+    p = read_dxf(tmp_path / "t.dxf", 3000, ceiling_height=3000)
+    ref = read_dxf(INPUT / "fixture_openings.dxf", 3000, ceiling_height=3000)
     assert _counts(p) == _counts(ref)
     fp, fr = p.buildings[0].floors[0], ref.buildings[0].floors[0]
     assert sorted(w.thickness.value for w in fp.walls) == pytest.approx(
@@ -79,7 +79,7 @@ def client(tmp_path, monkeypatch):
 def _job(client, name):
     up = client.post("/api/v1/uploads", content=(INPUT / name).read_bytes()).json()
     gen = client.post(
-        "/api/v1/generations", json={"upload_id": up["upload_id"], "wall_height": 3000}
+        "/api/v1/generations", json={"upload_id": up["upload_id"], "wall_height": 3000, "ceiling_height": 3000}
     )
     assert gen.status_code == 201
     body = gen.json()
@@ -92,7 +92,7 @@ def test_each_storey_is_its_own_job_and_never_combined(client):
     assert len({gid for gid, _ in jobs.values()}) == 3  # distinct jobs
     for k, (gid, floor) in jobs.items():
         name, _ = FLOORS[k]
-        solo = read_dxf(INPUT / name, 3000).buildings[0].floors[0]
+        solo = read_dxf(INPUT / name, 3000, ceiling_height=3000).buildings[0].floors[0]
         # same element counts as processing that drawing alone: nothing carried over
         assert len(floor["walls"]) == len(solo.walls)
         assert len(floor["openings"]) == len(solo.openings)
@@ -120,10 +120,10 @@ def test_two_plans_in_one_file_are_one_floor_known_limitation(tmp_path):
             c.translate(dx, 0, 0)
             msp.add_entity(c)
     doc.saveas(tmp_path / "two.dxf")
-    p = read_dxf(tmp_path / "two.dxf", 3000)
+    p = read_dxf(tmp_path / "two.dxf", 3000, ceiling_height=3000)
     assert len(p.buildings) == 1 and len(p.buildings[0].floors) == 1
     solo = [
-        read_dxf(INPUT / n, 3000).buildings[0].floors[0]
+        read_dxf(INPUT / n, 3000, ceiling_height=3000).buildings[0].floors[0]
         for n in ("fixture_a.dxf", "fixture_b.dxf")
     ]
     assert len(p.buildings[0].floors[0].walls) == sum(len(f.walls) for f in solo)

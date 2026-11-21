@@ -31,6 +31,7 @@ class GenerationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     upload_id: str
     wall_height: float | None = Field(None, gt=0, description="mm")
+    ceiling_height: float | None = Field(None, gt=0, description="mm")
     units: Literal[tuple(USER_UNITS)] | None = None  # type: ignore[valid-type]
     door_height: float | None = Field(None, gt=0, description="mm")
     window_height: float | None = Field(None, gt=0, description="mm")
@@ -53,6 +54,7 @@ def create_generation(req: GenerationRequest):
             door_height=req.door_height,
             window_height=req.window_height,
             window_sill=req.window_sill,
+            ceiling_height=req.ceiling_height,
         )
     except InputError as e:
         raise HTTPException(

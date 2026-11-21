@@ -22,7 +22,7 @@ export type OpeningData = {
 
 export type ElementData = {
   id: string;
-  type: "wall" | "junction" | "floor_boundary";
+  type: "wall" | "junction" | "floor_boundary" | "ceiling";
   floor_id?: string;
   thickness?: Measured;
   height?: Measured | null;
@@ -30,6 +30,7 @@ export type ElementData = {
   role_source?: Provenance | null;
   wall_ids?: string[];
   source?: Provenance; // junction: always "inferred"
+  elevation?: Measured; // ceiling: floor elevation + ceiling height
   sources?: SourceRef[];
   openings?: OpeningData[];
 };
@@ -124,6 +125,15 @@ export function describeElement(ud: ElementData): Panel {
       ],
       sourcesLabel: "Source entities",
       sources: [], // not drawn in the DXF: derived from the walls above
+    };
+  }
+  if (ud.type === "ceiling") {
+    return {
+      title: "Ceiling",
+      id: ud.id,
+      rows: [...floor, measured("Elevation", ud.elevation)],
+      sourcesLabel: "Source entities (floor boundary)",
+      sources: refs(ud.sources),
     };
   }
   return {

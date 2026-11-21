@@ -16,6 +16,7 @@ from ezdxf import units
 
 from api.engine.canonical.model import (
     Building,
+    Ceiling,
     Floor,
     FloorBoundary,
     Issue,
@@ -182,12 +183,14 @@ def read_dxf(
     door_height: float | None = None,
     window_height: float | None = None,
     window_sill: float | None = None,
+    ceiling_height: float | None = None,
     settings: Settings = DEFAULTS,
 ) -> Project:
     for name, v in (
         ("wall height", wall_height),
         ("door height", door_height),
         ("window height", window_height),
+        ("ceiling height", ceiling_height),
     ):
         if v is not None and v <= 0:
             raise ValueError(f"{name} must be > 0 mm, got {v}")
@@ -456,10 +459,54 @@ def read_dxf(
         )
     )
     issues += role_issues
+    elevation = Measured(value=0, source="defaulted")
+    ceil_h = ceilings = None
+    if ceiling_height is not None:
+        ceil_h = Measured(value=ceiling_height, source="user_provided")
+        # derived sum, so "inferred" (not the user's own number); the floor
+        # elevation it builds on is still reported by elevation_defaulted
+        top = Measured(value=elevation.value + ceiling_height, source="inferred")
+        ceilings = [
+            Ceiling(
+                id=b.id.replace("fb-", "ceiling-", 1),
+                polygon=b.polygon,
+                elevation=top,
+                sources=b.sources,
+            )
+            for b in boundaries
+        ]
+        if not boundaries:
+            issues.append(
+                Issue(
+                    code="ceiling_not_built",
+                    severity="warning",
+                    message="ceiling height given but no floor boundary on "
+                    f"{floor_layer}; no ceiling built",
+                )
+            )
+        if wall_height is not None and ceiling_height > wall_height:
+            issues.append(
+                Issue(
+                    code="ceiling_above_walls",
+                    severity="warning",
+                    message=f"ceiling height {ceiling_height:g} mm exceeds wall "
+                    f"height {wall_height:g} mm; there is a gap above the walls",
+                )
+            )
+    elif paired:
+        issues.append(
+            Issue(
+                code="ceiling_height_missing",
+                severity="blocking",
+                message="DXF has no ceiling height; supply --ceiling-height (mm)",
+            )
+        )
     floor = Floor(
         id="floor-0",
         name="Level 0",
-        elevation=Measured(value=0, source="defaulted"),
+        elevation=elevation,
+        ceiling_height=ceil_h,
+        ceilings=ceilings or [],
         walls=walls,
         junctions=junctions,
         boundaries=boundaries,

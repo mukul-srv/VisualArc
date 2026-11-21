@@ -8,7 +8,7 @@ FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "input"
 
 
 def _geometry(path: Path):
-    p = read_dxf(path, wall_height=3000)
+    p = read_dxf(path, wall_height=3000, ceiling_height=3000)
     f = p.buildings[0].floors[0]
     walls = sorted(
         (
@@ -35,7 +35,7 @@ def test_fixture_c_matches_fixture_a_geometry():
 
 
 def test_fixture_c_source_refs_use_actual_layer_and_polyline_handles():
-    f = read_dxf(FIXTURES / "fixture_c.dxf", 3000).buildings[0].floors[0]
+    f = read_dxf(FIXTURES / "fixture_c.dxf", 3000, ceiling_height=3000).buildings[0].floors[0]
     refs = {(s.layer, s.entity_handle) for w in f.walls for s in w.sources}
     assert {layer for layer, _ in refs} == {"a-wall"}
     assert len({h for _, h in refs}) == 3  # three polylines, not 12 lines

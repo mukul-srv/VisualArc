@@ -25,11 +25,11 @@ def _prism(footprint: Polygon, z0: float, height: float) -> trimesh.Trimesh:
     return mesh
 
 
-def _flat(polygon: Polygon, z: float) -> trimesh.Trimesh:
-    # no slab thickness in the canonical model -> zero-thickness surface, facing up
+def _flat(polygon: Polygon, z: float, up: bool = True) -> trimesh.Trimesh:
+    # no slab thickness in the canonical model -> zero-thickness surface
     v2, faces = trimesh.creation.triangulate_polygon(orient(polygon, 1.0))
     v3 = np.column_stack([v2, np.full(len(v2), z)])
-    return trimesh.Trimesh(v3, faces, process=True)
+    return trimesh.Trimesh(v3, faces if up else faces[:, ::-1], process=True)
 
 
 def _wall_with_openings(
@@ -86,4 +86,6 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
         )
     for b in floor.boundaries:
         meshes[b.id] = _flat(Polygon(b.polygon), z0)
+    for c in floor.ceilings:  # underside faces down so it shows from inside
+        meshes[c.id] = _flat(Polygon(c.polygon), c.elevation.value, up=False)
     return meshes

@@ -14,7 +14,7 @@ FIXTURE_B = FIXTURES / "input" / "fixture_b.dxf"
 
 
 def test_fixture_b_l_shaped_room():
-    p = read_dxf(FIXTURE_B, wall_height=3000)
+    p = read_dxf(FIXTURE_B, wall_height=3000, ceiling_height=3000)
     assert [(i.code, i.severity) for i in p.issues] == [
         ("elevation_defaulted", "warning"),
         ("wall_role_inferred", "warning"),
@@ -41,7 +41,7 @@ def test_fixture_b_l_shaped_room():
 
 def test_fixture_b_snapshot(tmp_path: Path):
     out = tmp_path / "b.json"
-    main(["interpret", str(FIXTURE_B), "--wall-height", "3000", "--out", str(out)])
+    main(["interpret", str(FIXTURE_B), "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)])
     expected = json.loads(
         (FIXTURES / "expected" / "fixture_b.canonical.json").read_text()
     )

@@ -15,7 +15,11 @@ from api.storage import new_id, upload_path
 router = APIRouter(prefix="/api/v1")
 
 # preflight issues that mean "the user must supply this parameter"
-_NEEDS = {"wall_height_missing": "wall_height", "units_missing": "units"}
+_NEEDS = {
+    "wall_height_missing": "wall_height",
+    "ceiling_height_missing": "ceiling_height",
+    "units_missing": "units",
+}
 
 
 async def _save(request: Request, limit: int) -> int:

@@ -19,7 +19,7 @@ beforeAll(async () => {
   const out = mkdtempSync(path.join(tmpdir(), "meas-"));
   execFileSync(
     "uv",
-    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input/fixture_a.dxf"), "--wall-height", "3000", "--out", out],
+    ["run", "python", "-m", "api.cli", "build", path.join(root, "fixtures/input/fixture_a.dxf"), "--wall-height", "3000", "--ceiling-height", "3000", "--out", out],
     { cwd: path.join(root, "services/api"), stdio: "pipe" },
   );
   const buf = readFileSync(path.join(out, "fixture_a.glb"));

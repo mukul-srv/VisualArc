@@ -21,6 +21,28 @@ export const WALK = {
   speed: 2.0, // m/s
 };
 
+/** Ceilings live on their own layer: three's Raycaster only tests layer 0, so they are
+ *  never picked, measured, or hit by the spawn/collision rays; only a camera that enables
+ *  this layer (walk mode) draws them. */
+export const CEILING_LAYER = 1;
+
+export function layerCeilings(model: THREE.Object3D): void {
+  model.traverse((o) => {
+    if (o.userData?.type === "ceiling") o.layers.set(CEILING_LAYER);
+  });
+}
+
+/** Bounding box of the model without ceilings, so orbit limits and plan framing do not
+ *  depend on geometry that is hidden in those views. */
+export function modelBox(model: THREE.Object3D): THREE.Box3 {
+  const box = new THREE.Box3();
+  model.updateWorldMatrix(true, true);
+  model.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh && o.userData?.type !== "ceiling") box.expandByObject(o);
+  });
+  return box;
+}
+
 /** Solid meshes the player collides with: walls and junctions (never the floor plane). */
 export function collectColliders(model: THREE.Object3D): THREE.Mesh[] {
   const out: THREE.Mesh[] = [];

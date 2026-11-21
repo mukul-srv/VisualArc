@@ -97,14 +97,14 @@ def test_annotation_does_not_consume_the_wall_or_marker_caps():
 def test_default_limits_reject_601_wall_lines_fast_via_read_dxf(tmp_path):
     p = _save(tmp_path, _doc(walls=601))
     with pytest.raises(InputError, match="601 wall segments.*limit is 600"):
-        read_dxf(p, 3000)
+        read_dxf(p, 3000, ceiling_height=3000)
 
 
 def test_cli_exits_3_with_clear_message(tmp_path, capsys):
     p = _save(tmp_path, _doc(walls=601))
     with pytest.raises(SystemExit) as e:
         main(
-            ["interpret", str(p), "--wall-height", "3000", "--out", str(tmp_path / "o")]
+            ["interpret", str(p), "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(tmp_path / "o")]
         )
     assert e.value.code == 3
     err = capsys.readouterr().err
