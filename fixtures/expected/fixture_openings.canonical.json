@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.5.0",
+  "schema_version": "0.6.0",
   "id": "fixture_openings",
   "units": "mm",
   "source_file": "fixture_openings.dxf",
@@ -1236,7 +1236,8 @@
                 }
               ]
             }
-          ]
+          ],
+          "plan_offset": null
         }
       ]
     }

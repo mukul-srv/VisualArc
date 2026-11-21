@@ -470,7 +470,7 @@ def test_12_lower_case_layers_identical(tmp_path):
     (tmp_path / "u").mkdir()
     upper = read_dxf(worked_example(Drawing()).save(tmp_path / "u"), 2700, ceiling_height=2700)
     lower = read_dxf(worked_example(Drawing(case=str.lower)).save(tmp_path), 2700, ceiling_height=2700)
-    dump = lambda p: json.loads(p.model_dump_json().upper())
+    dump = lambda p: json.loads(p.model_dump_json().upper().replace("NULL", "null"))
     assert dump(lower) == dump(upper)
     assert _floor(lower).openings[0].sources[0].layer == "a-door"
 

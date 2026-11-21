@@ -11,6 +11,7 @@ as interior, indistinguishable from a partition without more information.
 from shapely.geometry import LineString, Polygon
 from shapely.ops import unary_union
 
+from api.engine.adapters.dxf.split import strip_floor_prefix
 from api.engine.canonical.model import Issue
 from api.engine.geometry2d.walls import JunctionPiece, PairedWall
 from api.engine.settings import DEFAULTS, Settings
@@ -52,9 +53,9 @@ def resolve_roles(
     pending = []
     for w in walls:
         found = {
-            layer_role[s.layer.upper()]
+            layer_role[strip_floor_prefix(s.layer, settings).upper()]
             for s in w.sources
-            if s.layer.upper() in layer_role
+            if strip_floor_prefix(s.layer, settings).upper() in layer_role
         }
         if len(found) > 1:
             roles[w.id] = None

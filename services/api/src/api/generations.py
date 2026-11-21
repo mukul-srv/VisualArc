@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
+from api.engine.canonical.model import Project
 from api.pipeline import has_blocking, write_artifacts
 from api.storage import data_dir, new_id, upload_path, valid_id
 
@@ -42,10 +43,9 @@ def _dir(generation_id: str):
     return data_dir() / "generations" / generation_id
 
 
-def run_generation(req: GenerationRequest, **floor) -> tuple[str | None, list[dict]]:
-    """Shared by /generations and project floors. `floor` = floor_id/floor_name/
-    floor_elevation, passed to read_dxf. Returns (generation_id, issues); the id is
-    None when blocking issues stopped it (nothing is stored)."""
+def read_project(req: GenerationRequest, **floor) -> Project:
+    """Read the upload into a Project; nothing is stored. `floor` = floor_id/
+    floor_name/floor_elevation/scope, passed to read_dxf."""
     if not valid_id(req.upload_id) or not upload_path(req.upload_id).is_file():
         raise HTTPException(404, "unknown upload_id")
     try:
@@ -63,6 +63,13 @@ def run_generation(req: GenerationRequest, **floor) -> tuple[str | None, list[di
         raise HTTPException(
             422, str(e).replace(str(upload_path(req.upload_id)), "the uploaded file")
         ) from e
+    return project
+
+
+def run_generation(req: GenerationRequest, **floor) -> tuple[str | None, list[dict]]:
+    """Shared by /generations and project floors. Returns (generation_id, issues);
+    the id is None when blocking issues stopped it (nothing is stored)."""
+    project = read_project(req, **floor)
     issues = [i.model_dump(mode="json") for i in project.issues]
     if has_blocking(project):  # nothing is stored: the client fixes inputs and retries
         return None, issues

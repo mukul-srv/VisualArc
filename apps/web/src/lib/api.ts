@@ -1,5 +1,6 @@
 import type { Floor } from "./project";
 import type { SourceRef } from "./selection";
+import type { FloorCandidate, SplitBody } from "./split";
 
 // Thin client for the FastAPI backend. fetch is injectable so tests need no server.
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
@@ -16,6 +17,7 @@ export type Preflight = {
   issues: Issue[];
   needs: ("wall_height" | "ceiling_height" | "units")[];
   inventory: { layers: string[]; entity_counts: Record<string, number> };
+  floor_candidates?: FloorCandidate[]; // >= 2: the user must confirm the floors (split step)
 };
 
 export type GenerationParams = {
@@ -101,6 +103,11 @@ export type FloorParams = GenerationParams & { floor_name: string; elevation: nu
 export const addFloor = (projectId: string, params: FloorParams, f: Fetch = fetch) =>
   send<{ floor: Floor; generation_id: string; issues: Issue[] }>(() =>
     post(`/projects/${projectId}/floors`, params, f),
+  );
+
+export const splitUpload = (uploadId: string, body: SplitBody, f: Fetch = fetch) =>
+  send<{ project_id: string; floors: { key: string; floor: Floor; generation_id: string; issues: Issue[] }[]; issues: Issue[] }>(() =>
+    post(`/uploads/${uploadId}/split`, body, f),
   );
 
 export const getProject = (projectId: string, f: Fetch = fetch) =>
