@@ -54,3 +54,32 @@ def _need_db(request):
     # engine-only tests run without Postgres; modules that import TestClient need it
     if "db" in request.fixturenames or hasattr(request.module, "TestClient"):
         request.getfixturevalue("_db_url")
+
+
+@pytest.fixture(autouse=True)
+def _authenticated_clients(request, monkeypatch, _need_db):
+    """Every TestClient built in a DB test starts logged in as a fresh user, so existing
+    endpoint tests exercise the real guard. Tests marked `anon` (the auth tests) get plain
+    unauthenticated clients."""
+    from fastapi.testclient import TestClient
+
+    from api import auth
+    from api.db import UserRow, session
+    from api.storage import new_id
+
+    auth._hits.clear()  # rate limiter is process-global
+    if not hasattr(request.module, "TestClient"):
+        return
+    if request.node.get_closest_marker("anon"):
+        return
+    orig = TestClient.__init__
+
+    def init(self, *a, **kw):
+        orig(self, *a, **kw)
+        with session() as db:
+            uid = new_id()
+            db.add(UserRow(id=uid, email=f"{uid}@test.example", password_hash=None, display_name="t"))
+            db.commit()
+        self.cookies.set(auth.COOKIE, auth.create_session(uid))
+
+    monkeypatch.setattr(TestClient, "__init__", init)

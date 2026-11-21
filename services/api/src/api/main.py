@@ -1,12 +1,15 @@
 import math
 import os
+import secrets
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
+from api.auth import router as auth_router
 from api.generations import router as generations_router
 from api.projects import router as projects_router
 from api.uploads import router as uploads_router
@@ -19,9 +22,20 @@ _ORIGINS = os.environ.get(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ORIGINS.split(","),
-    allow_methods=["GET", "POST"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type"],
 )
+# signed cookie that only carries OAuth state/next across the provider redirect
+# shortcut: random per-process secret; set SESSION_SECRET when running several workers
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get("SESSION_SECRET") or secrets.token_hex(32),
+    max_age=600,
+    same_site="lax",
+    https_only=os.environ.get("AUTH_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
+)
+app.include_router(auth_router)
 app.include_router(uploads_router)
 app.include_router(generations_router)
 app.include_router(projects_router)

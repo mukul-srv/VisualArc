@@ -18,6 +18,7 @@ const ORIGIN = "http://localhost:3000";
 let server: ChildProcess;
 let base: string;
 let api: typeof import("./api");
+let afterAllRestore = () => {};
 
 const freePort = () =>
   new Promise<number>((resolve) => {
@@ -40,8 +41,22 @@ async function loadGlb(url: string) {
 beforeAll(async () => {
   const port = await freePort();
   base = `http://127.0.0.1:${port}`;
-  process.env.NEXT_PUBLIC_API_URL = base; // read at import time by lib/api
   api = await import("./api");
+  // The app calls same-origin `/api/*` (Next rewrites to the API) and the browser keeps the
+  // session cookie. Emulate both here: prefix relative URLs with the test server and carry
+  // the cookie by hand.
+  const realFetch = globalThis.fetch;
+  let cookie = "";
+  globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = typeof input === "string" && input.startsWith("/") ? base + input : input;
+    const headers = new Headers(init.headers);
+    if (cookie) headers.set("Cookie", cookie);
+    const res = await realFetch(url, { ...init, headers });
+    const set = res.headers.getSetCookie().find((c) => c.startsWith("session="));
+    if (set) cookie = set.split(";")[0];
+    return res;
+  }) as typeof fetch;
+  afterAllRestore = () => (globalThis.fetch = realFetch);
   server = spawn("uv", ["run", "uvicorn", "api.main:app", "--port", String(port)], {
     cwd: path.join(root, "services/api"),
     env: { ...process.env, API_DATA_DIR: mkdtempSync(path.join(tmpdir(), "wf-")) },
@@ -49,16 +64,20 @@ beforeAll(async () => {
   });
   for (let i = 0; i < 100; i++) {
     try {
-      if ((await fetch(`${base}/health`)).ok) return;
+      if ((await fetch(`${base}/health`)).ok) break;
     } catch {
       /* not up yet */
     }
     await new Promise((r) => setTimeout(r, 300));
   }
-  throw new Error("API did not start");
+  if (!(await fetch(`${base}/health`).catch(() => null))?.ok) throw new Error("API did not start");
+  const auth = await import("./auth");
+  const reg = await auth.register(`wf-${Date.now()}@example.com`, "workflow test password", "Workflow");
+  if (!reg.ok) throw new Error(reg.message);
 }, 60_000);
 
 afterAll(() => {
+  afterAllRestore();
   if (!server?.pid) return;
   // uv spawns the real server as a child; on Windows kill the whole tree
   if (process.platform === "win32") execSync(`taskkill /pid ${server.pid} /T /F`, { stdio: "ignore" });

@@ -9,8 +9,12 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.1",
+    "argon2-cffi>=25.1.0",
+    "authlib>=1.9.10",
     "ezdxf>=1.4.5",
     "fastapi>=0.165.0",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2.0",
     "mapbox-earcut>=2.1.0",
     "psycopg[binary]>=3.3.9",
     "pydantic>=2.14.4",
@@ -33,3 +37,6 @@ dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.6",
 ]
+
+[tool.pytest.ini_options]
+markers = ["anon: client stays unauthenticated (auth tests)"]

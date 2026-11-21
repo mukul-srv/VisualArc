@@ -92,9 +92,24 @@ uv run api build ../../fixtures/input/fixture_b.dxf --wall-height 3000 --out ../
 ```
 `apps/web/public/models/` is git-ignored. The stem may contain only `A-Z a-z 0-9 _ -`.
 
+### Accounts and login
+All `/api/v1` endpoints except `/api/v1/auth/*` need a session cookie (`POST /api/v1/auth/register`
+or `/login`); `/health` is public. The web app proxies `/api/*` to the API (Next rewrite,
+target `NEXT_PUBLIC_API_URL`) so the cookie is first-party. Pages: `/login`, `/register`, `/profile`.
+Run `uv run alembic upgrade head` after pulling (migration 0002).
+
+OAuth is optional. Register an app and export the credentials before starting the API:
+- GitHub: Settings > Developer settings > OAuth Apps > New. Callback URL
+  `http://localhost:3000/api/v1/auth/oauth/github/callback`. Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`.
+- Google: Cloud Console > APIs & Services > Credentials > OAuth client ID (Web). Authorised redirect URI
+  `http://localhost:3000/api/v1/auth/oauth/google/callback`. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+A provider without credentials returns 503 and its login button is hidden. Other settings:
+`WEB_BASE_URL` (default `http://localhost:3000`), `AUTH_COOKIE_SECURE=true` behind HTTPS,
+`SESSION_SECRET` (set when running more than one worker), `AUTH_RATE_LIMIT_PER_MIN` (default 10).
+
 Configuration: `API_DATA_DIR` (API storage, default a temp folder), `API_CORS_ORIGINS`
 (comma-separated, default the local web origins), `NEXT_PUBLIC_API_URL` (web, default
-`http://127.0.0.1:8000`).
+`http://127.0.0.1:8000`; now the target of the `/api/*` rewrite).
 
 ## API
 | Method and path | Purpose |

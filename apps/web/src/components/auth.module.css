@@ -1,0 +1,52 @@
+.card {
+  max-width: 380px;
+  margin: 64px auto;
+  padding: 0 16px;
+}
+
+.card h1 {
+  margin-bottom: 16px;
+}
+
+.card form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card input {
+  padding: 8px;
+  font: inherit;
+}
+
+.card button,
+.provider {
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+
+.provider {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.errors {
+  margin-bottom: 12px;
+  padding-left: 18px;
+  color: #b00020;
+}
+
+.card p {
+  margin-top: 16px;
+}

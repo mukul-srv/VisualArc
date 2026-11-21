@@ -7,17 +7,18 @@ allowlisted name.
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.auth import CurrentUser, current_user
 from api.db import GenerationRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.canonical.model import Project
 from api.pipeline import has_blocking, write_artifacts
 from api.storage import blob_path, new_id, upload_path, valid_id
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
 # artifact name -> (file suffix written by write_artifacts, media type)
 ARTIFACTS = {
@@ -67,7 +68,9 @@ def read_project(req: GenerationRequest, **floor) -> Project:
     return project
 
 
-def run_generation(req: GenerationRequest, **floor) -> tuple[str | None, list[dict]]:
+def run_generation(
+    req: GenerationRequest, owner_id: str | None = None, **floor
+) -> tuple[str | None, list[dict]]:
     """Shared by /generations and project floors. Returns (generation_id, issues);
     the id is None when blocking issues stopped it (nothing is stored)."""
     project = read_project(req, **floor)
@@ -77,7 +80,7 @@ def run_generation(req: GenerationRequest, **floor) -> tuple[str | None, list[di
     gid = new_id()
     write_artifacts(project, blob_path(f"{_prefix(gid)}/{_STEM}.glb").parent, _STEM)
     with session() as db:
-        db.add(GenerationRow(id=gid, blob_prefix=_prefix(gid)))
+        db.add(GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id))
         db.commit()
     return gid, issues
 
@@ -98,8 +101,8 @@ def result(gid: str, issues: list[dict]) -> dict:
 
 
 @router.post("/generations", status_code=201)
-def create_generation(req: GenerationRequest):
-    gid, issues = run_generation(req)
+def create_generation(req: GenerationRequest, user: CurrentUser):
+    gid, issues = run_generation(req, user.id)
     return blocked_response(issues) if gid is None else result(gid, issues)
 
 
