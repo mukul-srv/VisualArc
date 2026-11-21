@@ -14,6 +14,12 @@ class Settings:
     # Layer names of the MVP-0 convention. Matched case-insensitively (the reader
     # upper-cases the entity's layer), so these must be written in upper case.
     wall_layer: str = "A-WALL"
+    # Role layers: walls read exactly like wall_layer walls, but the layer names the
+    # role (user decision: layer first, geometry only as fallback). Upper case.
+    wall_role_layers: tuple[tuple[str, str], ...] = (
+        ("A-WALL-EXTR", "exterior"),
+        ("A-WALL-INTR", "interior"),
+    )
     floor_layer: str = "A-FLOR"
     # Opening marker layers (ADR-002 §1): AIA names; the layer is the opening kind.
     door_layer: str = "A-DOOR"
@@ -45,6 +51,11 @@ class Settings:
     # polygons and junction/leftover regions.
     tolerance_mm: float = 1e-6
 
+    # Role inference (no role layer): a wall face counts as lying on the exterior
+    # ring of the wall union when it is within this distance of it. 1 mm absorbs
+    # drafting noise while staying far below the thinnest wall (50 mm).
+    role_face_tolerance_mm: float = 1.0
+
     # Extrusion (OCS normal) counts as parallel to Z when |x| and |y| are within
     # this. Unitless direction cosine, NOT millimetres, so it must not share
     # tolerance_mm. 1e-6 absorbs float round-off in a normalised vector while a
@@ -67,6 +78,10 @@ class Settings:
     # total count is still in the message) so one noisy layer, e.g. thousands of
     # TEXT entities, cannot flood the report (T5).
     unmapped_ref_cap: int = 20
+
+    @property
+    def wall_layers(self) -> frozenset[str]:
+        return frozenset({self.wall_layer, *(l for l, _ in self.wall_role_layers)})
 
     def __post_init__(self) -> None:
         # ADR-002 §5: reject impossible opening defaults up front, not per opening

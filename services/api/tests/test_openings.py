@@ -127,6 +127,7 @@ def test_1_worked_example_exact_values(tmp_path):
         "opening_symbol_ignored": 2,
         "unpaired_segment": 2,
         "elevation_defaulted": 1,
+        "wall_role_inferred": 1,
     }
     assert not _codes(p, "blocking")
     unpaired = [i for i in p.issues if i.code == "unpaired_segment"]

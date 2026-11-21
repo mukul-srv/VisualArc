@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.engine.settings import DEFAULTS
 
-SCHEMA_VERSION = "0.3.0"
+SCHEMA_VERSION = "0.4.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -67,6 +67,15 @@ class Wall(_Model):
     thickness: Measured
     height: Measured | None  # None until supplied; missing height is a blocking issue
     sources: list[SourceRef]  # paired-line walls keep both boundary handles
+    # None only when the role layers of its lines conflict (blocking issue)
+    role: Literal["exterior", "interior"] | None = None
+    role_source: Literal["source_extracted", "inferred"] | None = None
+
+    @model_validator(mode="after")
+    def _check_role(self) -> "Wall":
+        if (self.role is None) != (self.role_source is None):
+            raise ValueError(f"{self.id}: role and role_source go together")
+        return self
 
 
 class Junction(_Model):

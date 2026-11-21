@@ -1,9 +1,9 @@
 # Verification report: fixture_openings
 
 - Source file: `fixture_openings.dxf`
-- Schema version: 0.3.0
+- Schema version: 0.4.0
 - Units: mm
-- Result: **OK** (0 blocking, 4 warnings)
+- Result: **OK** (0 blocking, 5 warnings)
 
 ## Blocking issues
 
@@ -15,6 +15,7 @@ None.
 - `opening_dimension_defaulted`: 3 door opening(s): height 2100 mm, sill 0 mm from provisional Settings defaults (not in the DXF) (sources: A-DOOR:55, A-DOOR:56, A-DOOR:5D)
 - `opening_dimension_defaulted`: 4 window opening(s): height 1200 mm, sill 900 mm from provisional Settings defaults (not in the DXF) (sources: A-GLAZ:51, A-GLAZ:54, A-GLAZ:59, A-GLAZ:5A)
 - `elevation_defaulted`: floor elevation assumed 0 mm; DXF plan carries no elevation (sources: -)
+- `wall_role_inferred`: 10 wall(s) have no role layer (A-WALL-EXTR, A-WALL-INTR); role inferred from geometry (a face on the outer boundary of all walls = exterior). Walls around an interior courtyard read as interior. (sources: A-WALL:33, A-WALL:37, A-WALL:34, A-WALL:38, A-WALL:39, A-WALL:35, A-WALL:3A, A-WALL:3B, A-WALL:36, A-WALL:3C, A-WALL:41, A-WALL:43, A-WALL:42, A-WALL:44, A-WALL:49, A-WALL:4B, A-WALL:4A, A-WALL:4C, A-WALL:4D, A-WALL:4F, A-WALL:4E, A-WALL:50, A-WALL:45, A-WALL:47, A-WALL:46, A-WALL:48, A-WALL:3D, A-WALL:40, A-WALL:3E, A-WALL:3F)
 
 ## Values by provenance
 

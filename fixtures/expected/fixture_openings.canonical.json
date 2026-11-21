@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.3.0",
+  "schema_version": "0.4.0",
   "id": "fixture_openings",
   "units": "mm",
   "source_file": "fixture_openings.dxf",
@@ -61,7 +61,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "38"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-002",
@@ -108,7 +110,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "3A"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-003",
@@ -155,7 +159,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "3C"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-004",
@@ -202,7 +208,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "44"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-005",
@@ -249,7 +257,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "4C"
                 }
-              ]
+              ],
+              "role": "interior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-006",
@@ -296,7 +306,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "50"
                 }
-              ]
+              ],
+              "role": "interior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-007",
@@ -343,7 +355,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "48"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-008",
@@ -380,7 +394,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "40"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-009",
@@ -417,7 +433,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "40"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-010",
@@ -454,7 +472,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "40"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             }
           ],
           "junctions": [
@@ -1204,6 +1224,163 @@
       "severity": "warning",
       "message": "floor elevation assumed 0 mm; DXF plan carries no elevation",
       "sources": []
+    },
+    {
+      "code": "wall_role_inferred",
+      "severity": "warning",
+      "message": "10 wall(s) have no role layer (A-WALL-EXTR, A-WALL-INTR); role inferred from geometry (a face on the outer boundary of all walls = exterior). Walls around an interior courtyard read as interior.",
+      "sources": [
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "33"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "37"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "34"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "38"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "39"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "35"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3A"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3B"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "36"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3C"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "41"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "43"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "42"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "44"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "49"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "4B"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "4A"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "4C"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "4D"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "4F"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "4E"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "50"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "45"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "47"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "46"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "48"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3D"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "40"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3E"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3F"
+        }
+      ]
     }
   ]
 }
