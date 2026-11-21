@@ -10,3 +10,4 @@ Browser viewer for engine output. Never duplicates parsing or geometry rules (th
 ## Worktree tip
 Fresh worktree: don't `npm ci` unless the lockfile differs from main. If `apps/web/package-lock.json` matches main, link main's deps (PowerShell, from repo root):
 `New-Item -ItemType Junction -Path apps/web/node_modules -Target <main-repo>/apps/web/node_modules`
+`next build` needs a real `npm ci` — Turbopack does not follow the junction.
