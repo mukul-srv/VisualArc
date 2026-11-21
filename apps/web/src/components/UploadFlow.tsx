@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { addFloor, createProject, generate, isGenerationId, uploadDxf, type Failure, type Issue, type Preflight } from "@/lib/api";
+import { addFloor, createProject, generate, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight } from "@/lib/api";
 import { viewerUrl, type Floor } from "@/lib/project";
 import { buildRequest, ceilingReady, setCeilingHeight, setWallHeight, splitIssues, UNITS, type FormValues } from "@/lib/params";
+import { bboxSize, buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
 import { IssueList } from "./IssueList";
 
 const EMPTY: FormValues = { wallHeight: "", ceilingHeight: "", ceilingConfirmed: false, units: "", doorHeight: "", windowHeight: "", windowSill: "" };
 // Blocking issues the parameter form itself resolves; they must not lock the button.
-const FORM_RESOLVABLE = ["wall_height_missing", "ceiling_height_missing", "units_missing"];
+const FORM_RESOLVABLE = ["wall_height_missing", "ceiling_height_missing", "units_missing", "floor_split_unconfirmed"];
 
 export function UploadFlow() {
   const router = useRouter();
@@ -19,6 +20,8 @@ export function UploadFlow() {
   const [errors, setErrors] = useState<string[]>([]);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<Issue[] | null>(null);
+  const [rows, setRows] = useState<SplitRow[]>([]);
+  const [projectName, setProjectName] = useState("");
   const [proj, setProj] = useState({ on: false, target: "", floorName: "", elevation: "" });
 
   const field = (k: Exclude<keyof FormValues, "ceilingConfirmed">, label: string, hint = "") => (
@@ -50,7 +53,24 @@ export function UploadFlow() {
     setErrors([]);
     const r = await uploadDxf(file);
     setBusy(false);
-    if (r.ok) setPre(r);
+    if (r.ok) {
+      setPre(r);
+      setRows(initialRows(r.floor_candidates ?? []));
+    } else setFailure(r);
+  }
+
+  async function onSplit() {
+    if (!pre) return;
+    const req = buildSplitRequest(pre, form, rows, projectName);
+    if (!req.ok) return setErrors(req.errors);
+    setErrors([]);
+    setFailure(null);
+    setBlockedIssues(null);
+    setBusy(true);
+    const r = await splitUpload(pre.upload_id, req.body);
+    setBusy(false);
+    if (r.ok) router.push(`/viewer?project=${r.project_id}`);
+    else if (r.kind === "blocked") setBlockedIssues(r.issues);
     else setFailure(r);
   }
 
@@ -97,6 +117,8 @@ export function UploadFlow() {
     else setFailure(r);
   }
 
+  const splitting = (pre?.floor_candidates?.length ?? 0) >= 2;
+  const setRow = (i: number, patch: Partial<SplitRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const shown = blockedIssues ?? pre?.issues ?? [];
   const unresolvable = splitIssues(shown).blocking.filter((i) => !FORM_RESOLVABLE.includes(i.code));
 
@@ -141,10 +163,48 @@ export function UploadFlow() {
           {field("doorHeight", "Door height (mm)", "optional, else provisional default")}
           {field("windowHeight", "Window height (mm)", "optional, else provisional default")}
           {field("windowSill", "Window sill (mm)", "optional, else provisional default")}
+          {splitting && (
+            <>
+              <h2>Floors found in this drawing</h2>
+              <p>
+                Confirm each floor. Offsets (mm) move the floor so floors line up; they start from the floor&apos;s
+                lower-left corner and are <em>proposed</em> until you confirm them. Excluded floors are reported as not
+                reconstructed.
+              </p>
+              <label style={{ display: "block", margin: "6px 0" }}>
+                Project name <input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+              </label>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Key</th><th>Size (mm)</th><th>Build</th><th>Name</th><th>Elevation (mm)</th><th>Offset X (mm)</th><th>Offset Y (mm)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => {
+                    const s = bboxSize(pre.floor_candidates![i]);
+                    return (
+                      <tr key={r.key}>
+                        <td>{r.key}</td>
+                        <td>{s.width.toFixed(0)} x {s.height.toFixed(0)}</td>
+                        <td><input type="checkbox" aria-label={`Build ${r.key}`} checked={!r.exclude} onChange={(e) => setRow(i, { exclude: !e.target.checked })} /></td>
+                        <td><input aria-label={`Name ${r.key}`} value={r.name} disabled={r.exclude} onChange={(e) => setRow(i, { name: e.target.value })} /></td>
+                        <td><input aria-label={`Elevation ${r.key}`} inputMode="decimal" value={r.elevation} disabled={r.exclude} onChange={(e) => setRow(i, { elevation: e.target.value })} /></td>
+                        <td><input aria-label={`Offset X ${r.key}`} inputMode="decimal" value={r.offsetX} disabled={r.exclude} onChange={(e) => setRow(i, { offsetX: e.target.value })} /> proposed</td>
+                        <td><input aria-label={`Offset Y ${r.key}`} inputMode="decimal" value={r.offsetY} disabled={r.exclude} onChange={(e) => setRow(i, { offsetY: e.target.value })} /> proposed</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
+          )}
+          {!splitting && (
           <label style={{ display: "block", margin: "6px 0" }}>
             <input type="checkbox" checked={proj.on} onChange={(e) => setProj({ ...proj, on: e.target.checked })} /> Add to a project (multi-floor)
           </label>
-          {proj.on && (
+          )}
+          {!splitting && proj.on && (
             <>
               <label style={{ display: "block", margin: "6px 0" }}>
                 Project id (existing) or name (new){" "}
@@ -166,8 +226,8 @@ export function UploadFlow() {
               ))}
             </ul>
           )}
-          <button disabled={busy || unresolvable.length > 0 || !ceilingReady(pre, form)} onClick={onGenerate}>
-            Generate 3D model
+          <button disabled={busy || unresolvable.length > 0 || !ceilingReady(pre, form)} onClick={splitting ? onSplit : onGenerate}>
+            {splitting ? "Confirm floors and generate" : "Generate 3D model"}
           </button>
           {unresolvable.length > 0 && <p>Fix the blocking issues in the drawing and upload it again.</p>}
         </>

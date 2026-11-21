@@ -23,10 +23,12 @@ from api.engine.canonical.model import (
     Junction,
     LineGeometry,
     Measured,
+    PlanOffset,
     Project,
     SourceRef,
     Wall,
 )
+from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.geometry2d.floor import floor_issue
 from api.engine.geometry2d.openings import (
     Marker,
@@ -86,7 +88,7 @@ def check_complexity(doc, settings: Settings = DEFAULTS) -> None:
     opening_layers = {settings.door_layer, settings.window_layer}
     segments = markers = 0
     for e in msp:
-        layer, kind = e.dxf.layer.upper(), e.dxftype()
+        layer, kind = strip_floor_prefix(e.dxf.layer, settings).upper(), e.dxftype()
         if layer in settings.wall_layers:
             if kind == "LINE":
                 segments += 1
@@ -107,6 +109,19 @@ def check_complexity(doc, settings: Settings = DEFAULTS) -> None:
                 f"drawing has {count} {what}, limit is {limit} "
                 "(provisional; see the T21 benchmark report)"
             )
+
+
+def resolve_scale(doc, user_units: str | None = None) -> float | None:
+    """Drawing units -> mm, or None when the units are missing, conflicting or
+    unsupported (read_dxf reports those as blocking issues)."""
+    code = doc.header.get("$INSUNITS", 0)
+    user = USER_UNITS[user_units] if user_units else None
+    if isinstance(code, bool) or not isinstance(code, int) or (code and user and code != user):
+        return None
+    try:
+        return units.conversion_factor(code or user, units.MM) if code or user else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _ref(e) -> SourceRef:
@@ -188,6 +203,7 @@ def read_dxf(
     floor_id: str = "floor-0",
     floor_name: str = "Level 0",
     floor_elevation: float | None = None,  # mm; None = defaulted 0 + warning
+    scope: FloorScope | None = None,  # one confirmed floor of a consolidated DXF
 ) -> Project:
     for name, v in (
         ("wall height", wall_height),
@@ -245,8 +261,31 @@ def read_dxf(
     ):  # e.g. 21 US survey feet, or a code not in the table
         return _units_unsupported(project, insunits)
 
+    # The floor offset is applied here, at the single point where coordinates enter
+    # (after unit scaling, before every geometry rule): downstream code sees plain
+    # plan coordinates, and a pure translation cannot change any length or thickness.
+    ox, oy = scope.offset if scope else (0.0, 0.0)
+
     def mm(p) -> tuple[float, float]:
-        return (p[0] * k, p[1] * k)
+        return (p[0] * k - ox, p[1] * k - oy)
+
+    if scope is None:  # a consolidated file must be split and confirmed first
+        split = detect_floors(doc, k, settings)
+        if len(split.candidates) > 1:
+            keys = ", ".join(c.key for c in split.candidates)
+            return Project(
+                **project,
+                issues=[
+                    Issue(
+                        code="floor_split_unconfirmed",
+                        severity="blocking",
+                        message=f"drawing holds {len(split.candidates)} floor candidates "
+                        f"({keys}); confirm each floor's name, elevation and offset "
+                        "(POST /api/v1/uploads/{id}/split) before generating",
+                    ),
+                    *split.issues,
+                ],
+            )
 
     issues: list[Issue] = []
     if from_user:
@@ -266,7 +305,9 @@ def read_dxf(
     decorative: dict[str, list] = {}  # opening layer -> ignored symbol entities
     swings = []  # ARCs on the door layer (orphan check)
     for e in doc.modelspace():
-        layer, kind = e.dxf.layer.upper(), e.dxftype()
+        if scope and e.dxf.handle not in scope.handles:
+            continue
+        layer, kind = strip_floor_prefix(e.dxf.layer, settings).upper(), e.dxftype()
         if layer in opening_kind:  # ADR-002 §2
             if kind == "INSERT":
                 issues.append(
@@ -466,6 +507,8 @@ def read_dxf(
     else:
         elevation = Measured(value=floor_elevation, source="user_provided")
     issues += role_issues
+    if scope:
+        issues += scope.notes
     ceil_h = ceilings = None
     if ceiling_height is not None:
         ceil_h = Measured(value=ceiling_height, source="user_provided")
@@ -517,6 +560,7 @@ def read_dxf(
         junctions=junctions,
         boundaries=boundaries,
         openings=openings,
+        plan_offset=PlanOffset(x=ox, y=oy, source="user_provided") if scope else None,
     )
     return Project(
         **project, buildings=[Building(id="bldg-0", floors=[floor])], issues=issues

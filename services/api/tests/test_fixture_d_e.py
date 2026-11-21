@@ -107,10 +107,9 @@ def test_job_result_does_not_depend_on_what_was_processed_before(client):
     assert first == again
 
 
-def test_two_plans_in_one_file_are_one_floor_known_limitation(tmp_path):
-    """KNOWN LIMITATION (reported in the T21 benchmark): the engine has no notion of
-    several storeys in one DXF. Two plans drawn side by side are interpreted as ONE
-    floor, silently. This pins today's behaviour; revisit if a warning is added."""
+def test_two_plans_in_one_file_must_be_split_first(tmp_path):
+    """Two plans drawn side by side are two floor candidates (B8): the file blocks
+    until the user confirms the split, instead of silently becoming one floor."""
     doc = ezdxf.new("R2018", setup=False)
     doc.units = ezdxf.units.MM
     msp = doc.modelspace()
@@ -121,10 +120,5 @@ def test_two_plans_in_one_file_are_one_floor_known_limitation(tmp_path):
             msp.add_entity(c)
     doc.saveas(tmp_path / "two.dxf")
     p = read_dxf(tmp_path / "two.dxf", 3000, ceiling_height=3000)
-    assert len(p.buildings) == 1 and len(p.buildings[0].floors) == 1
-    solo = [
-        read_dxf(INPUT / n, 3000, ceiling_height=3000).buildings[0].floors[0]
-        for n in ("fixture_a.dxf", "fixture_b.dxf")
-    ]
-    assert len(p.buildings[0].floors[0].walls) == sum(len(f.walls) for f in solo)
-    assert not [i for i in p.issues if i.severity == "blocking"]
+    assert p.buildings == []
+    assert [i.code for i in p.issues if i.severity == "blocking"] == ["floor_split_unconfirmed"]

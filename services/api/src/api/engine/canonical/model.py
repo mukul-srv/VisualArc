@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.engine.settings import DEFAULTS
 
-SCHEMA_VERSION = "0.5.0"
+SCHEMA_VERSION = "0.6.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -141,6 +141,16 @@ class Opening(_Model):
         return self
 
 
+class PlanOffset(_Model):
+    """Translation applied when a floor was split out of a consolidated drawing:
+    plan = source - offset. Pure translation, so no dimension changes."""
+
+    x: float
+    y: float
+    unit: Literal["mm"] = "mm"
+    source: Provenance
+
+
 class Floor(_Model):
     id: str
     name: str
@@ -151,6 +161,7 @@ class Floor(_Model):
     boundaries: list[FloorBoundary] = []
     openings: list[Opening] = []
     ceilings: list[Ceiling] = []
+    plan_offset: PlanOffset | None = None  # None = plan coordinates are the source's
 
     @model_validator(mode="after")
     def _check_ceiling(self) -> "Floor":

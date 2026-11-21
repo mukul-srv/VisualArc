@@ -34,6 +34,9 @@ def test_defaults_match_document_08():
         "max_wall_segments": 600,
         "max_opening_markers": 120,
         "unmapped_ref_cap": 20,
+        "floor_prefix_pattern": r"^(L\d+)\|",
+        "floor_gap_mm": 5000.0,
+        "non_floor_layer_patterns": ("A-ROOF*", "*TTLB*", "*TITLE*"),
         "material_palette": (
             ("wall_exterior", ("#b5654a", 0.9)),
             ("wall_interior", ("#e6e0d4", 0.9)),

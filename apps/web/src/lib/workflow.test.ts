@@ -126,6 +126,32 @@ test("2-floor project: create, add floors, manifest, each floor GLB sits at its 
   }
 });
 
+test("consolidated DXF: preflight lists floors, generation blocks, confirm creates a 2-floor project", async () => {
+  const { parseManifest, sortFloors } = await import("./project");
+  const { initialRows, buildSplitRequest } = await import("./split");
+  const up = await api.uploadDxf(fixture("fixture_f.dxf"));
+  if (!up.ok) throw new Error(up.message);
+  const cands = up.floor_candidates ?? [];
+  expect(cands).toHaveLength(2);
+  expect(up.issues.map((i) => i.code)).toEqual(expect.arrayContaining(["floor_split_unconfirmed", "content_not_reconstructed"]));
+  expect(await api.generate({ upload_id: up.upload_id, wall_height: 3000, ceiling_height: 3000 })).toMatchObject({ ok: false, kind: "blocked" });
+
+  const form = { wallHeight: "3000", ceilingHeight: "3000", ceilingConfirmed: true, units: "", doorHeight: "", windowHeight: "", windowSill: "" };
+  const rows = initialRows(cands).map((r, i) => ({ ...r, name: ["Ground", "First"][i], elevation: ["0", "3200"][i] }));
+  const req = buildSplitRequest(up, form, rows, "Consolidated");
+  if (!req.ok) throw new Error(req.errors.join());
+  const done = await api.splitUpload(up.upload_id, req.body);
+  if (!done.ok) throw new Error(done.message);
+  const got = await api.getProject(done.project_id);
+  if (!got.ok) throw new Error(got.message);
+  const m = parseManifest(got.manifest)!;
+  expect(sortFloors(m.floors).map((f) => f.name)).toEqual(["Ground", "First"]);
+  for (const f of m.floors) {
+    const box = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(f.generation_id))).scene);
+    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000, 3);
+  }
+});
+
 test("failure paths: non-DXF rejected cleanly; unknown upload and generation are 404", async () => {
   const bad = await api.uploadDxf(new Blob(["not a dxf at all"]));
   expect(bad).toMatchObject({ ok: false, kind: "rejected" });

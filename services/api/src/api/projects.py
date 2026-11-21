@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.engine.canonical.model import Measured
+from api.engine.adapters.dxf.split import FloorScope
 from api.generations import GenerationRequest, blocked_response, result, run_generation
 from api.storage import data_dir, new_id, valid_id
 
@@ -54,7 +55,7 @@ def create_project(name: str) -> str:
     return pid
 
 
-def add_floor(pid: str, req: FloorRequest):
+def add_floor(pid: str, req: FloorRequest, scope: FloorScope | None = None):
     """Generate and append a floor. HTTPException 404 (unknown ids) / 422 (duplicate
     name or elevation); returns the 409 response when blocking issues stop it."""
     # shortcut: read-modify-write without a lock; two concurrent adds to one project
@@ -70,7 +71,7 @@ def add_floor(pid: str, req: FloorRequest):
     # id = creation index: deterministic, stable when the viewer sorts by elevation,
     # unique because floors are append-only (never deleted)
     fid = f"floor-{len(manifest['floors'])}"
-    gid, issues = run_generation(req, floor_id=fid, floor_name=name, floor_elevation=req.elevation)
+    gid, issues = run_generation(req, floor_id=fid, floor_name=name, floor_elevation=req.elevation, scope=scope)
     if gid is None:
         return blocked_response(issues)
     floor = {

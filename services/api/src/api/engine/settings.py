@@ -6,6 +6,7 @@ recorded in Document 08; pass a modified `Settings` to experiment instead.
 All lengths are canonical millimetres (ADR-001).
 """
 
+import re
 from dataclasses import dataclass
 
 
@@ -79,6 +80,19 @@ class Settings:
     # TEXT entities, cannot flood the report (T5).
     unmapped_ref_cap: int = 20
 
+    # Floor split of a consolidated DXF (B8). Layer-prefix mode: a layer matching this
+    # regex (group 1 = floor key) belongs to that floor; the rest of the name is mapped
+    # by the normal layer rules. `|` is the usual AIA-style sheet separator.
+    floor_prefix_pattern: str = r"^(L\d+)\|"
+    # Spatial mode: wall/floor-boundary geometry closer than this (per axis) is one
+    # floor. PROVISIONAL: 5 m is wider than the 1 m tile gap of the benchmark
+    # fixtures and any gap inside one plan we have seen, but a detached garage 5 m
+    # away would also split off; the user confirms every split, so it is a proposal.
+    floor_gap_mm: float = 5000.0
+    # Layers never reconstructed as floors (roof outlines, title blocks); fnmatch on
+    # the upper-cased layer. Reported as content_not_reconstructed, never dropped.
+    non_floor_layer_patterns: tuple[str, ...] = ("A-ROOF*", "*TTLB*", "*TITLE*")
+
     # Presentation only (never changes geometry): kind -> (sRGB hex, roughness).
     # Kinds: wall role, "wall_neutral" (junctions, and walls whose role is unresolved),
     # floor_boundary, ceiling. Junctions get the neutral tone, not a wall role's:
@@ -98,6 +112,10 @@ class Settings:
         return frozenset({self.wall_layer, *(l for l, _ in self.wall_role_layers)})
 
     def __post_init__(self) -> None:
+        if re.compile(self.floor_prefix_pattern).groups < 1:
+            raise ValueError("floor_prefix_pattern needs a group for the floor key")
+        if self.floor_gap_mm <= 0:
+            raise ValueError("floor_gap_mm must be > 0 mm")
         # ADR-002 §5: reject impossible opening defaults up front, not per opening
         if min(self.default_door_height_mm, self.default_window_height_mm) <= 0:
             raise ValueError("default opening heights must be > 0 mm")
