@@ -14,7 +14,7 @@ import { describeElement, describeOpening, pickOpening, type ElementData, type O
 
 const root = path.resolve(__dirname, "../../../..");
 type Canon = {
-  walls: { id: string; thickness: { value: number; source: string }; height: { value: number; source: string }; sources: { layer: string; entity_handle: string }[] }[];
+  walls: { id: string; thickness: { value: number; source: string }; height: { value: number; source: string }; role: string; role_source: string; sources: { layer: string; entity_handle: string }[] }[];
   junctions: { id: string; wall_ids: string[] }[];
   openings: {
     id: string;
@@ -54,6 +54,7 @@ test("every wall panel matches its canonical wall: values, provenance, sources",
     const row = (l: string) => p.rows.find((r) => r.label === l)!;
     expect(row("Thickness")).toMatchObject({ value: `${w.thickness.value} mm`, provenance: w.thickness.source });
     expect(row("Height")).toMatchObject({ value: `${w.height.value} mm`, provenance: w.height.source });
+    expect(row("Role")).toMatchObject({ value: w.role, provenance: w.role_source });
     expect(row("Openings hosted").value).toBe(String(canon.openings.filter((o) => o.wall_id === w.id).length));
     expect(p.sources).toEqual(refs(w.sources));
   }

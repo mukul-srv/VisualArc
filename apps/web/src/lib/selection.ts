@@ -26,6 +26,8 @@ export type ElementData = {
   floor_id?: string;
   thickness?: Measured;
   height?: Measured | null;
+  role?: "exterior" | "interior" | null; // wall; absent in pre-0.4.0 GLBs
+  role_source?: Provenance | null;
   wall_ids?: string[];
   source?: Provenance; // junction: always "inferred"
   sources?: SourceRef[];
@@ -98,6 +100,13 @@ export function describeElement(ud: ElementData): Panel {
         ...floor,
         measured("Thickness", ud.thickness),
         measured("Height", ud.height),
+        ...(ud.role === undefined
+          ? []
+          : [
+              ud.role
+                ? { label: "Role", value: ud.role, provenance: ud.role_source ?? undefined }
+                : { label: "Role", value: "unknown (conflicting layers)" },
+            ]),
         { label: "Openings hosted", value: String(n) },
       ],
       sourcesLabel: "Source entities (two boundary lines)",

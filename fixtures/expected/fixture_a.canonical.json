@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.3.0",
+  "schema_version": "0.4.0",
   "id": "fixture_a",
   "units": "mm",
   "source_file": "fixture_a.dxf",
@@ -51,7 +51,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "35"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-002",
@@ -88,7 +90,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "36"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-003",
@@ -125,7 +129,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "3A"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-004",
@@ -162,7 +168,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "3C"
                 }
-              ]
+              ],
+              "role": "interior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-005",
@@ -199,7 +207,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "32"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-006",
@@ -236,7 +246,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "33"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             },
             {
               "id": "wall-007",
@@ -273,7 +285,9 @@
                   "layer": "A-WALL",
                   "entity_handle": "33"
                 }
-              ]
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
             }
           ],
           "junctions": [
@@ -513,6 +527,73 @@
       "severity": "warning",
       "message": "floor elevation assumed 0 mm; DXF plan carries no elevation",
       "sources": []
+    },
+    {
+      "code": "wall_role_inferred",
+      "severity": "warning",
+      "message": "7 wall(s) have no role layer (A-WALL-EXTR, A-WALL-INTR); role inferred from geometry (a face on the outer boundary of all walls = exterior). Walls around an interior courtyard read as interior.",
+      "sources": [
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "31"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "35"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "36"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "34"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3A"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3B"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3C"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "37"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "32"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "39"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "33"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "38"
+        }
+      ]
     }
   ]
 }

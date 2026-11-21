@@ -13,6 +13,10 @@ def test_defaults_match_document_08():
     # changing a default is a convention change: update Document 08 + ADR-003 too
     assert dataclasses.asdict(DEFAULTS) == {
         "wall_layer": "A-WALL",
+        "wall_role_layers": (
+            ("A-WALL-EXTR", "exterior"),
+            ("A-WALL-INTR", "interior"),
+        ),
         "floor_layer": "A-FLOR",
         "door_layer": "A-DOOR",
         "window_layer": "A-GLAZ",
@@ -22,6 +26,7 @@ def test_defaults_match_document_08():
         "default_window_sill_mm": 900.0,
         "wall_thickness_min_mm": 50.0,
         "wall_thickness_max_mm": 600.0,
+        "role_face_tolerance_mm": 1.0,
         "tolerance_mm": 1e-6,
         "extrusion_tolerance": 1e-6,
         "max_dxf_bytes": 5 * 2**20,

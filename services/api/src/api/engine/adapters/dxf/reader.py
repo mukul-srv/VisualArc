@@ -34,6 +34,7 @@ from api.engine.geometry2d.openings import (
     on_marker_boundary,
     resolve_openings,
 )
+from api.engine.geometry2d.role import resolve_roles
 from api.engine.geometry2d.walls import Segment
 from api.engine.settings import DEFAULTS, Settings
 
@@ -85,7 +86,7 @@ def check_complexity(doc, settings: Settings = DEFAULTS) -> None:
     segments = markers = 0
     for e in msp:
         layer, kind = e.dxf.layer.upper(), e.dxftype()
-        if layer == settings.wall_layer:
+        if layer in settings.wall_layers:
             if kind == "LINE":
                 segments += 1
             elif kind == "LWPOLYLINE":
@@ -195,6 +196,7 @@ def read_dxf(
     doc = load_doc(path, settings.max_dxf_bytes if max_bytes is None else max_bytes)
     check_complexity(doc, settings)
     wall_layer, floor_layer = settings.wall_layer, settings.floor_layer
+    wall_layers = settings.wall_layers
     ref_cap = settings.unmapped_ref_cap
     project = {"id": path.stem, "source_file": path.name}
 
@@ -300,10 +302,10 @@ def read_dxf(
                 if kind == "ARC" and layer == settings.door_layer:
                     swings.append(e)
             continue
-        if layer not in (wall_layer, floor_layer):
+        if layer not in wall_layers and layer != floor_layer:
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
-        if layer == wall_layer and kind == "LINE":
+        if layer in wall_layers and kind == "LINE":
             segments.append(
                 Segment(e.dxf.handle, e.dxf.layer, mm(e.dxf.start), mm(e.dxf.end))
             )
@@ -311,7 +313,7 @@ def read_dxf(
             issues.append(bad)
         elif kind == "LWPOLYLINE" and any(b for *_, b in e.get_points("xyb")):
             issues.append(_arc_issue(e))
-        elif layer == wall_layer and kind == "LWPOLYLINE":
+        elif layer in wall_layers and kind == "LWPOLYLINE":
             pts = [mm(p) for p in _wcs_xy(e)]
             ring = pts + pts[:1] if e.closed else pts
             segments += [
@@ -361,8 +363,8 @@ def read_dxf(
             Issue(
                 code="unmapped_layer",
                 severity="warning",
-                message=f"layer {name} is not a mapped layer ({wall_layer}, "
-                f"{floor_layer}); ignored {listed}{more}",
+                message=f"layer {name} is not a mapped layer ("
+                f"{', '.join(sorted(wall_layers))}, {floor_layer}); ignored {listed}{more}",
                 sources=[_ref(e) for e in ents[:ref_cap]],
             )
         )
@@ -396,6 +398,7 @@ def read_dxf(
     res = resolve_openings(segments, markers, settings)
     paired, pieces = res.walls, res.junctions
     issues += res.issues
+    roles, role_issues = resolve_roles(paired, pieces, settings)
     if not paired:
         issues.append(
             Issue(
@@ -437,6 +440,8 @@ def read_dxf(
             ),
             height=height,
             sources=[s.ref for s in w.sources],
+            role=(roles[w.id] or (None, None))[0],
+            role_source=(roles[w.id] or (None, None))[1],
         )
         for w in paired
     ]
@@ -450,6 +455,7 @@ def read_dxf(
             message="floor elevation assumed 0 mm; DXF plan carries no elevation",
         )
     )
+    issues += role_issues
     floor = Floor(
         id="floor-0",
         name="Level 0",
