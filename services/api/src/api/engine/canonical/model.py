@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.engine.settings import DEFAULTS
 
-SCHEMA_VERSION = "0.4.0"
+SCHEMA_VERSION = "0.5.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -95,6 +95,17 @@ class FloorBoundary(_Model):
     sources: list[SourceRef]
 
 
+class Ceiling(_Model):
+    """Slab at floor elevation + user ceiling height, one per floor boundary."""
+
+    id: str
+    type: Literal["ceiling"] = "ceiling"
+    polygon: list[Point2]  # same ring as its boundary
+    # derived sum (floor elevation + ceiling height): never source_extracted
+    elevation: Measured
+    sources: list[SourceRef]  # the boundary's sources
+
+
 # shortcut: model invariants use DEFAULTS.tolerance_mm, not a caller's Settings;
 # pass it via validation context if tolerance ever becomes per-run.
 class Opening(_Model):
@@ -134,10 +145,18 @@ class Floor(_Model):
     id: str
     name: str
     elevation: Measured
+    ceiling_height: Measured | None = None  # None -> blocking when walls exist
     walls: list[Wall] = []
     junctions: list[Junction] = []
     boundaries: list[FloorBoundary] = []
     openings: list[Opening] = []
+    ceilings: list[Ceiling] = []
+
+    @model_validator(mode="after")
+    def _check_ceiling(self) -> "Floor":
+        if self.ceiling_height is not None and self.ceiling_height.value <= 0:
+            raise ValueError(f"{self.id}: ceiling height must be > 0 mm")
+        return self
 
     @model_validator(mode="after")
     def _check_openings(self) -> "Floor":

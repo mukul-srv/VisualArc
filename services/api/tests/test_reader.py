@@ -13,7 +13,7 @@ FIXTURE_A = FIXTURES / "input" / "fixture_a.dxf"
 
 
 def test_fixture_a_known_dimensions():
-    p = read_dxf(FIXTURE_A, wall_height=3000)
+    p = read_dxf(FIXTURE_A, wall_height=3000, ceiling_height=3000)
     assert [(i.code, i.severity) for i in p.issues] == [
         ("elevation_defaulted", "warning"),
         ("wall_role_inferred", "warning"),
@@ -43,7 +43,7 @@ def test_fixture_a_known_dimensions():
 
 def test_fixture_a_snapshot(tmp_path: Path):
     out = tmp_path / "a.json"
-    main(["interpret", str(FIXTURE_A), "--wall-height", "3000", "--out", str(out)])
+    main(["interpret", str(FIXTURE_A), "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)])
     expected = json.loads(
         (FIXTURES / "expected" / "fixture_a.canonical.json").read_text()
     )
@@ -56,6 +56,7 @@ def test_missing_height_is_blocking_and_cli_fails(tmp_path: Path):
         ("wall_height_missing", "blocking"),
         ("elevation_defaulted", "warning"),
         ("wall_role_inferred", "warning"),
+        ("ceiling_height_missing", "blocking"),
     ]
     assert all(w.height is None for w in p.buildings[0].floors[0].walls)
     with pytest.raises(SystemExit) as exc:
@@ -74,12 +75,12 @@ def _dxf(tmp_path: Path, insunits: int, lines) -> Path:
 
 
 def test_unitless_dxf_is_blocking_with_no_geometry(tmp_path: Path):
-    p = read_dxf(_dxf(tmp_path, 0, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))]), 3000)
+    p = read_dxf(_dxf(tmp_path, 0, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))]), 3000, ceiling_height=3000)
     assert [i.code for i in p.issues] == ["units_missing"] and p.buildings == []
 
 
 def test_metre_dxf_converted_to_mm(tmp_path: Path):
-    p = read_dxf(_dxf(tmp_path, 6, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))]), 3000)
+    p = read_dxf(_dxf(tmp_path, 6, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))]), 3000, ceiling_height=3000)
     (w,) = p.buildings[0].floors[0].walls
     assert w.thickness.value == pytest.approx(200, abs=1e-6)
     assert w.centreline.end == pytest.approx((1000, 100), abs=1e-6)
@@ -120,7 +121,7 @@ def test_unmapped_layers_reported_with_counts_and_refs(tmp_path: Path):
         tmp_path,
         extra=[("NOTES", _line), ("NOTES", _circle), ("NOTES", _line), ("DIMS", _line)],
     )
-    issues = _by_code(read_dxf(path, 3000), "unmapped_layer")
+    issues = _by_code(read_dxf(path, 3000, ceiling_height=3000), "unmapped_layer")
     assert [i.severity for i in issues] == ["warning"] * 2
     notes, dims = issues
     assert "NOTES" in notes.message and "1 CIRCLE, 2 LINE" in notes.message
@@ -130,7 +131,7 @@ def test_unmapped_layers_reported_with_counts_and_refs(tmp_path: Path):
 
 def test_unmapped_layer_refs_capped_with_total(tmp_path: Path):
     path, h = _plan(tmp_path, extra=[("NOTES", _line)] * 25)
-    (issue,) = _by_code(read_dxf(path, 3000), "unmapped_layer")
+    (issue,) = _by_code(read_dxf(path, 3000, ceiling_height=3000), "unmapped_layer")
     assert "25 LINE" in issue.message and "first 20 of 25" in issue.message
     assert [s.entity_handle for s in issue.sources] == h["NOTES"][:20]
 
@@ -144,7 +145,7 @@ def test_unmapped_layer_refs_capped_with_total(tmp_path: Path):
 )
 def test_invalid_floor_is_blocking_and_excluded(tmp_path: Path, ring):
     path, h = _plan(tmp_path, floor=ring)
-    p = read_dxf(path, 3000)
+    p = read_dxf(path, 3000, ceiling_height=3000)
     (issue,) = _by_code(p, "invalid_floor_boundary")
     assert issue.severity == "blocking"
     assert [s.entity_handle for s in issue.sources] == [h["floor"]]
@@ -153,7 +154,7 @@ def test_invalid_floor_is_blocking_and_excluded(tmp_path: Path, ring):
 
 def test_clockwise_floor_is_valid(tmp_path: Path):
     ring = [(0, 0), (0, 1000), (1000, 1000), (1000, 0)]
-    p = read_dxf(_plan(tmp_path, floor=ring)[0], 3000)
+    p = read_dxf(_plan(tmp_path, floor=ring)[0], 3000, ceiling_height=3000)
     assert [i.code for i in p.issues] == ["elevation_defaulted", "wall_role_inferred"]
     assert [b.polygon for b in p.buildings[0].floors[0].boundaries] == [ring]
 
@@ -162,21 +163,21 @@ def test_build_blocked_on_bow_tie_floor(tmp_path: Path):
     path, _ = _plan(tmp_path, floor=[(0, 0), (1000, 1000), (1000, 0), (0, 1000)])
     out = tmp_path / "out"
     with pytest.raises(SystemExit) as exc:
-        main(["build", str(path), "--wall-height", "3000", "--out", str(out)])
+        main(["build", str(path), "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)])
     assert exc.value.code == 1
     assert {p.name for p in out.iterdir()} == {"t.canonical.json", "t.report.md"}
 
 
 def test_no_walls_carries_unpaired_refs(tmp_path: Path):
     path = _dxf(tmp_path, 4, [((0, 0), (1000, 0))])
-    (issue,) = _by_code(read_dxf(path, 3000), "no_walls")
+    (issue,) = _by_code(read_dxf(path, 3000, ceiling_height=3000), "no_walls")
     handle = ezdxf.readfile(path).modelspace()[0].dxf.handle
     assert [s.entity_handle for s in issue.sources] == [handle]
 
 
 def test_bad_height_rejected():
     with pytest.raises(ValueError):
-        read_dxf(FIXTURE_A, wall_height=0)
+        read_dxf(FIXTURE_A, wall_height=0, ceiling_height=0)
 
 
 def _eq_walls(p):
@@ -202,7 +203,7 @@ def test_units_flag_scales_unitless_like_mm(tmp_path: Path):
 
 
 def test_units_conflict_blocks(tmp_path: Path):
-    p = read_dxf(_dxf(tmp_path, 4, [((0, 0), (1, 0))]), 3000, user_units="m")
+    p = read_dxf(_dxf(tmp_path, 4, [((0, 0), (1, 0))]), 3000, ceiling_height=3000, user_units="m")
     assert [i.code for i in p.issues] == ["units_conflict"] and p.buildings == []
     assert "4" in p.issues[0].message and "m" in p.issues[0].message
 
@@ -220,7 +221,7 @@ def test_units_matching_header_accepted(tmp_path: Path):
 def test_units_cli_exit_codes(tmp_path: Path, capsys):
     unitless = _dxf(tmp_path, 0, [((0, 0), (1, 0)), ((0, 0.2), (1, 0.2))])
     out = tmp_path / "o.json"
-    base = ["interpret", str(unitless), "--wall-height", "3000", "--out", str(out)]
+    base = ["interpret", str(unitless), "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)]
 
     def code(args):
         with pytest.raises(SystemExit) as e:
@@ -236,7 +237,7 @@ def test_units_cli_exit_codes(tmp_path: Path, capsys):
         code(
             base[:1]
             + [str(_dxf(tmp_path, 4, [((0, 0), (1, 0))]))]
-            + ["--units", "m", "--wall-height", "3000", "--out", str(out)]
+            + ["--units", "m", "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)]
         )
         == 1
     )
@@ -255,13 +256,13 @@ def _hdr(tmp_path: Path, raw: str) -> Path:
 
 @pytest.mark.parametrize("code", [21, 22, 99, -1, 10**6])
 def test_unsupported_insunits_blocks_cleanly(tmp_path: Path, code):
-    p = read_dxf(_dxf(tmp_path, code, [((0, 0), (1, 0))]), 3000)
+    p = read_dxf(_dxf(tmp_path, code, [((0, 0), (1, 0))]), 3000, ceiling_height=3000)
     assert [i.code for i in p.issues] == ["units_unsupported"] and p.buildings == []
     assert p.issues[0].severity == "blocking" and str(code) in p.issues[0].message
 
 
 def test_unsupported_insunits_with_units_flag_is_conflict(tmp_path: Path):
-    p = read_dxf(_dxf(tmp_path, 21, [((0, 0), (1, 0))]), 3000, user_units="m")
+    p = read_dxf(_dxf(tmp_path, 21, [((0, 0), (1, 0))]), 3000, ceiling_height=3000, user_units="m")
     assert [i.code for i in p.issues] == ["units_conflict"]
 
 
@@ -269,7 +270,7 @@ def test_unsupported_insunits_with_units_flag_is_conflict(tmp_path: Path):
 def test_malformed_insunits_never_tracebacks(tmp_path: Path, raw):
     path = _hdr(tmp_path, raw)
     try:
-        p = read_dxf(path, 3000)
+        p = read_dxf(path, 3000, ceiling_height=3000)
     except InputError:
         return  # rejected at load: clean exit 3
     assert [i.code for i in p.issues] == ["units_unsupported"]
@@ -280,11 +281,11 @@ def test_unsupported_insunits_cli_exit_1(tmp_path: Path, capsys):
     for cmd in ("interpret", "build"):
         out = tmp_path / "o" if cmd == "build" else tmp_path / "o.json"
         with pytest.raises(SystemExit) as e:
-            main([cmd, str(path), "--wall-height", "3000", "--out", str(out)])
+            main([cmd, str(path), "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)])
         assert e.value.code == 1
     assert "units_unsupported" in capsys.readouterr().err
     with pytest.raises(SystemExit) as e:
-        main(["interpret", str(_hdr(tmp_path, "abc")), "--wall-height", "3000"])
+        main(["interpret", str(_hdr(tmp_path, "abc")), "--wall-height", "3000", "--ceiling-height", "3000"])
     assert e.value.code in (1, 3)
 
 
@@ -319,10 +320,10 @@ def _geom(p):
 
 def test_flipped_extrusion_matches_mirrored_points(tmp_path: Path):
     floor_wcs = [(0, 0), (-4000, 0), (-4000, 3000), (0, 3000)]  # x < 0 in WCS
-    ref = read_dxf(_ocs_dxf(tmp_path, "ref", None, floor_wcs), 3000)
+    ref = read_dxf(_ocs_dxf(tmp_path, "ref", None, floor_wcs), 3000, ceiling_height=3000)
     # OCS with extrusion (0,0,-1): world x = -ocs x, so author mirrored x
     floor_ocs = [(-x, y) for x, y in floor_wcs]
-    got = read_dxf(_ocs_dxf(tmp_path, "got", None, floor_ocs, (0, 0, -1)), 3000)
+    got = read_dxf(_ocs_dxf(tmp_path, "got", None, floor_ocs, (0, 0, -1)), 3000, ceiling_height=3000)
     assert _geom(got)[1] == _geom(ref)[1] == [floor_wcs]
 
 
@@ -338,7 +339,7 @@ def test_flipped_extrusion_wall_polyline(tmp_path: Path):
         )
         path = tmp_path / f"{name}.dxf"
         doc.saveas(path)
-        return read_dxf(path, 3000)
+        return read_dxf(path, 3000, ceiling_height=3000)
 
     ref = build("wref", wcs, (0, 0, 1))
     got = build("wgot", [(-x, y) for x, y in wcs], (0, 0, -1))
@@ -359,14 +360,58 @@ def test_default_extrusion_unchanged_and_elevation_ignored(tmp_path: Path):
     )
     path = tmp_path / "e.dxf"
     doc.saveas(path)
-    p = read_dxf(path, 3000)
+    p = read_dxf(path, 3000, ceiling_height=3000)
     assert _geom(p)[1] == [[(0, 0), (1000, 0), (1000, 1000)]]
 
 
 def test_non_z_extrusion_flagged_and_skipped(tmp_path: Path):
     ring = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
     path = _ocs_dxf(tmp_path, "x", None, ring, (1, 0, 0))
-    p = read_dxf(path, 3000)
+    p = read_dxf(path, 3000, ceiling_height=3000)
     (i,) = [i for i in p.issues if i.code == "unsupported_extrusion"]
     assert i.severity == "warning" and i.sources[0].layer == "A-FLOR"
     assert i.sources[0].entity_handle and _geom(p)[1] == []
+
+
+# --- ceiling (schema 0.5.0) -------------------------------------------------
+
+
+def _codes(p, code):
+    return [i for i in p.issues if i.code == code]
+
+
+def test_ceiling_built_from_each_boundary_with_derived_elevation():
+    f = read_dxf(FIXTURE_A, 3000, ceiling_height=2600).buildings[0].floors[0]
+    assert f.ceiling_height.value == 2600 and f.ceiling_height.source == "user_provided"
+    assert f.boundaries and len(f.ceilings) == len(f.boundaries)
+    for b, c in zip(f.boundaries, f.ceilings, strict=True):
+        assert c.polygon == b.polygon and c.sources == b.sources
+        assert c.elevation.value == f.elevation.value + 2600
+        assert c.elevation.source == "inferred"  # derived sum, not user's number
+
+
+def test_ceiling_height_missing_is_blocking_only_with_walls(tmp_path):
+    p = read_dxf(FIXTURE_A, 3000)
+    (i,) = _codes(p, "ceiling_height_missing")
+    assert i.severity == "blocking" and p.buildings[0].floors[0].ceilings == []
+    no_walls = read_dxf(_dxf(tmp_path, 4, []), 3000)
+    assert not _codes(no_walls, "ceiling_height_missing")
+
+
+def test_ceiling_without_boundary_warns_and_builds_nothing(tmp_path):
+    path, _ = _plan(tmp_path)
+    p = read_dxf(path, 3000, ceiling_height=2600)
+    (i,) = _codes(p, "ceiling_not_built")
+    assert i.severity == "warning" and p.buildings[0].floors[0].ceilings == []
+
+
+def test_ceiling_above_walls_warns_but_equal_or_lower_does_not():
+    assert _codes(read_dxf(FIXTURE_A, 3000, ceiling_height=3001), "ceiling_above_walls")
+    for h in (3000, 2500):
+        p = read_dxf(FIXTURE_A, 3000, ceiling_height=h)
+        assert not _codes(p, "ceiling_above_walls")
+
+
+def test_ceiling_height_must_be_positive():
+    with pytest.raises(ValueError, match="ceiling height"):
+        read_dxf(FIXTURE_A, 3000, ceiling_height=0)

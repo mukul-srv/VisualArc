@@ -18,7 +18,7 @@ def _norm(text: str) -> str:
 
 
 def test_fixture_a_report_snapshot():
-    p = read_dxf(INPUT / "fixture_a.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_a.dxf", 3000, ceiling_height=3000)
     expected = Project.model_validate_json(
         (EXPECTED / "fixture_a.canonical.json").read_text(encoding="utf-8")
     )
@@ -26,7 +26,7 @@ def test_fixture_a_report_snapshot():
 
 
 def test_fixture_openings_report_snapshot():
-    p = read_dxf(INPUT / "fixture_openings.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_openings.dxf", 3000, ceiling_height=3000)
     expected = Project.model_validate_json(
         (EXPECTED / "fixture_openings.canonical.json").read_text(encoding="utf-8")
     )
@@ -34,7 +34,7 @@ def test_fixture_openings_report_snapshot():
 
 
 def test_every_non_extracted_value_appears_in_report():
-    p = read_dxf(INPUT / "fixture_openings.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_openings.dxf", 3000, ceiling_height=3000)
     report = build_report(p)
     flagged = [r for r in _measured(p) if r[2].source != "source_extracted"]
     assert len(flagged) > 20  # guards against a vacuous loop
@@ -52,8 +52,8 @@ def test_blocked_report_lists_blocking_issue_and_still_renders():
 
 
 def test_mismatch_is_marked():
-    p = read_dxf(INPUT / "fixture_a.dxf", 3000)
-    other = read_dxf(INPUT / "fixture_b.dxf", 3000)
+    p = read_dxf(INPUT / "fixture_a.dxf", 3000, ceiling_height=3000)
+    other = read_dxf(INPUT / "fixture_b.dxf", 3000, ceiling_height=3000)
     assert "**NO**" in build_report(p, other)
 
 

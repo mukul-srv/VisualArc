@@ -79,7 +79,7 @@ def test_json_round_trip_is_lossless():
 def test_json_shape_keeps_units_provenance_and_handles():
     d = json.loads(_project().model_dump_json())
     wall = d["buildings"][0]["floors"][0]["walls"][0]
-    assert d["schema_version"] == "0.4.0" and d["units"] == "mm"
+    assert d["schema_version"] == "0.5.0" and d["units"] == "mm"
     assert wall["thickness"] == {
         "value": 200.0,
         "unit": "mm",

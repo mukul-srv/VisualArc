@@ -97,8 +97,8 @@ def _dxf(tmp_path: Path, wall_layer: str, notes: int = 0) -> Path:
 
 def test_reader_uses_settings_layers_and_ref_cap(tmp_path: Path):
     path = _dxf(tmp_path, "s-wall", notes=3)
-    assert "no_walls" in [i.code for i in read_dxf(path, 3000).issues]
-    p = read_dxf(path, 3000, settings=Settings(wall_layer="S-WALL", unmapped_ref_cap=2))
+    assert "no_walls" in [i.code for i in read_dxf(path, 3000, ceiling_height=3000).issues]
+    p = read_dxf(path, 3000, ceiling_height=3000, settings=Settings(wall_layer="S-WALL", unmapped_ref_cap=2))
     assert len(p.buildings[0].floors[0].walls) == 1  # layer match is case-insensitive
     (notes,) = [i for i in p.issues if i.code == "unmapped_layer"]
     assert len(notes.sources) == 2 and "first 2 of 3" in notes.message
@@ -107,9 +107,9 @@ def test_reader_uses_settings_layers_and_ref_cap(tmp_path: Path):
 def test_reader_size_limit_from_settings(tmp_path: Path):
     path = _dxf(tmp_path, "A-WALL")
     with pytest.raises(InputError):
-        read_dxf(path, 3000, settings=Settings(max_dxf_bytes=100))
+        read_dxf(path, 3000, ceiling_height=3000, settings=Settings(max_dxf_bytes=100))
     # explicit max_bytes (the CLI --max-mb path) still overrides settings
-    assert read_dxf(path, 3000, max_bytes=10**9, settings=Settings(max_dxf_bytes=100))
+    assert read_dxf(path, 3000, ceiling_height=3000, max_bytes=10**9, settings=Settings(max_dxf_bytes=100))
 
 
 def test_extrusion_tolerance_is_configurable(tmp_path: Path):
@@ -123,10 +123,10 @@ def test_extrusion_tolerance_is_configurable(tmp_path: Path):
     path = tmp_path / "tilt.dxf"
     doc.saveas(path)
     codes = lambda p: [i.code for i in p.issues]
-    assert "unsupported_extrusion" in codes(read_dxf(path, 3000))
+    assert "unsupported_extrusion" in codes(read_dxf(path, 3000, ceiling_height=3000))
     wide = Settings(extrusion_tolerance=1e-3)
-    assert "unsupported_extrusion" not in codes(read_dxf(path, 3000, settings=wide))
+    assert "unsupported_extrusion" not in codes(read_dxf(path, 3000, ceiling_height=3000, settings=wide))
     # unrelated to tolerance_mm: widening that does not accept the tilt
     assert "unsupported_extrusion" in codes(
-        read_dxf(path, 3000, settings=Settings(tolerance_mm=1.0))
+        read_dxf(path, 3000, ceiling_height=3000, settings=Settings(tolerance_mm=1.0))
     )

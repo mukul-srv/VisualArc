@@ -29,6 +29,7 @@ def _nonneg_mm(text: str) -> float:
 
 
 def _opening_flags(p) -> None:
+    p.add_argument("--ceiling-height", type=_positive_mm, help="ceiling height in mm")
     # ADR-002 §5: one value per kind; omitted -> Settings default, `defaulted`
     p.add_argument("--door-height", type=_positive_mm, help="door height in mm")
     p.add_argument("--window-height", type=_positive_mm, help="window height in mm")
@@ -46,6 +47,7 @@ def _read(args):
         door_height=args.door_height,
         window_height=args.window_height,
         window_sill=args.window_sill,
+        ceiling_height=args.ceiling_height,
     )
 
 

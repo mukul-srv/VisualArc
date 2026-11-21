@@ -206,7 +206,7 @@ WALLS = {
 
 @pytest.fixture(scope="module")
 def fo_project():
-    return read_dxf(FIX / "fixture_openings.dxf", wall_height=H)
+    return read_dxf(FIX / "fixture_openings.dxf", wall_height=H, ceiling_height=H)
 
 
 def test_fixture_openings_wall_volumes(fo_project):
@@ -225,7 +225,7 @@ def test_fixture_openings_wall_volumes(fo_project):
 
 def test_fixture_openings_glb_roundtrip_and_meta(fo_project, tmp_path):
     floor = fo_project.buildings[0].floors[0]
-    ids = {e.id for e in [*floor.walls, *floor.junctions, *floor.boundaries]}
+    ids = {e.id for e in [*floor.walls, *floor.junctions, *floor.boundaries, *floor.ceilings]}
     loaded = trimesh.load(
         io.BytesIO(build_scene(fo_project).export(file_type="glb")), file_type="glb"
     )
@@ -249,11 +249,11 @@ def test_fixture_openings_glb_roundtrip_and_meta(fo_project, tmp_path):
     assert n == 7
     out = tmp_path / "o"
     dxf = str(FIX / "fixture_openings.dxf")
-    main(["build", dxf, "--wall-height", "3000", "--out", str(out)])
+    main(["build", dxf, "--wall-height", "3000", "--ceiling-height", "3000", "--out", str(out)])
     meta = json.loads((out / "fixture_openings.meta.json").read_text())
     hosted = [v["openings"] for v in meta["elements"].values() if "openings" in v]
     assert sum(len(h) for h in hosted) == 7
-    solids = [v for v in meta["elements"].values() if v["type"] != "floor_boundary"]
+    solids = [v for v in meta["elements"].values() if v["type"] not in ("floor_boundary", "ceiling")]
     assert all(v["watertight"] for v in solids)  # boundaries are flat polygons
     # 9.6 x 3.0 x 4.0 m, glTF Y-up: plan y 0..4 m -> z -4..0
     np.testing.assert_allclose(
@@ -264,7 +264,7 @@ def test_fixture_openings_glb_roundtrip_and_meta(fo_project, tmp_path):
 @pytest.mark.parametrize("name", ["fixture_a", "fixture_b"])
 def test_no_openings_means_plain_prism(name):
     """Fixtures A/B: no openings key; meshes equal the pre-T12 prism construction."""
-    proj = read_dxf(FIX / f"{name}.dxf", wall_height=3000)
+    proj = read_dxf(FIX / f"{name}.dxf", wall_height=3000, ceiling_height=3000)
     floor = proj.buildings[0].floors[0]
     assert not floor.openings
     meshes = build_meshes(floor)

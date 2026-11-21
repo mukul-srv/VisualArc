@@ -28,7 +28,7 @@ def test_valid_upload_returns_preflight(client, tmp_path):
     body = r.json()
     assert len(body["upload_id"]) == 32
     assert body["inventory"]["layers"] and body["inventory"]["entity_counts"]
-    assert body["needs"] == ["wall_height"]  # height is never in the DXF
+    assert body["needs"] == ["ceiling_height", "wall_height"]  # height is never in the DXF
     codes = {i["code"]: i["severity"] for i in body["issues"]}
     assert codes["wall_height_missing"] == "blocking"
     assert [p.name for p in _stored(tmp_path)] == [f"{body['upload_id']}.dxf"]

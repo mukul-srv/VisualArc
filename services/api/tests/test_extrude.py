@@ -50,7 +50,7 @@ def test_missing_height_refuses():
 
 
 def test_fixture_a_meshes():
-    floor = read_dxf(FIXTURE_A, wall_height=3000).buildings[0].floors[0]
+    floor = read_dxf(FIXTURE_A, wall_height=3000, ceiling_height=3000).buildings[0].floors[0]
     meshes = build_meshes(floor)
     solids = [meshes[e.id] for e in [*floor.walls, *floor.junctions]]
     assert all(m.is_watertight for m in solids)

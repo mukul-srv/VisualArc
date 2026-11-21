@@ -19,7 +19,7 @@ PLAN_MM_TO_GLTF_M = np.diag([0.001, 0.001, 0.001, 1.0]) @ np.array(
 
 
 def _elements(floor):
-    return [*floor.walls, *floor.junctions, *floor.boundaries]
+    return [*floor.walls, *floor.junctions, *floor.boundaries, *floor.ceilings]
 
 
 def build_scene(project: Project) -> trimesh.Scene:
