@@ -3,7 +3,7 @@ Global orchestration rules: ~/.claude/CLAUDE.md. This file adds project specific
 
 - Roadmap/status: `docs/implementation/remaining-work-plan.md` (may be outdated). Before work, check git status, recent commits, relevant code, actual task status.
 - Act as coordinator. Parallelize only independent tasks and read-only research/reviews. Keep dependent geometry/schema work sequential. No overlapping edits.
-- Model roles: Opus plans and reviews design decisions; Sonnet implements geometry/schema work; complex PR review: Haiku first, Sonnet if Haiku fails.
+- Model roles: Opus designs geometry algorithms and schema changes (in the plan) and reviews critical geometry/schema PRs; Sonnet implements them; plan names the model per task; complex PR review: Haiku first, Sonnet if Haiku fails.
 - Review subagent changes; run relevant tests and the full suite before accepting.
 - Do batches of related tasks without asking on routine decisions covered by approved specs.
 - Commit locally after review + tests pass; conventional messages. Never push to `main` directly; push feature branches and merge PRs only after review.
