@@ -31,6 +31,7 @@ projects). Not deployed. Limits below are provisional.
 
 ## Setup and tests
 ```bash
+docker compose up -d                             # Postgres (API tests need it)
 cd services/api && uv sync && uv run pytest      # API + engine tests
 cd apps/web && npm ci && npm test                # web tests (builds fixtures via the API CLI, starts a real API)
 cd apps/web && npm run lint && npm run build     # type-check, lint, production build
@@ -67,6 +68,7 @@ corrupt, or over a limit).
 
 ## Browser workflow
 ```bash
+# terminal 0 (once): docker compose up -d && cd services/api && uv run alembic upgrade head
 # terminal 1
 cd services/api && uv run uvicorn api.main:app --reload     # http://127.0.0.1:8000
 # terminal 2

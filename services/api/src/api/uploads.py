@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from api.db import UploadRow, session
 from api.engine.adapters.dxf.inspect import build_inventory
 from api.engine.adapters.dxf.reader import InputError, load_doc, read_dxf, resolve_scale
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, excluded_issue
@@ -17,7 +18,7 @@ from api.engine.settings import DEFAULTS
 from api.generations import GenerationRequest, read_project
 from api.pipeline import has_blocking
 from api.projects import FloorRequest, add_floor, create_project
-from api.storage import new_id, upload_path, valid_id
+from api.storage import new_id, upload_key, upload_path, valid_id
 
 router = APIRouter(prefix="/api/v1")
 
@@ -60,6 +61,9 @@ async def create_upload(request: Request) -> dict:
     except BaseException:
         path.unlink(missing_ok=True)  # size limit, client disconnect, bug: no orphan
         raise
+    with session() as db:
+        db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id)))
+        db.commit()
     codes = {i.code for i in project.issues}
     candidates = []
     if "floor_split_unconfirmed" in codes:  # read_dxf already checked the units

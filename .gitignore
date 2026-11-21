@@ -33,3 +33,6 @@ docs/
 .claude/*
 !.claude/rules/
 !.claude/playbooks/
+
+# local runtime data (uploads, generations)
+var/

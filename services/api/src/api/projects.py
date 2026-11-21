@@ -1,19 +1,17 @@
 """Lightweight projects: an ordered set of floors, each one a generation (B7).
 
-data_dir()/projects/<pid>/project.json. `create_project` and `add_floor` are plain
+Rows in the `projects` table (manifest in a JSONB column). `create_project` and `add_floor` are plain
 Python so other code (B8 floor split) can build projects without HTTP.
 """
-
-import json
-import os
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.engine.canonical.model import Measured
+from api.db import ProjectRow, session
 from api.engine.adapters.dxf.split import FloorScope
+from api.engine.canonical.model import Measured
 from api.generations import GenerationRequest, blocked_response, result, run_generation
-from api.storage import data_dir, new_id, valid_id
+from api.storage import new_id, valid_id
 
 router = APIRouter(prefix="/api/v1")
 
@@ -28,60 +26,59 @@ class FloorRequest(GenerationRequest):
     elevation: float = Field(allow_inf_nan=False, description="mm")
 
 
-def _path(pid: str):
+def load_project(pid: str) -> dict:
     if not valid_id(pid):
         raise HTTPException(404, "unknown project")
-    return data_dir() / "projects" / pid / "project.json"
-
-
-def load_project(pid: str) -> dict:
-    p = _path(pid)
-    if not p.is_file():
+    with session() as db:
+        row = db.get(ProjectRow, pid)
+    if row is None:
         raise HTTPException(404, "unknown project")
-    return json.loads(p.read_text("utf-8"))
-
-
-def _save(pid: str, manifest: dict) -> None:
-    p = _path(pid)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(manifest, indent=2) + "\n", "utf-8")
-    os.replace(tmp, p)  # a reader never sees a half-written manifest
+    return row.data
 
 
 def create_project(name: str) -> str:
     pid = new_id()
-    _save(pid, {"id": pid, "name": name.strip(), "floors": []})
+    with session() as db:
+        db.add(ProjectRow(id=pid, data={"id": pid, "name": name.strip(), "floors": []}))
+        db.commit()
     return pid
 
 
 def add_floor(pid: str, req: FloorRequest, scope: FloorScope | None = None):
     """Generate and append a floor. HTTPException 404 (unknown ids) / 422 (duplicate
     name or elevation); returns the 409 response when blocking issues stop it."""
-    # shortcut: read-modify-write without a lock; two concurrent adds to one project
-    # can lose a floor. Add a file lock or a DB before multi-user use.
-    manifest = load_project(pid)
-    name = req.floor_name.strip()
-    if any(f["name"].casefold() == name.casefold() for f in manifest["floors"]):
-        raise HTTPException(422, f"floor name {name!r} already exists in this project")
-    if any(f["elevation"]["value"] == req.elevation for f in manifest["floors"]):
-        raise HTTPException(
-            422, f"a floor at elevation {req.elevation:g} mm already exists in this project"
+    if not valid_id(pid):
+        raise HTTPException(404, "unknown project")
+    # the row lock serialises adds to one project, so no floor is lost (and floor ids
+    # stay unique); generation runs inside it. shortcut: a long generation blocks
+    # other adds to the same project, fine at this scale.
+    with session() as db, db.begin():
+        row = db.get(ProjectRow, pid, with_for_update=True)
+        if row is None:
+            raise HTTPException(404, "unknown project")
+        manifest = row.data
+        name = req.floor_name.strip()
+        if any(f["name"].casefold() == name.casefold() for f in manifest["floors"]):
+            raise HTTPException(422, f"floor name {name!r} already exists in this project")
+        if any(f["elevation"]["value"] == req.elevation for f in manifest["floors"]):
+            raise HTTPException(
+                422, f"a floor at elevation {req.elevation:g} mm already exists in this project"
+            )
+        # id = creation index: deterministic, stable when the viewer sorts by elevation,
+        # unique because floors are append-only (never deleted)
+        fid = f"floor-{len(manifest['floors'])}"
+        gid, issues = run_generation(
+            req, floor_id=fid, floor_name=name, floor_elevation=req.elevation, scope=scope
         )
-    # id = creation index: deterministic, stable when the viewer sorts by elevation,
-    # unique because floors are append-only (never deleted)
-    fid = f"floor-{len(manifest['floors'])}"
-    gid, issues = run_generation(req, floor_id=fid, floor_name=name, floor_elevation=req.elevation, scope=scope)
-    if gid is None:
-        return blocked_response(issues)
-    floor = {
-        "id": fid,
-        "name": name,
-        "elevation": Measured(value=req.elevation, source="user_provided").model_dump(mode="json"),
-        "generation_id": gid,
-    }
-    manifest["floors"].append(floor)
-    _save(pid, manifest)
+        if gid is None:
+            return blocked_response(issues)
+        floor = {
+            "id": fid,
+            "name": name,
+            "elevation": Measured(value=req.elevation, source="user_provided").model_dump(mode="json"),
+            "generation_id": gid,
+        }
+        row.data = {**manifest, "floors": [*manifest["floors"], floor]}
     return {"floor": floor, **result(gid, issues)}
 
 

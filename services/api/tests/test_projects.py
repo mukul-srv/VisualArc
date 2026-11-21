@@ -123,3 +123,34 @@ def test_reader_floor_params():
     assert (f.id, f.name, f.elevation.value, f.elevation.source) == ("floor-2", "Top", 6400, "user_provided")
     assert f.ceilings[0].elevation.value == 9400
     assert "elevation_defaulted" not in {i.code for i in p.issues}
+
+
+def test_concurrent_floor_adds_keep_both_floors(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    pid = _pid(client)
+    ups = [_upload(client, "fixture_a.dxf") for _ in range(2)]
+
+    def add(i):
+        body = {"upload_id": ups[i], "floor_name": f"F{i}", "elevation": i * 3000, **H}
+        return client.post(f"{P}/{pid}/floors", json=body).status_code
+
+    with ThreadPoolExecutor(2) as ex:
+        assert list(ex.map(add, range(2))) == [201, 201]
+    floors = client.get(f"{P}/{pid}").json()["floors"]
+    assert sorted(f["id"] for f in floors) == ["floor-0", "floor-1"]
+    assert len({f["generation_id"] for f in floors}) == 2
+
+
+def test_import_projects_is_idempotent(client, tmp_path):
+    import json
+
+    from api.importer import import_projects
+
+    pid = "a" * 32
+    d = tmp_path / "projects" / pid
+    d.mkdir(parents=True)
+    (d / "project.json").write_text(json.dumps({"id": pid, "name": "Old", "floors": []}))
+    assert import_projects() == (1, 0)
+    assert import_projects() == (0, 1)
+    assert client.get(f"{P}/{pid}").json()["name"] == "Old"
