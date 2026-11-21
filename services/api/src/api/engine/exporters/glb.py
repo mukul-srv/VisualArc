@@ -11,6 +11,7 @@ import trimesh
 
 from api.engine.canonical.model import Project
 from api.engine.geometry3d.extrude import build_meshes
+from api.engine.settings import DEFAULTS
 
 # rotation part has det +1, so triangle winding (and normals) survive the swap
 PLAN_MM_TO_GLTF_M = np.diag([0.001, 0.001, 0.001, 1.0]) @ np.array(
@@ -22,6 +23,12 @@ def _elements(floor):
     return [*floor.walls, *floor.junctions, *floor.boundaries, *floor.ceilings]
 
 
+def material_key(el) -> str:
+    if el.type == "wall":
+        return f"wall_{el.role}" if el.role else "wall_neutral"
+    return "wall_neutral" if el.type == "junction" else el.type
+
+
 def build_scene(project: Project) -> trimesh.Scene:
     scene = trimesh.Scene()
     scene.metadata.update(
@@ -29,6 +36,16 @@ def build_scene(project: Project) -> trimesh.Scene:
         project_id=project.id,
         source_file=project.source_file,
     )
+    # one shared material per kind, not per mesh
+    materials = {
+        k: trimesh.visual.material.PBRMaterial(
+            name=k,
+            baseColorFactor=[*(int(h[i : i + 2], 16) for i in (1, 3, 5)), 255],
+            roughnessFactor=r,
+            metallicFactor=0.0,
+        )
+        for k, (h, r) in DEFAULTS.material_palette
+    }
     for building in project.buildings:
         for floor in building.floors:
             meshes = build_meshes(floor)
@@ -42,6 +59,9 @@ def build_scene(project: Project) -> trimesh.Scene:
             for el in _elements(floor):
                 mesh = meshes[el.id]
                 mesh.apply_transform(PLAN_MM_TO_GLTF_M)  # baked: viewer gets metres
+                mesh.visual = trimesh.visual.TextureVisuals(
+                    material=materials[material_key(el)]
+                )
                 mesh.metadata = {
                     "floor_id": floor.id,
                     **el.model_dump(mode="json", exclude={"centreline", "polygon"}),

@@ -33,6 +33,19 @@ test("fixture A: node/mesh names match canonical element ids", () => {
   expect(meshes.map((m) => m.name).sort()).toEqual([...ids].sort());
 });
 
+test("fixture A: every mesh loads a PBR material, shared per kind", () => {
+  const mats = new Set<THREE.Material>();
+  let meshes = 0;
+  gltf.scene.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    meshes++;
+    expect(o.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+    mats.add(o.material as THREE.Material);
+  });
+  expect(mats.size).toBeGreaterThan(1);
+  expect(mats.size).toBeLessThan(meshes);
+});
+
 test("fixture A: bounds are 8.20 x 5.20 x 3.00 m, Y-up, plan Y -> -Z", () => {
   const box = new THREE.Box3().setFromObject(gltf.scene);
   const size = box.getSize(new THREE.Vector3());
