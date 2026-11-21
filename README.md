@@ -9,8 +9,21 @@ every value carries its provenance (`source_extracted`, `user_provided`, `defaul
 Pipeline: **DXF -> inventory/interpretation -> canonical model (JSON, with provenance)
 -> 3D geometry -> GLB + metadata + report -> browser viewer**.
 
-Status: MVP-0 local workflow complete (CLI, API, web upload, viewer with selection and
-metadata panel). Not deployed. Limits below are provisional.
+Status: Phase 0 complete (local workflow: CLI, API, web upload, viewer, multi-floor
+projects). Not deployed. Limits below are provisional.
+
+## Features
+- **Issues:** each issue links to its source drawing entities in the issue list.
+- **Viewer:** orbit, orthographic plan view, first-person walk mode, point-to-point measure
+  tool with snapping, metadata panel.
+- **Walls:** role `exterior` or `interior` from layers `A-WALL-EXTR` / `A-WALL-INTR`, else
+  inferred (provenance kept).
+- **Ceiling:** ceiling height input and ceiling element (shown in walk mode).
+- **Materials:** per element and per wall role.
+- **Projects:** several floors per project with a floor selector (`/viewer?project=<id>`).
+- **Multi-floor DXF:** a consolidated DXF is split into floors; each floor gets a name,
+  elevation and offset you confirm before generation (blocks until confirmed).
+- **Input validation:** non-finite numbers are rejected with HTTP 422.
 
 ## Requirements
 - Python 3.12 + [uv](https://docs.astral.sh/uv/)
@@ -35,7 +48,7 @@ A restricted convention; everything else is listed as an issue.
   exactly filling it, on `A-DOOR` (door) or `A-GLAZ` (window). Heights come from flags or
   provisional defaults (door 2100 mm, sill 0; window 1200 mm, sill 900), always flagged.
 - **Wall height** is never in the DXF: supply `--wall-height` (mm). Layer names are
-  case-insensitive. One floor per job.
+  case-insensitive. One plan per generation; a DXF with several floors is split (see Features).
 
 ## Command line
 ```bash
@@ -84,6 +97,8 @@ Configuration: `API_DATA_DIR` (API storage, default a temp folder), `API_CORS_OR
 |---|---|
 | `GET /health` | liveness |
 | `POST /api/v1/uploads` | body = raw DXF (`application/octet-stream`); returns `upload_id`, inventory, issues, `needs` (`wall_height`, `units`). 413 over size, 422 invalid or over a limit |
+| `POST /api/v1/uploads/{id}/split` | confirm floors of a consolidated DXF; 201 with one project and one generation per floor, 409 if any floor blocks |
+| `POST /api/v1/projects`, `POST /api/v1/projects/{pid}/floors`, `GET /api/v1/projects/{pid}` | multi-floor projects |
 | `POST /api/v1/generations` | JSON `{upload_id, wall_height, units?, door_height?, window_height?, window_sill?}`; 201 with artifact URLs, 409 with structured issues if blocked |
 | `GET /api/v1/generations/{id}/artifacts/{glb,meta,canonical,report}` | download artifacts |
 
@@ -100,10 +115,10 @@ performance debt: `benchmarks/t21-benchmark-report.md`. Re-run with
 - Orthogonal walls only; arcs, blocks, non-Z extrusion and sloped lines are reported and
   skipped (a model can generate with such walls missing: check the warnings).
 - No drafting tolerance: lines that are off by a fraction of a millimetre are not paired.
-- Two plans drawn in one DXF are treated as one floor, silently.
+- Floor detection in one DXF is heuristic (layer prefix, else spatial gap). Files without a
+  `$INSUNITS` header show no split table until units are given; generation then blocks.
 - API storage is local disk with no expiry; the API processes requests synchronously (no
   job timeout or worker process), so it is for local use, not public hosting.
-- One floor per generation; multi-floor projects and an on-screen floor selector are Phase 1.
 - Walk mode probes at fixed heights: a window with a sill below 0.3 m and a head above 1.6 m
   behaves like a door; no stairs or multi-floor navigation.
 - The viewer is validated by manual inspection and by loading the served GLB in tests; there
