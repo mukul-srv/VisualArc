@@ -185,6 +185,9 @@ def read_dxf(
     window_sill: float | None = None,
     ceiling_height: float | None = None,
     settings: Settings = DEFAULTS,
+    floor_id: str = "floor-0",
+    floor_name: str = "Level 0",
+    floor_elevation: float | None = None,  # mm; None = defaulted 0 + warning
 ) -> Project:
     for name, v in (
         ("wall height", wall_height),
@@ -451,15 +454,18 @@ def read_dxf(
     junctions = [
         Junction(id=j.id, polygon=j.polygon, wall_ids=j.wall_ids) for j in pieces
     ]
-    issues.append(
-        Issue(
-            code="elevation_defaulted",
-            severity="warning",
-            message="floor elevation assumed 0 mm; DXF plan carries no elevation",
+    if floor_elevation is None:
+        issues.append(
+            Issue(
+                code="elevation_defaulted",
+                severity="warning",
+                message="floor elevation assumed 0 mm; DXF plan carries no elevation",
+            )
         )
-    )
+        elevation = Measured(value=0, source="defaulted")
+    else:
+        elevation = Measured(value=floor_elevation, source="user_provided")
     issues += role_issues
-    elevation = Measured(value=0, source="defaulted")
     ceil_h = ceilings = None
     if ceiling_height is not None:
         ceil_h = Measured(value=ceiling_height, source="user_provided")
@@ -502,8 +508,8 @@ def read_dxf(
             )
         )
     floor = Floor(
-        id="floor-0",
-        name="Level 0",
+        id=floor_id,
+        name=floor_name,
         elevation=elevation,
         ceiling_height=ceil_h,
         ceilings=ceilings or [],

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { generate, uploadDxf, type Failure, type Issue, type Preflight } from "@/lib/api";
+import { addFloor, createProject, generate, isGenerationId, uploadDxf, type Failure, type Issue, type Preflight } from "@/lib/api";
+import { viewerUrl, type Floor } from "@/lib/project";
 import { buildRequest, ceilingReady, setCeilingHeight, setWallHeight, splitIssues, UNITS, type FormValues } from "@/lib/params";
 import { IssueList } from "./IssueList";
 
@@ -18,6 +19,7 @@ export function UploadFlow() {
   const [errors, setErrors] = useState<string[]>([]);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<Issue[] | null>(null);
+  const [proj, setProj] = useState({ on: false, target: "", floorName: "", elevation: "" });
 
   const field = (k: Exclude<keyof FormValues, "ceilingConfirmed">, label: string, hint = "") => (
     <label style={{ display: "block", margin: "6px 0" }}>
@@ -59,13 +61,38 @@ export function UploadFlow() {
       setErrors(req.errors);
       return;
     }
+    const elev = Number(proj.elevation);
+    if (proj.on) {
+      const errs = [];
+      if (!proj.target.trim()) errs.push("Project: enter an existing project id or a new project name.");
+      if (!proj.floorName.trim()) errs.push("Floor name is required.");
+      if (proj.elevation.trim() === "" || !Number.isFinite(elev)) errs.push("Floor elevation (mm) is required and must be a number.");
+      if (errs.length) return setErrors(errs);
+    }
     setErrors([]);
     setFailure(null);
     setBlockedIssues(null);
     setBusy(true);
-    const r = await generate(req.params);
+    let r;
+    let target = "";
+    if (proj.on) {
+      const t = proj.target.trim();
+      let pid = t;
+      if (!isGenerationId(t)) {
+        // not a project id: treat it as the name of a new project
+        const c = await createProject(t);
+        if (!c.ok) {
+          setBusy(false);
+          return setFailure(c);
+        }
+        pid = c.project_id;
+      }
+      target = pid;
+      r = await addFloor(pid, { ...req.params, floor_name: proj.floorName.trim(), elevation: elev });
+      if (r.ok) setProj({ ...proj, target: pid }); // keep the id so the next floor joins it
+    } else r = await generate(req.params);
     setBusy(false);
-    if (r.ok) router.push(`/viewer?generation=${r.generation_id}`);
+    if (r.ok) router.push("floor" in r ? viewerUrl(target, (r.floor as Floor).id) : `/viewer?generation=${r.generation_id}`);
     else if (r.kind === "blocked") setBlockedIssues(r.issues);
     else setFailure(r);
   }
@@ -114,6 +141,24 @@ export function UploadFlow() {
           {field("doorHeight", "Door height (mm)", "optional, else provisional default")}
           {field("windowHeight", "Window height (mm)", "optional, else provisional default")}
           {field("windowSill", "Window sill (mm)", "optional, else provisional default")}
+          <label style={{ display: "block", margin: "6px 0" }}>
+            <input type="checkbox" checked={proj.on} onChange={(e) => setProj({ ...proj, on: e.target.checked })} /> Add to a project (multi-floor)
+          </label>
+          {proj.on && (
+            <>
+              <label style={{ display: "block", margin: "6px 0" }}>
+                Project id (existing) or name (new){" "}
+                <input value={proj.target} onChange={(e) => setProj({ ...proj, target: e.target.value })} />
+              </label>
+              <label style={{ display: "block", margin: "6px 0" }}>
+                Floor name <input value={proj.floorName} onChange={(e) => setProj({ ...proj, floorName: e.target.value })} />
+              </label>
+              <label style={{ display: "block", margin: "6px 0" }}>
+                Floor elevation (mm){" "}
+                <input inputMode="decimal" value={proj.elevation} onChange={(e) => setProj({ ...proj, elevation: e.target.value })} /> required, unique per project
+              </label>
+            </>
+          )}
           {errors.length > 0 && (
             <ul role="alert" style={{ color: "#b00020" }}>
               {errors.map((e) => (

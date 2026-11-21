@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { glbUrl, isGenerationId } from "@/lib/api";
+import { getProject, glbUrl, isGenerationId } from "@/lib/api";
+import { parseManifest, pickFloor, sortFloors, viewerUrl, type Floor, type Manifest } from "@/lib/project";
 import { resolveStem } from "@/lib/model-stem";
 import { MetadataPanel } from "@/components/MetadataPanel";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
-import { describeElement, describeOpening, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
+import { describeElement, describeOpening, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
 
 // Viewer only renders. GLB is already metres, Y-up (ADR-001); no unit/axis fixes here.
 
@@ -27,29 +28,43 @@ export default function ViewerPage() {
   const [measuring, setMeasuring] = useState(false);
   const [result, setResult] = useState<{ m: Measurement; a: SnapKind; b: SnapKind } | null>(null);
 
+  const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [floorId, setFloorId] = useState<string | null>(null);
+  const [target, setTarget] = useState<{ url: string; stem: string } | null>(null);
+  const floorTarget = (m: Manifest, f: Floor) => ({ url: glbUrl(f.generation_id), stem: `${m.name} / ${f.name}` });
+
+  // Resolve what to load from the query string. The scene effect below reloads on `target`.
   useEffect(() => {
-    const el = mount.current!;
     const query = new URLSearchParams(window.location.search);
-    // ?generation=<id> loads an API-generated model; ?model=<stem> a local /models file
+    // ?project=<id>[&floor=<id>] loads a project floor; ?generation=<id> one API model;
+    // ?model=<stem> a local /models file
+    const project = query.get("project");
     const generation = query.get("generation");
-    let stem: string | null = null;
-    let url: string;
-    if (generation !== null) {
-      if (!isGenerationId(generation)) {
-        queueMicrotask(() => setStatus("error: invalid generation id"));
-        return;
-      }
-      stem = `generation ${generation.slice(0, 8)}`;
-      url = glbUrl(generation);
+    if (project !== null) {
+      if (!isGenerationId(project)) return queueMicrotask(() => setStatus("error: invalid project id"));
+      getProject(project).then((r) => {
+        const m = r.ok ? parseManifest(r.manifest) : null;
+        if (!r.ok || !m) return setStatus(r.ok ? "error: malformed project manifest" : `error: ${r.message}`);
+        const f = pickFloor(m, query.get("floor"));
+        if (!f) return setStatus("error: project has no floors yet");
+        setManifest(m);
+        setFloorId(f.id);
+        setTarget(floorTarget(m, f));
+      });
+    } else if (generation !== null) {
+      if (!isGenerationId(generation)) return queueMicrotask(() => setStatus("error: invalid generation id"));
+      queueMicrotask(() => setTarget({ url: glbUrl(generation), stem: `generation ${generation.slice(0, 8)}` }));
     } else {
       const name = resolveStem(query.get("model"));
-      if (name === null) {
-        queueMicrotask(() => setStatus("error: invalid model name (allowed: letters, digits, _ and -)"));
-        return;
-      }
-      stem = name;
-      url = `/models/${name}.glb`;
+      if (name === null) return queueMicrotask(() => setStatus("error: invalid model name (allowed: letters, digits, _ and -)"));
+      queueMicrotask(() => setTarget({ url: `/models/${name}.glb`, stem: name }));
     }
+  }, []);
+
+  useEffect(() => {
+    if (!target) return;
+    const { url, stem } = target;
+    const el = mount.current!;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e22);
     const persp = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 500);
@@ -341,12 +356,29 @@ export default function ViewerPage() {
       exitWalk();
       clearSelection();
       clearMeasure();
+      model?.traverse((o) => {
+        // free the previous floor's GPU memory when switching
+        const m = o as THREE.Mesh;
+        m.geometry?.dispose();
+        [m.material].flat().forEach((x) => x?.dispose());
+      });
       renderer.setAnimationLoop(null);
       controls.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
-  }, []);
+  }, [target]);
+
+  const floors = manifest ? sortFloors(manifest.floors) : [];
+  const current = floors.find((f) => f.id === floorId);
+  const selectFloor = (f: Floor) => {
+    if (!manifest || f.id === floorId) return;
+    setPanel(null);
+    setTopState(false);
+    setFloorId(f.id);
+    setTarget(floorTarget(manifest, f));
+    window.history.replaceState(null, "", viewerUrl(manifest.id, f.id));
+  };
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
@@ -366,6 +398,18 @@ export default function ViewerPage() {
           {measuring ? "Measure: on (Esc)" : "Measure"}
         </button>{" "}
         {walking ? "WASD/arrows move, drag to look" : status}
+        {floors.length > 0 && (
+          <div role="group" aria-label="Floors" style={{ marginTop: 6 }}>
+            {floors.map((f) => (
+              <div key={f.id}>
+                <button disabled={walking} aria-pressed={f.id === floorId} onClick={() => selectFloor(f)}>
+                  {f.id === floorId ? "▶ " : ""}
+                  {f.name}: {Number(f.elevation.value.toFixed(3))} mm [{PROVENANCE_LABEL[f.elevation.source]}]
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div
         style={{
@@ -379,6 +423,12 @@ export default function ViewerPage() {
           font: "13px monospace",
         }}
       >
+        {current && (
+          <div style={{ marginBottom: 8 }}>
+            <b>{current.name}</b> <code>{current.id}</code>: elevation {Number(current.elevation.value.toFixed(3))} mm [
+            {PROVENANCE_LABEL[current.elevation.source]}]
+          </div>
+        )}
         <MetadataPanel panel={panel} />
         {measuring && (
           <div>
