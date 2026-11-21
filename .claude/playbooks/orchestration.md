@@ -5,7 +5,7 @@
 - Parallelize only independent tasks and read-only research/reviews. Keep dependent geometry/schema work sequential.
 - Review subagent changes; run relevant tests and the full suite before accepting.
 - Do batches of related tasks without asking on routine decisions covered by approved specs.
-- Commit locally after review + tests pass; conventional messages. Never push without explicit approval.
+- Commit locally after review + tests pass; conventional messages. Never push to `main` directly; push feature branches and merge PRs only after review (see Agent workflow).
 - Update the plan as task status changes.
 
 ## Agent workflow
