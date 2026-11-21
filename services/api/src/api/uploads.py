@@ -61,9 +61,13 @@ async def create_upload(request: Request) -> dict:
     except BaseException:
         path.unlink(missing_ok=True)  # size limit, client disconnect, bug: no orphan
         raise
-    with session() as db:
-        db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id)))
-        db.commit()
+    try:
+        with session() as db:
+            db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id)))
+            db.commit()
+    except BaseException:
+        path.unlink(missing_ok=True)  # no blob without its metadata row
+        raise
     codes = {i.code for i in project.issues}
     candidates = []
     if "floor_split_unconfirmed" in codes:  # read_dxf already checked the units

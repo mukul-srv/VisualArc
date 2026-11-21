@@ -32,16 +32,16 @@ def valid_id(value: str) -> bool:
 
 
 def blob_path(key: str) -> Path:
-    """Disk location of a blob key; the parent directory is created."""
+    """Disk location of a blob key; creates nothing (writers make their directories)."""
     if any(p in ("", ".", "..") or "\\" in p or ":" in p for p in key.split("/")):
         raise ValueError("invalid blob key")
-    p = data_dir() / key
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    return data_dir() / key
 
 
 def put_blob(key: str, data: bytes) -> None:
-    blob_path(key).write_bytes(data)
+    p = blob_path(key)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
 
 
 def get_blob(key: str) -> bytes:
