@@ -7,6 +7,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { glbUrl, isGenerationId } from "@/lib/api";
 import { resolveStem } from "@/lib/model-stem";
 import { MetadataPanel } from "@/components/MetadataPanel";
+import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { collectColliders, makeDoubleSided, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { describeElement, describeOpening, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
@@ -47,12 +48,16 @@ export default function ViewerPage() {
     }
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e22);
-    const camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 500);
-    camera.position.set(10, 8, 10);
+    const persp = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 500);
+    persp.position.set(10, 8, 10);
+    const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+    let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = persp;
+    let planBox: THREE.Box3 | null = null;
+    let saved3d: { position: THREE.Vector3; target: THREE.Vector3 } | null = null;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(renderer.domElement);
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new OrbitControls(persp as THREE.Camera, renderer.domElement);
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.2));
     const sun = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -149,6 +154,7 @@ export default function ViewerPage() {
     };
     const enterWalk = () => {
       if (!model) return;
+      if (camera === ortho) return setStatus("switch to Perspective to walk");
       const spawn = spawnPoint(model);
       if (!spawn) return setStatus("walk mode needs a floor boundary in the model");
       clearSelection();
@@ -209,11 +215,34 @@ export default function ViewerPage() {
 
     let center = new THREE.Vector3();
     let size = 10;
+    const fitPlan = () => {
+      if (!planBox) return;
+      const f = planFrustum(planBox, el.clientWidth / el.clientHeight, 0.1);
+      Object.assign(ortho, { left: f.left, right: f.right, top: f.top, bottom: f.bottom, near: f.near, far: f.far });
+      ortho.zoom = 1;
+      ortho.position.copy(f.position);
+      ortho.up.set(0, 0, -1); // plan up = -Z (plan Y -> -Z)
+      controls.target.set(f.position.x, planBox.min.y, f.position.z);
+      ortho.updateProjectionMatrix();
+    };
     const place = (isTop: boolean) => {
-      const d = size * 1.5;
-      controls.target.copy(center);
-      if (isTop) camera.position.set(center.x, center.y + d * 1.5, center.z + 0.001);
-      else camera.position.set(center.x + d, center.y + d * 0.7, center.z + d);
+      if (isTop && camera === persp && planBox) {
+        saved3d = { position: persp.position.clone(), target: controls.target.clone() };
+        camera = ortho;
+        controls.object = ortho;
+        controls.enableRotate = false;
+        fitPlan();
+      } else if (!isTop && camera === ortho && saved3d) {
+        camera = persp;
+        controls.object = persp;
+        controls.enableRotate = true;
+        persp.position.copy(saved3d.position);
+        controls.target.copy(saved3d.target);
+      } else if (!isTop) {
+        const d = size * 1.5; // initial 3D framing
+        controls.target.copy(center);
+        persp.position.set(center.x + d, center.y + d * 0.7, center.z + d);
+      }
       controls.update();
     };
     setTop.current = place;
@@ -227,6 +256,8 @@ export default function ViewerPage() {
         const s = box.getSize(new THREE.Vector3());
         center = box.getCenter(new THREE.Vector3());
         size = Math.max(s.x, s.z);
+        planBox = box;
+        Object.assign(controls, orbitLimits(box));
         place(false);
         setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
       },
@@ -239,8 +270,9 @@ export default function ViewerPage() {
       renderer.render(scene, camera);
     });
     const onResize = () => {
-      camera.aspect = el.clientWidth / el.clientHeight;
-      camera.updateProjectionMatrix();
+      persp.aspect = el.clientWidth / el.clientHeight;
+      persp.updateProjectionMatrix();
+      if (camera === ortho) fitPlan();
       renderer.setSize(el.clientWidth, el.clientHeight);
     };
     window.addEventListener("resize", onResize);
