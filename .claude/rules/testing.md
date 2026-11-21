@@ -8,4 +8,3 @@ paths:
 - Run relevant tests, then the full applicable suite, before accepting work.
 - API: `cd services/api && uv run pytest`. Web: `cd apps/web && npm test`.
 - Never weaken tests to hide bugs. Never hardcode fixture coordinates to pass.
-- Never claim tests passed unless actually run.
