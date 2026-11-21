@@ -29,6 +29,7 @@ Thumbs.db
 
 # local-only project docs
 docs/
-CLAUDE.md
-.claude/rules/
-.claude/playbooks/
+# claude code local state: only .claude/rules/ and .claude/playbooks/ are tracked
+.claude/*
+!.claude/rules/
+!.claude/playbooks/
