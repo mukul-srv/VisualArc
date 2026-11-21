@@ -10,6 +10,7 @@ import { MetadataPanel } from "@/components/MetadataPanel";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { collectColliders, makeDoubleSided, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
+import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
 
 // Viewer only renders. GLB is already metres, Y-up (ADR-001); no unit/axis fixes here.
@@ -22,6 +23,9 @@ export default function ViewerPage() {
   const [top, setTopState] = useState(false);
   const [status, setStatus] = useState("loading…");
   const [panel, setPanel] = useState<Panel | null>(null);
+  const toggleMeasure = useRef<() => void>(() => {});
+  const [measuring, setMeasuring] = useState(false);
+  const [result, setResult] = useState<{ m: Measurement; a: SnapKind; b: SnapKind } | null>(null);
 
   useEffect(() => {
     const el = mount.current!;
@@ -93,6 +97,49 @@ export default function ViewerPage() {
     const raycaster = new THREE.Raycaster();
     let down: { x: number; y: number } | null = null;
     const canvas = renderer.domElement;
+    // --- measure mode: click A, click B (snapped to vertex/edge), third click restarts
+    let measureOn = false;
+    let pts: { p: THREE.Vector3; snap: SnapKind }[] = [];
+    let mObjs: THREE.Object3D[] = [];
+    const clearMeasure = () => {
+      mObjs.forEach((o) => {
+        scene.remove(o);
+        (o as THREE.Mesh).geometry.dispose();
+        ((o as THREE.Mesh).material as THREE.Material).dispose();
+      });
+      mObjs = [];
+      pts = [];
+      setResult(null);
+    };
+    const setMeasure = (on: boolean) => {
+      if (on && walk) return;
+      measureOn = on;
+      if (on) {
+        clearSelection();
+        setPanel(null);
+      } else clearMeasure();
+      setMeasuring(on);
+    };
+    toggleMeasure.current = () => setMeasure(!measureOn);
+    const measureClick = (mesh: THREE.Mesh, hit: THREE.Vector3) => {
+      if (pts.length === 2) clearMeasure();
+      const s = snapPoint(hit, mesh, camera, { width: canvas.clientWidth, height: canvas.clientHeight }, 12);
+      pts.push({ p: s.point, snap: s.snap });
+      const mk = new THREE.Mesh(new THREE.SphereGeometry(0.05), new THREE.MeshBasicMaterial({ color: 0xff3366, depthTest: false }));
+      mk.position.copy(s.point);
+      mk.renderOrder = 1;
+      scene.add(mk);
+      mObjs.push(mk);
+      if (pts.length < 2) return;
+      const ln = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([pts[0].p, pts[1].p]),
+        new THREE.LineBasicMaterial({ color: 0xff3366, depthTest: false }),
+      );
+      ln.renderOrder = 1;
+      scene.add(ln);
+      mObjs.push(ln);
+      setResult({ m: measure(pts[0].p, pts[1].p), a: pts[0].snap, b: pts[1].snap });
+    };
     const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
     const onUp = (e: PointerEvent) => {
       if (walk || !down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
@@ -101,8 +148,9 @@ export default function ViewerPage() {
         new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
         camera,
       );
-      clearSelection();
       const pick = pickElement(model, raycaster.ray);
+      if (measureOn) return pick && measureClick(pick.mesh, pick.point);
+      clearSelection();
       if (!pick) return setPanel(null);
       const ud = pick.mesh.userData as ElementData;
       if (pick.opening) {
@@ -157,6 +205,7 @@ export default function ViewerPage() {
       if (camera === ortho) return setStatus("switch to Perspective to walk");
       const spawn = spawnPoint(model);
       if (!spawn) return setStatus("walk mode needs a floor boundary in the model");
+      setMeasure(false);
       clearSelection();
       setPanel(null);
       const colliders = collectColliders(model);
@@ -175,7 +224,7 @@ export default function ViewerPage() {
     };
     toggleWalk.current = () => (walk ? exitWalk() : enterWalk());
     const onKey = (e: KeyboardEvent, down: boolean) => {
-      if (e.key === "Escape" && down) return exitWalk();
+      if (e.key === "Escape" && down) return measureOn ? setMeasure(false) : exitWalk();
       if (down && walk) keys.add(e.key.toLowerCase());
       if (!down) keys.delete(e.key.toLowerCase()); // always, or a key released after Esc sticks
     };
@@ -288,6 +337,7 @@ export default function ViewerPage() {
       window.removeEventListener("pointerup", onLookUp);
       exitWalk();
       clearSelection();
+      clearMeasure();
       renderer.setAnimationLoop(null);
       controls.dispose();
       renderer.dispose();
@@ -309,6 +359,9 @@ export default function ViewerPage() {
           {top ? "Perspective" : "Top-down"}
         </button>{" "}
         <button onClick={() => toggleWalk.current()}>{walking ? "Exit walk (Esc)" : "Walk"}</button>{" "}
+        <button disabled={walking} onClick={() => toggleMeasure.current()}>
+          {measuring ? "Measure: on (Esc)" : "Measure"}
+        </button>{" "}
         {walking ? "WASD/arrows move, drag to look" : status}
       </div>
       <div
@@ -324,6 +377,22 @@ export default function ViewerPage() {
         }}
       >
         <MetadataPanel panel={panel} />
+        {measuring && (
+          <div>
+            <b>Viewer measurement (not source data)</b>
+            {result ? (
+              <div>
+                total {result.m.total_mm.toFixed(1)} mm
+                <br />
+                horizontal {result.m.horizontal_mm.toFixed(1)} mm, vertical {result.m.vertical_mm.toFixed(1)} mm
+                <br />
+                snap: A {result.a}, B {result.b}
+              </div>
+            ) : (
+              <div>click point A, then point B</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
