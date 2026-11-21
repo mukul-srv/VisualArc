@@ -1,3 +1,5 @@
+import type { SourceRef } from "./selection";
+
 // Thin client for the FastAPI backend. fetch is injectable so tests need no server.
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -5,7 +7,7 @@ export type Issue = {
   code: string;
   severity: "blocking" | "warning";
   message: string;
-  sources: { layer: string; entity_handle: string }[];
+  sources: SourceRef[];
 };
 
 export type Preflight = {

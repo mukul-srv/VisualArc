@@ -1,4 +1,5 @@
 import type { Issue } from "../lib/api";
+import { refs } from "../lib/selection";
 import { splitIssues } from "../lib/params";
 
 // Blocking and warnings are distinct in text and structure (never colour alone).
@@ -7,7 +8,8 @@ export function IssueList({ issues }: { issues: Issue[] }) {
   if (!issues.length) return <p>No issues found.</p>;
   const item = (i: Issue, label: string, color: string) => (
     <li key={`${i.code}-${i.message}`} style={{ color }}>
-      <strong>{label}</strong> <code>{i.code}</code>: {i.message}
+      <strong>{label}</strong> <code>{i.code}</code>: {i.message}{" "}
+      <small>({i.sources.length ? refs(i.sources).join(", ") : "no source entity"})</small>
     </li>
   );
   return (
