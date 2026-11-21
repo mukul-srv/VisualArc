@@ -45,7 +45,7 @@ export type Panel = { title: string; id: string; rows: Row[]; sourcesLabel: stri
 const mm = (v: number) => `${Number(v.toFixed(3))} mm`;
 const measured = (label: string, m: Measured | null | undefined): Row =>
   m ? { label, value: mm(m.value), provenance: m.source } : { label, value: "not set" };
-const refs = (s: SourceRef[] | undefined) => (s ?? []).map((r) => `${r.layer}:${r.entity_handle}`);
+export const refs = (s: SourceRef[] | undefined) => (s ?? []).map((r) => `${r.layer}:${r.entity_handle}`);
 
 /** Which opening, if any, a click on a host wall landed in (wall bore or reveal surface).
  *  `hit` is the three.js world point in metres (Y up, plan y -> -z); `baseY` the wall's

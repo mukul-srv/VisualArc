@@ -23,6 +23,17 @@ test("only warnings: no blocking section", () => {
   expect(html).not.toContain("Blocking issues");
 });
 
+test("issue sources render as layer:entity_handle", () => {
+  const i = { ...mk("a", "warning"), sources: [{ layer: "WALLS", entity_handle: "1A" }, { layer: "DOORS", entity_handle: "2B" }] };
+  const html = renderToStaticMarkup(<IssueList issues={[i]} />);
+  expect(html).toContain("WALLS:1A");
+  expect(html).toContain("DOORS:2B");
+});
+
+test("issue without sources shows a fallback", () => {
+  expect(renderToStaticMarkup(<IssueList issues={[mk("a", "warning")]} />)).toContain("no source entity");
+});
+
 test("empty list says so", () => {
   expect(renderToStaticMarkup(<IssueList issues={[]} />)).toContain("No issues found");
 });
