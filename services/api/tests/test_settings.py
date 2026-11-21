@@ -34,6 +34,13 @@ def test_defaults_match_document_08():
         "max_wall_segments": 600,
         "max_opening_markers": 120,
         "unmapped_ref_cap": 20,
+        "material_palette": (
+            ("wall_exterior", ("#b5654a", 0.9)),
+            ("wall_interior", ("#e6e0d4", 0.9)),
+            ("wall_neutral", ("#a8a8a8", 0.9)),
+            ("floor_boundary", ("#8c7b6b", 0.8)),
+            ("ceiling", ("#f4f4f0", 0.95)),
+        ),
     }
     with pytest.raises(dataclasses.FrozenInstanceError):
         DEFAULTS.tolerance_mm = 1.0

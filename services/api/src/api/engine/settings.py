@@ -79,6 +79,20 @@ class Settings:
     # TEXT entities, cannot flood the report (T5).
     unmapped_ref_cap: int = 20
 
+    # Presentation only (never changes geometry): kind -> (sRGB hex, roughness).
+    # Kinds: wall role, "wall_neutral" (junctions, and walls whose role is unresolved),
+    # floor_boundary, ceiling. Junctions get the neutral tone, not a wall role's:
+    # they sit between walls of mixed roles, and a distinct tone keeps them visible
+    # when checking the model. Mid-light, non-metal values so every kind reads
+    # against the viewer background and under the selection highlight.
+    material_palette: tuple[tuple[str, tuple[str, float]], ...] = (
+        ("wall_exterior", ("#b5654a", 0.9)),
+        ("wall_interior", ("#e6e0d4", 0.9)),
+        ("wall_neutral", ("#a8a8a8", 0.9)),
+        ("floor_boundary", ("#8c7b6b", 0.8)),
+        ("ceiling", ("#f4f4f0", 0.95)),
+    )
+
     @property
     def wall_layers(self) -> frozenset[str]:
         return frozenset({self.wall_layer, *(l for l, _ in self.wall_role_layers)})

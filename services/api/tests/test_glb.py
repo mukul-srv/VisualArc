@@ -18,6 +18,7 @@ from api.engine.canonical.model import (
     Wall,
 )
 from api.engine.exporters.glb import build_meta, build_scene
+from api.engine.settings import DEFAULTS
 
 FIXTURE_A = Path(__file__).resolve().parents[3] / "fixtures" / "input" / "fixture_a.dxf"
 
@@ -79,6 +80,29 @@ def test_fixture_a_metadata_roundtrip():
         np.testing.assert_allclose(
             f.face_normals, [[0, 1, 0]] * len(f.faces), atol=1e-9
         )
+
+
+def test_materials_per_kind_from_settings():
+    project = read_dxf(FIXTURE_A, wall_height=3000, ceiling_height=3000)
+    floor = project.buildings[0].floors[0]
+    loaded = _roundtrip(build_scene(project))
+    palette = dict(DEFAULTS.material_palette)
+
+    def expect(el):
+        if el.type == "wall":
+            return f"wall_{el.role}" if el.role else "wall_neutral"
+        return "wall_neutral" if el.type == "junction" else el.type
+
+    seen = set()
+    for el in [*floor.walls, *floor.junctions, *floor.boundaries, *floor.ceilings]:
+        mat = loaded.geometry[el.id].visual.material
+        hex_, rough = palette[expect(el)]
+        assert list(mat.baseColorFactor[:3]) == [int(hex_[i : i + 2], 16) for i in (1, 3, 5)]
+        assert mat.roughnessFactor == pytest.approx(rough)
+        assert mat.metallicFactor == 0
+        seen.add(expect(el))
+    assert len(seen) > 1  # fixture exercises several kinds
+    assert len({id(g.visual.material) for g in loaded.geometry.values()}) <= len(palette)
 
 
 def test_meta_report_fixture_a():
