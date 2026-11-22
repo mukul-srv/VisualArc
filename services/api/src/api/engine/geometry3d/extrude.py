@@ -245,14 +245,15 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
                           else _flat(Polygon(bal.polygon), z0))
     for sl in floor.slabs:
         t = sl.thickness.value
-        m = _prism(Polygon(sl.polygon), z0 - t, t)
+        outline = Polygon(sl.polygon, sl.holes)  # holes: courtyards, no slab there
+        m = _prism(outline, z0 - t, t)
         # over a floor boundary the top face is the boundary's surface: drop it there so the
         # two coplanar faces do not z-fight; boundary + slab together are the closed solid
         top = (m.face_normals[:, 2] > 0.5) & (m.triangles_center[:, 2] > z0 - 1e-6)
         m.update_faces(~top)
         m.remove_unreferenced_vertices()
         # the top face stays wherever no floor boundary covers it (under the walls)
-        rest = Polygon(sl.polygon).difference(unary_union(
+        rest = outline.difference(unary_union(
             [Polygon(b.polygon) for b in floor.boundaries if b.id in sl.boundary_ids]))
         tops = [_flat(g, z0) for g in getattr(rest, "geoms", [rest])
                 if isinstance(g, Polygon) and g.area > 1e-6]

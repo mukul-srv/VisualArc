@@ -55,3 +55,12 @@ def test_other_users_and_project_models_cannot_be_changed(client):
     assert pid
     assert client.delete(f"/api/v1/generations/{gid}").status_code == 409  # belongs to a project now
     assert client.patch(f"/api/v1/generations/{gid}", json={"name": "x"}).status_code == 409
+
+
+def test_generations_replaced_by_a_regeneration_are_not_listed_as_standalone(client):
+    # a project's older generations (and those of deleted projects) stay out of the standalone list
+    gid = _generate(client)
+    pid = client.post("/api/v1/projects/from-generation", json={"generation_id": gid, "name": "P"}).json()["project_id"]
+    assert gid not in _recent(client) or _recent(client)[gid]["project_id"] == pid
+    assert client.delete(f"/api/v1/projects/{pid}").status_code == 204
+    assert gid not in _recent(client)  # project soft-deleted: hidden, not shown as standalone

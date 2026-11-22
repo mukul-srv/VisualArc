@@ -106,6 +106,19 @@ test("reach picks the nearest door, and a walker in the doorway keeps it from cl
   const doors = buildDoors(modelWithLeaf().g);
   expect(nearestDoor(doors, new THREE.Vector3(7.9, 0, 0.8))).toBe(doors[0]); // 0.9 m from the opening
   expect(nearestDoor(doors, new THREE.Vector3(7.9, 0, 3))).toBeNull(); // too far
-  expect(canClose(doors[0], new THREE.Vector3(7.9, 0, -0.1))).toBe(false); // standing in it
-  expect(canClose(doors[0], new THREE.Vector3(7.9, 0, 1.2))).toBe(true);
+  expect(canClose(doors[0], new THREE.Vector3(7.9, 0, -0.1))).toBe(false); // standing in the doorway
+  expect(canClose(doors[0], new THREE.Vector3(7.9, 0, 1.2))).toBe(true); // on the side it does not open to
+});
+
+test("closing is blocked exactly where the leaf would sweep, not by a fixed distance from the opening", () => {
+  // hinge at (7.55, -0.1), leaf 0.8 m, opens toward -z (three); walker radius 0.25
+  const d = buildDoors(modelWithLeaf().g)[0];
+  const at = (x: number, z: number) => canClose(d, new THREE.Vector3(x, 0, z));
+  expect(at(7.9, -0.5)).toBe(false); // in the swept quarter disc, 0.4 m out from the wall
+  expect(at(7.6, -0.85)).toBe(false); // near the open leaf's free end
+  expect(at(7.55, -1.2)).toBe(true); // beyond the leaf's reach plus the body radius (0.8 + 0.25 = 1.05)
+  expect(at(8.7, -0.1)).toBe(true); // along the wall, past the leaf's length: right beside the door, clear
+  expect(at(7.0, -0.5)).toBe(true); // behind the hinge side, outside the sweep
+  expect(at(7.9, 0.5)).toBe(true); // the other side of the wall
+  expect(d.hinge.length).toBeCloseTo(0.8); // 900 mm opening - 2 x 50 mm frame
 });

@@ -192,12 +192,20 @@ def recent_generations(user: CurrentUser):
         for p in db.scalars(select(ProjectRow).where(ProjectRow.owner_id == user.id)):
             for f in p.data["floors"]:
                 where[f["generation_id"]] = (p, f)
+        # every generation a project of mine ever used (older versions, deleted projects too) is the
+        # project's, not a standalone model: it is changed through the project
+        used = {gid for (ids,) in db.execute(
+            select(ProjectVersionRow.snapshot["generation_ids"]).join(
+                ProjectRow, ProjectRow.id == ProjectVersionRow.project_id)
+            .where(ProjectRow.owner_id == user.id)) for gid in (ids or [])}
         gens = db.scalars(select(GenerationRow).where(
             GenerationRow.owner_id == user.id, GenerationRow.deleted_at.is_(None))
             .order_by(GenerationRow.created_at.desc())).all()
     out = []
     for g in gens:
         p, floor = where.get(g.id, (None, None))
+        if p is None and g.id in used:
+            continue
         if p is not None and p.deleted_at is not None:
             continue
         out.append({"generation_id": g.id, "created_at": g.created_at.isoformat(),

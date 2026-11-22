@@ -1,6 +1,9 @@
 """upload file names; generation display names and soft delete
 
 Revision ID: 0007
+
+Downgrade drops the three columns: uploaded file names, renamed model names and the soft-delete
+marks are lost for good, and standalone models that were deleted become visible again.
 """
 
 import sqlalchemy as sa

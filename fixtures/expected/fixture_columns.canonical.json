@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.7.0",
+  "schema_version": "0.7.1",
   "id": "fixture_columns",
   "units": "mm",
   "source_file": "fixture_columns.dxf",
@@ -387,6 +387,7 @@
                   0.0
                 ]
               ],
+              "holes": [],
               "thickness": {
                 "value": 200.0,
                 "unit": "mm",

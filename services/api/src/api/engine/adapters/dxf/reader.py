@@ -15,6 +15,7 @@ from pathlib import Path
 import ezdxf
 from ezdxf import units
 from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
@@ -141,6 +142,9 @@ def resolve_scale(doc, user_units: str | None = None) -> float | None:
         return units.conversion_factor(code or user, units.MM) if code or user else None
     except (TypeError, ValueError):
         return None
+
+
+AREA_EPS_MM2 = 1.0  # a hole smaller than a square millimetre uncovered is float noise
 
 
 def _ref(e) -> SourceRef:
@@ -978,14 +982,27 @@ def read_dxf(
         # above the ground): the exterior of the union of walls, junctions and floor boundaries
         shapes = ([w.rect() for w in paired] + [Polygon(j.polygon) for j in pieces]
                   + [Polygon(b.polygon) for b in boundaries])
+        floors = unary_union([Polygon(b.polygon) for b in boundaries]) if boundaries else Polygon()
         for n, o in enumerate(wall_outlines(shapes, settings), 1):
             inside = [b for b in boundaries
                       if Polygon(o.polygon).buffer(settings.tolerance_mm).covers(Polygon(b.polygon))]
+            # an enclosed region no floor boundary covers (a courtyard, or a room drawn without
+            # A-FLOR) gets no slab: a floor there is not in the drawing
+            bare = [list(h) for h in o.holes
+                    if Polygon(h).difference(floors).area > AREA_EPS_MM2]
+            if bare:
+                issues.append(Issue(
+                    code="slab_hole_without_floor", severity="warning",
+                    message=f"{len(bare)} enclosed region(s) inside slab-{n:03d} have no floor "
+                    "boundary on the floor layer (courtyard, or a room drawn without one), so "
+                    "no slab is built there",
+                    sources=[s for b in inside for s in b.sources]))
             slabs.append(Slab(
                 id=f"slab-{n:03d}",
                 boundary_id=inside[0].id if len(inside) == 1 else None,
                 boundary_ids=[b.id for b in inside],
                 polygon=o.polygon,
+                holes=bare,
                 thickness=Measured(value=slab_t, source=slab_src),
                 sources=[s for b in inside for s in b.sources],
             ))

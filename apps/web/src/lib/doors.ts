@@ -6,19 +6,21 @@
 // symbol in the drawing, so hinge and side are unknown) is never guessed: it does nothing.
 // Windows have no swing data in the model and are not interactive.
 import * as THREE from "three";
+import { WALK } from "./walk";
 import type { OpeningData } from "./selection";
 
 export const DOOR = {
   speed: 2.5, // rad/s
   open: Math.PI / 2, // a door opens a quarter turn
   reach: 1.6, // m: how close the walker must be (E key / tap in walk mode)
-  clear: 0.6, // m: a door cannot close while the walker stands this close to its opening
 };
 
 type Plan = [number, number];
 const TOWARD: Record<string, Plan> = { "+x": [1, 0], "-x": [-1, 0], "+y": [0, 1], "-y": [0, -1] };
 
-export type Hinge = { pivot: THREE.Vector3; angle: number };
+/** pivot: the hinge (three.js m); angle: signed quarter turn about +Y; along: pivot -> free edge of the
+ *  closed leaf; toward: the side it opens to (unit, horizontal); length: the leaf's width (m). */
+export type Hinge = { pivot: THREE.Vector3; angle: number; along: THREE.Vector3; toward: THREE.Vector3; length: number };
 
 /** Pivot (three.js metres, on the wall centreline) and the signed quarter-turn about +Y that swings
  *  the closed leaf towards `opens_toward`. Null when the opening has no swing record or is no door. */
@@ -39,7 +41,13 @@ export function hingeOf(o: OpeningData): Hinge | null {
   const [tx, tz] = [t[0], -t[1]];
   const angle = Math.abs(uz - tx) < 1e-9 && Math.abs(-ux - tz) < 1e-9 ? Math.PI / 2 : -Math.PI / 2;
   const [px, py] = alongX ? [a, (sy + ey) / 2] : [(sx + ex) / 2, a];
-  return { pivot: new THREE.Vector3(px / 1000, 0, -py / 1000), angle };
+  return {
+    pivot: new THREE.Vector3(px / 1000, 0, -py / 1000),
+    angle,
+    along: new THREE.Vector3(ux, 0, uz),
+    toward: new THREE.Vector3(tx, 0, tz),
+    length: Math.max(0, hi - lo - 2 * fw) / 1000,
+  };
 }
 
 export type Door = {
@@ -129,5 +137,13 @@ export function nearestDoor(doors: Door[], p: THREE.Vector3, reach = DOOR.reach)
   return best;
 }
 
-/** A door that is open is only closed when the walker is not standing in or at its opening. */
-export const canClose = (d: Door, p: THREE.Vector3) => distanceToOpening(d, p) > DOOR.clear;
+/** A door only closes when the walker is clear of the leaf's whole sweep: the quarter disc about the
+ *  hinge, as wide as the leaf, from the closed position (in the doorway) to the open one (to the
+ *  side it opens to), plus the body radius. Anywhere else, even right next to the door, it can close. */
+export function canClose(d: Door, p: THREE.Vector3): boolean {
+  const { pivot, along, toward, length } = d.hinge;
+  const w = new THREE.Vector3(p.x - pivot.x, 0, p.z - pivot.z);
+  const r = WALK.radius;
+  const inSweep = w.dot(along) >= -r && w.dot(toward) >= -r && w.length() <= length + r;
+  return !inSweep;
+}

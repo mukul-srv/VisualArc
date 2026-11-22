@@ -12,7 +12,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.engine.settings import DEFAULTS
 
-SCHEMA_VERSION = "0.7.0"
+# 0.7.1: Slab.polygon is the outline of the building part (walls included), not a floor-boundary ring;
+# Slab.boundary_id may be null and Slab.boundary_ids / holes are new. 0.7.0 artifacts (a slab per
+# boundary, boundary_id set) still validate: only optional fields were added or relaxed.
+SCHEMA_VERSION = "0.7.1"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -137,6 +140,7 @@ class Slab(_Model):
     boundary_id: str | None = None  # the one floor boundary it lies under, if exactly one
     boundary_ids: list[str] = []  # every floor boundary inside it (its top face is theirs)
     polygon: list[Point2]  # outline of the building part: walls and floor boundaries
+    holes: list[list[Point2]] = []  # enclosed regions with no floor boundary (courtyards): no slab there
     thickness: Measured
     sources: list[SourceRef]  # the boundary's sources
 
