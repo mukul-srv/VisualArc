@@ -33,6 +33,7 @@ from api.engine.canonical.model import (
     PlanOffset,
     Project,
     Ramp,
+    Roof,
     Room,
     Slab,
     SourceRef,
@@ -51,6 +52,8 @@ from api.engine.geometry2d.openings import (
     resolve_openings,
 )
 from api.engine.geometry2d.role import resolve_roles
+from api.engine.geometry2d.roofs import Outline as RoofOutline
+from api.engine.geometry2d.roofs import plan_roofs, ridge_height, wall_outlines
 from api.engine.geometry2d.rooms import Label, find_rooms
 from api.engine.geometry2d.stairs import Arrow, Outline, find_flights
 from api.engine.geometry2d.walls import Segment
@@ -223,6 +226,7 @@ def read_dxf(
     building_type: str | None = None,  # None: no presets, missing heights block (CLI)
     elevation_assumed: str | None = None,  # why floor_elevation is an assumption, if it is
     params: dict[str, float | str] | None = None,  # user-given project parameters (parameters.py)
+    roof: bool = True,  # False: not the top floor of its project, so no roof
 ) -> Project:
     if building_type is not None and building_type not in dict(settings.building_presets):
         raise ValueError(f"unknown building type {building_type!r}")
@@ -350,6 +354,7 @@ def read_dxf(
     stair_layers, ramp_layers = settings.stair_layers, settings.ramp_layers
     outlines: list[Outline] = []
     arrows: list[Arrow] = []
+    roof_polys: list[tuple] = []  # (ref, ring) on the roof-plan layer
     for e in doc.modelspace():
         if scope and e.dxf.handle not in scope.handles:
             continue
@@ -405,7 +410,7 @@ def read_dxf(
             if text:
                 at = e.ocs().to_wcs(e.dxf.insert) if kind == "TEXT" else e.dxf.insert
                 labels.append(Label(text, mm(at), _ref(e)))
-        if layer not in wall_layers | floor_layers | column_layers | balcony_layers | stair_layers | ramp_layers:
+        if layer not in wall_layers | floor_layers | column_layers | balcony_layers | stair_layers | ramp_layers | settings.roof_layers:
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
         if layer in wall_layers and kind == "LINE":
@@ -469,6 +474,24 @@ def read_dxf(
                 )
             else:
                 outlines.append(Outline(what, _ref(e), rect))
+        elif layer in settings.roof_layers and kind == "LWPOLYLINE":
+            pts = [mm(p) for p in _wcs_xy(e)]
+            if len(pts) > 3 and pts[0] == pts[-1]:
+                pts.pop()
+            elif not e.closed:
+                pts = []
+            if len(pts) < 3 or Polygon(pts).area <= settings.tolerance_mm or not Polygon(pts).is_valid:
+                issues.append(
+                    Issue(
+                        code="invalid_roof",
+                        severity="warning",
+                        message=f"roof polyline {e.dxf.handle} is not a closed, valid polygon "
+                        "with area; no roof built from it",
+                        sources=[_ref(e)],
+                    )
+                )
+            else:
+                roof_polys.append((_ref(e), pts))
         elif layer in balcony_layers and kind == "LWPOLYLINE":
             pts = [mm(p) for p in _wcs_xy(e)]
             if len(pts) > 3 and pts[0] == pts[-1]:
@@ -846,6 +869,77 @@ def read_dxf(
                 run_param=None if run_p is None else Measured(
                     value=run_p, source="user_provided" if "stair_run" in given else "defaulted"),
                 sources=srcs, **kw))
+    roofs = []
+    if not roof and roof_polys:
+        issues.append(Issue(
+            code="roof_not_top_floor", severity="warning",
+            message=f"{len(roof_polys)} roof-plan outline(s) on a floor that is not the top of its "
+            "project; no roof built here",
+            sources=[ref for ref, _ in roof_polys[: settings.unmapped_ref_cap]]))
+    if roof and not paired and roof_polys:
+        issues.append(Issue(
+            code="roof_without_walls", severity="warning",
+            message=f"{len(roof_polys)} roof-plan outline(s) but no walls, so no roof was built "
+            "(its base elevation comes from the wall height)",
+            sources=[ref for ref, _ in roof_polys[: settings.unmapped_ref_cap]]))
+    if roof and paired:
+        req_t = given.get("roof_type", preset.roof_type if preset else None)
+        t_src = "user_provided" if "roof_type" in given else "defaulted"
+        pitch_v = given.get("roof_pitch", preset.roof_pitch if preset else None)
+        p_src = "user_provided" if "roof_pitch" in given else "defaulted"
+        if req_t is None:
+            issues.append(Issue(
+                code="roof_type_unknown", severity="warning",
+                message="no roof type (choose a building type or set the parameter); no roof built"))
+        else:
+            outs = (
+                [RoofOutline(pts, "roof_layer", [ref]) for ref, pts in roof_polys] if roof_polys
+                else wall_outlines([w.rect() for w in paired] + [Polygon(j.polygon) for j in pieces]
+                                   + [Polygon(b.polygon) for b in boundaries], settings)
+            )
+            plans, roof_issues = plan_roofs(outs, req_t, pitch_v, settings)
+            issues += roof_issues
+            base = None if height is None else Measured(
+                value=elevation.value + height.value, source="inferred")
+            if plans and base is None:
+                issues.append(Issue(
+                    code="roof_base_unknown", severity="warning",
+                    message="no wall height, so the roof has no base elevation; roof recorded "
+                    "but not built"))
+            for pl in plans:
+                kw: dict = {}
+                if pl.kind == "flat":
+                    kw["thickness"] = Measured(value=settings.roof_thickness_mm, source="defaulted")
+                else:
+                    x0, y0, x1, y1 = pl.rect
+                    # a drawn roof-plan outline is the roof edge already; only the wall outline
+                    # gets the nominal eave overhang
+                    drawn = pl.outline.source == "roof_layer"
+                    o = 0.0 if drawn else settings.roof_overhang_mm
+                    short = min(x1 - x0, y1 - y0) + 2 * o
+                    kw.update(
+                        overhang=Measured(value=o, source="source_extracted" if drawn else "defaulted"),
+                        pitch=Param(value=pitch_v, unit="deg", source=p_src),
+                        ridge_axis=pl.ridge_axis,
+                        ridge_height=Measured(value=ridge_height(short, pitch_v), source="inferred"),
+                    )
+                roofs.append(Roof(
+                    id=pl.id, kind=pl.kind, requested=pl.requested, polygon=pl.outline.polygon,
+                    outline_source=pl.outline.source, base_elevation=base,
+                    type_param=Param(value=req_t, unit="none", source=t_src),
+                    sources=pl.outline.refs, **kw))
+            if plans and t_src == "defaulted":
+                issues.append(Issue(
+                    code="roof_type_defaulted", severity="warning",
+                    message=f"Roof type {req_t} assumed ({building_type} default)"
+                    + (f" at {pitch_v:g} deg pitch"
+                       if any(p.kind != "flat" for p in plans) and p_src == "defaulted" else "")
+                    + "; not in the DXF"))
+            elif p_src == "defaulted" and any(p.kind != "flat" for p in plans):
+                issues.append(Issue(
+                    code="roof_pitch_defaulted", severity="warning",
+                    message=f"Roof pitch assumed {pitch_v:g} deg ({building_type} default); "
+                    "not in the DXF"))
     balconies = []
     if balc:
         pieces_b, balc_issues = find_balconies(
@@ -921,6 +1015,7 @@ def read_dxf(
         balconies=balconies,
         stairs=stairs,
         ramps=ramps,
+        roofs=roofs,
         walls=walls,
         junctions=junctions,
         boundaries=boundaries,

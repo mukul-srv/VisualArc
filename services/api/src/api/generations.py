@@ -71,7 +71,7 @@ class ParamFields(BaseModel):
     ceiling_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
     slab_thickness: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
-    roof_type: Literal["flat", "gable"] | None = None
+    roof_type: Literal["flat", "gable", "hip"] | None = None
     roof_pitch: float | None = Field(None, ge=0, lt=90, allow_inf_nan=False, description="degrees")
     stair_rise: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     stair_run: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")

@@ -179,7 +179,8 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
         if req.conventions is not None:
             save_conventions(db, pid, req.conventions)
         for key, freq, scope, why in jobs:
-            out = add_floor(pid, freq, scope, user.id, why, version=False, db=db)
+            out = add_floor(pid, freq, scope, user.id, why, version=False, db=db,
+                            roof=elev[key] == max(elev.values()))
             if isinstance(out, JSONResponse):  # cannot happen after the check above
                 raise HTTPException(500, "floor blocked after the pre-check")
             floors.append({"key": key, **out})

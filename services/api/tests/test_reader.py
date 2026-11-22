@@ -18,6 +18,7 @@ def test_fixture_a_known_dimensions():
         ("elevation_defaulted", "warning"),
         ("wall_role_inferred", "warning"),
         ("room_name_defaulted", "warning"),
+        ("roof_type_unknown", "warning"),
     ]
     assert p.buildings[0].floors[0].elevation.source == "defaulted"
     f = p.buildings[0].floors[0]
@@ -59,6 +60,7 @@ def test_missing_height_is_blocking_and_cli_fails(tmp_path: Path):
         ("wall_role_inferred", "warning"),
         ("ceiling_height_missing", "blocking"),
         ("room_name_defaulted", "warning"),
+        ("roof_type_unknown", "warning"),
     ]
     assert all(w.height is None for w in p.buildings[0].floors[0].walls)
     with pytest.raises(SystemExit) as exc:
@@ -157,7 +159,7 @@ def test_invalid_floor_is_blocking_and_excluded(tmp_path: Path, ring):
 def test_clockwise_floor_is_valid(tmp_path: Path):
     ring = [(0, 0), (0, 1000), (1000, 1000), (1000, 0)]
     p = read_dxf(_plan(tmp_path, floor=ring)[0], 3000, ceiling_height=3000)
-    assert [i.code for i in p.issues] == ["elevation_defaulted", "wall_role_inferred", "room_outline_open", "no_closed_rooms"]
+    assert [i.code for i in p.issues] == ["elevation_defaulted", "wall_role_inferred", "room_outline_open", "no_closed_rooms", "roof_type_unknown"]
     assert [b.polygon for b in p.buildings[0].floors[0].boundaries] == [ring]
 
 

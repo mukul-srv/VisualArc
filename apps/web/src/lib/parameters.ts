@@ -11,7 +11,7 @@ export const PARAM_LABEL: Record<string, string> = {
   lintel_height: "Lintel (opening head) height (mm)",
   railing_height: "Railing height (mm)",
 };
-export const ROOF_TYPES = ["flat", "gable"];
+export const ROOF_TYPES = ["flat", "gable", "hip"];
 export const SOURCE_LABEL = { user_provided: "user-specified", defaulted: "assumed default" };
 
 const ZERO_OK = ["roof_pitch", "window_sill"]; // every other parameter must be > 0

@@ -19,6 +19,7 @@ def test_fixture_b_l_shaped_room():
         ("elevation_defaulted", "warning"),
         ("wall_role_inferred", "warning"),
         ("room_name_defaulted", "warning"),
+        ("roof_type_unknown", "warning"),
     ]
     f = p.buildings[0].floors[0]
     assert len(f.walls) == 6 and len(f.junctions) == 6  # 5 convex + 1 reflex corner

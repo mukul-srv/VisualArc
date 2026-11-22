@@ -5,7 +5,7 @@ reader (canonical `Project.parameters`) and the API (GET/PATCH), so they cannot 
 PARAMS: dict[str, str] = {
     "ceiling_height": "mm",
     "slab_thickness": "mm",
-    "roof_type": "none",  # "flat" | "gable"
+    "roof_type": "none",  # "flat" | "gable" | "hip"
     "roof_pitch": "deg",
     "stair_rise": "mm",
     "stair_run": "mm",
@@ -13,4 +13,4 @@ PARAMS: dict[str, str] = {
     "lintel_height": "mm",
     "railing_height": "mm",
 }
-ROOF_TYPES = ("flat", "gable")
+ROOF_TYPES = ("flat", "gable", "hip")

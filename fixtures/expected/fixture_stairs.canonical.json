@@ -496,6 +496,61 @@
               ]
             }
           ],
+          "roofs": [
+            {
+              "id": "roof-001",
+              "type": "roof",
+              "kind": "gable",
+              "requested": "gable",
+              "polygon": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  4400.0
+                ],
+                [
+                  6400.0,
+                  4400.0
+                ],
+                [
+                  6400.0,
+                  0.0
+                ]
+              ],
+              "outline_source": "walls",
+              "base_elevation": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "thickness": null,
+              "overhang": {
+                "value": 300.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "pitch": {
+                "value": 30.0,
+                "unit": "deg",
+                "source": "defaulted"
+              },
+              "ridge_axis": "x",
+              "ridge_height": {
+                "value": 1443.3756729740644,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "type_param": {
+                "value": "gable",
+                "unit": "none",
+                "source": "defaulted"
+              },
+              "sources": []
+            }
+          ],
           "ramps": [
             {
               "id": "ramp-001",
@@ -625,6 +680,12 @@
           "entity_handle": "3F"
         }
       ]
+    },
+    {
+      "code": "roof_type_defaulted",
+      "severity": "warning",
+      "message": "Roof type gable assumed (residential default) at 30 deg pitch; not in the DXF",
+      "sources": []
     },
     {
       "code": "slab_thickness_defaulted",

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 import trimesh
 from fastapi.testclient import TestClient
@@ -30,7 +31,10 @@ def test_generation_success_serves_usable_glb(client):
     glb = client.get(body["artifacts"]["glb"])
     assert glb.status_code == 200 and glb.headers["content-type"] == "model/gltf-binary"
     scene = trimesh.load(trimesh.util.wrap_as_stream(glb.content), file_type="glb")
-    assert scene.bounds.round(6).tolist() == [[0, -0.2, -5.2], [8.2, 3.0, 0]]  # y min: the default 200 mm slab
+    # y min: the default 200 mm slab; the default gable roof (30 deg) adds 300 mm eaves on every side
+    # and a ridge (5.8 m span / 2 x tan 30 deg = 1.6743 m) above the 3 m walls
+    np.testing.assert_allclose(
+        scene.bounds, [[-0.3, -0.2, -5.5], [8.5, 3.0 + 2.9 * 0.5773502691896257, 0.3]], atol=1e-5)
     assert "# Verification report" in client.get(body["artifacts"]["report"]).text
 
 
@@ -172,7 +176,7 @@ def test_missing_ceiling_height_is_a_tagged_warning_not_a_block(client):
     assert r.status_code == 201
     assert {i["code"] for i in r.json()["issues"]} == {
         "ceiling_height_defaulted", "elevation_defaulted", "wall_role_inferred", "slab_thickness_defaulted",
-        "room_name_defaulted",
+        "room_name_defaulted", "roof_type_defaulted",
     }
     r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 2600})
     assert r.status_code == 201

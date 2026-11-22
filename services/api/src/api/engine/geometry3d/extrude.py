@@ -4,13 +4,15 @@ Output stays in plan space: millimetres, X/Y = plan, Z up, Z=0 at datum.
 The swap to glTF Y-up (ADR-001) belongs to the exporter, not here.
 """
 
+import math
+
 import numpy as np
 import trimesh
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
-from api.engine.canonical.model import Balcony, Floor, Opening, Wall, _axis
+from api.engine.canonical.model import Balcony, Floor, Opening, Roof, Wall, _axis
 
 
 def _height(w: Wall) -> float:
@@ -155,6 +157,50 @@ def build_ramp(r, z0: float) -> trimesh.Trimesh | None:
     return mesh
 
 
+def _convex_solid(vertices: list, tris: list[tuple[int, int, int]]) -> trimesh.Trimesh:
+    """Triangles of a convex solid, each wound to face away from the centroid (no hull needed)."""
+    v = np.array(vertices, dtype=float)
+    c = v.mean(axis=0)
+    faces = []
+    for a, b, d in tris:
+        if len({a, b, d}) < 3:  # collapsed (a hip ridge of length 0)
+            continue
+        n = np.cross(v[b] - v[a], v[d] - v[a])
+        faces.append((a, b, d) if np.dot(n, (v[a] + v[b] + v[d]) / 3 - c) > 0 else (a, d, b))
+    return trimesh.Trimesh(v, faces, process=True)
+
+
+def build_roof(r: Roof) -> trimesh.Trimesh | None:
+    """Flat: a slab on the wall tops. Gable/hip: the solid volume between the eaves plane (wall
+    tops) and the roof surface, which overhangs the outline on every side."""
+    if r.base_elevation is None:
+        return None
+    z = r.base_elevation.value
+    if r.kind == "flat":
+        return _prism(Polygon(r.polygon), z, r.thickness.value)
+    xs, ys = [p[0] for p in r.polygon], [p[1] for p in r.polygon]
+    o = r.overhang.value
+    x0, x1, y0, y1 = min(xs) - o, max(xs) + o, min(ys) - o, max(ys) + o
+    h, along_x = r.ridge_height.value, r.ridge_axis == "x"
+    inset = 0.0 if r.kind == "gable" else min(x1 - x0, y1 - y0) / 2  # hip: ridge ends pulled in
+    if along_x:
+        top = [(x0 + inset, (y0 + y1) / 2), (x1 - inset, (y0 + y1) / 2)]
+    else:
+        top = [((x0 + x1) / 2, y0 + inset), ((x0 + x1) / 2, y1 - inset)]
+    v = [(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z), *[(a, b, z + h) for a, b in top]]
+    top1 = 5
+    if math.dist(top[0], top[1]) < 1e-6:  # a hip over a square: one apex
+        v.pop()
+        top1 = 4
+    quads = [(0, 1, 2, 3)]  # the eaves plane
+    if along_x:  # south slope, north slope, west end, east end (a triangle when the ridge is inset 0)
+        quads += [(0, 1, top1, 4), (2, 3, 4, top1), (0, 3, 4, 4), (1, 2, top1, top1)]
+    else:
+        quads += [(0, 3, top1, 4), (1, 2, top1, 4), (0, 1, 4, 4), (2, 3, top1, top1)]
+    tris = [t for q in quads for t in ((q[0], q[1], q[2]), (q[0], q[2], q[3]))]
+    return _convex_solid(v, tris)
+
+
 def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
     """Element id -> mesh for every wall, junction, floor boundary, slab and ceiling."""
     z0 = floor.elevation.value
@@ -184,6 +230,9 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
     for rp in floor.ramps:
         if (m := build_ramp(rp, z0)) is not None:
             meshes[rp.id] = m
+    for rf in floor.roofs:  # no base elevation (no wall height): recorded, not built
+        if (m := build_roof(rf)) is not None:
+            meshes[rf.id] = m
     for col in floor.columns:
         if col.height is None:  # ceiling height missing: blocking, nothing is exported
             continue

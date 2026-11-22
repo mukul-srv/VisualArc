@@ -3,7 +3,7 @@
 - Source file: `fixture_a.dxf`
 - Schema version: 0.7.0
 - Units: mm
-- Result: **OK** (0 blocking, 3 warnings)
+- Result: **OK** (0 blocking, 4 warnings)
 
 ## Blocking issues
 
@@ -14,6 +14,7 @@ None.
 - `elevation_defaulted`: floor elevation assumed 0 mm; DXF plan carries no elevation (sources: -)
 - `wall_role_inferred`: 7 wall(s) have no role layer (A-WALL-EXTR, A-WALL-INTR); role inferred from geometry (a face on the outer boundary of all walls = exterior). Walls around an interior courtyard read as interior. (sources: A-WALL:31, A-WALL:35, A-WALL:36, A-WALL:34, A-WALL:3A, A-WALL:3B, A-WALL:3C, A-WALL:37, A-WALL:32, A-WALL:39, A-WALL:33, A-WALL:38)
 - `room_name_defaulted`: no label inside Room 1, Room 2; numbered names assumed (sources: -)
+- `roof_type_unknown`: no roof type (choose a building type or set the parameter); no roof built (sources: -)
 
 ## Values by provenance
 
