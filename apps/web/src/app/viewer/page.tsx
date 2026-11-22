@@ -29,6 +29,7 @@ export default function ViewerPage() {
   const [result, setResult] = useState<{ m: Measurement; a: SnapKind; b: SnapKind } | null>(null);
 
   const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null); // past version number, read-only
   const [floorId, setFloorId] = useState<string | null>(null);
   const [target, setTarget] = useState<{ url: string; stem: string } | null>(null);
   const floorTarget = (m: Manifest, f: Floor) => ({ url: glbUrl(f.generation_id), stem: `${m.name} / ${f.name}` });
@@ -42,9 +43,13 @@ export default function ViewerPage() {
     const generation = query.get("generation");
     if (project !== null) {
       if (!isGenerationId(project)) return queueMicrotask(() => setStatus("error: invalid project id"));
-      getProject(project).then((r) => {
+      const vq = query.get("version"); // read-only history view of an older version
+      const version = vq === null ? undefined : Number(vq);
+      if (version !== undefined && !(Number.isInteger(version) && version >= 1)) return queueMicrotask(() => setStatus("error: invalid version"));
+      getProject(project, fetch, version).then((r) => {
         const m = r.ok ? parseManifest(r.manifest) : null;
         if (!r.ok || !m) return setStatus(r.ok ? "error: malformed project manifest" : `error: ${r.message}`);
+        setViewing(version ?? null);
         const f = pickFloor(m, query.get("floor"));
         if (!f) return setStatus("error: project has no floors yet");
         setManifest(m);
@@ -377,7 +382,7 @@ export default function ViewerPage() {
     setTopState(false);
     setFloorId(f.id);
     setTarget(floorTarget(manifest, f));
-    window.history.replaceState(null, "", viewerUrl(manifest.id, f.id));
+    window.history.replaceState(null, "", viewerUrl(manifest.id, f.id, viewing ?? undefined));
   };
 
   return (
@@ -398,6 +403,12 @@ export default function ViewerPage() {
           {measuring ? "Measure: on (Esc)" : "Measure"}
         </button>{" "}
         {walking ? "WASD/arrows move, drag to look" : status}
+        {manifest && (
+          <div>
+            <a href={`/projects/${manifest.id}`} style={{ color: "#8cf" }}>Project: {manifest.name}</a>
+            {viewing !== null && <b role="status"> Viewing version {viewing} (read-only)</b>}
+          </div>
+        )}
         {floors.length > 0 && (
           <div role="group" aria-label="Floors" style={{ marginTop: 6 }}>
             {floors.map((f) => (

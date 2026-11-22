@@ -1,4 +1,4 @@
-import type { Preflight, Presets } from "../lib/api";
+import { isGenerationId, type Preflight, type Presets } from "../lib/api";
 import { BUILDING_TYPES, UNITS, type FormValues } from "../lib/params";
 import { bboxSize, type SplitRow } from "../lib/split";
 
@@ -114,7 +114,7 @@ export function UploadForm(p: Props) {
                 {rows.map((r, i) => (
                   <tr key={r.key}>
                     <td>{r.key}</td>
-                    <td><input aria-label={`Elevation ${r.key}`} inputMode="decimal" value={r.elevation} disabled={r.exclude} placeholder={step === undefined ? undefined : `default ${Math.max(kept.indexOf(r), 0) * step}`} onChange={(e) => setRow(i, { elevation: e.target.value })} /></td>
+                    <td><input aria-label={`Elevation ${r.key}`} inputMode="decimal" value={r.elevation} disabled={r.exclude} placeholder={r.exclude || step === undefined ? undefined : `default ${kept.indexOf(r) * step}`} onChange={(e) => setRow(i, { elevation: e.target.value })} /></td>
                     <td><input aria-label={`Offset X ${r.key}`} inputMode="decimal" value={r.offsetX} disabled={r.exclude} onChange={(e) => setRow(i, { offsetX: e.target.value })} /> proposed</td>
                     <td><input aria-label={`Offset Y ${r.key}`} inputMode="decimal" value={r.offsetY} disabled={r.exclude} onChange={(e) => setRow(i, { offsetY: e.target.value })} /> proposed</td>
                   </tr>
@@ -139,7 +139,7 @@ export function UploadForm(p: Props) {
                 </label>
                 <label style={block}>
                   Floor elevation (mm){" "}
-                  <input inputMode="decimal" value={p.proj.elevation} placeholder={step === undefined ? undefined : `default highest floor + ${step}`} onChange={(e) => p.setProj({ ...p.proj, elevation: e.target.value })} /> unique per project
+                  <input inputMode="decimal" value={p.proj.elevation} placeholder={step === undefined ? undefined : isGenerationId(p.proj.target.trim()) ? `default highest floor + ${step}` : "default 0"} onChange={(e) => p.setProj({ ...p.proj, elevation: e.target.value })} /> unique per project
                 </label>
               </>
             )}

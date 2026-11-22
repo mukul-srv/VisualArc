@@ -307,3 +307,50 @@ def test_user_elevation_wins_and_mixed_collision_is_422(client):
     pre = _upload(client)
     body = _body(pre, elevs=(0, 0))  # user-given duplicate still rejected
     assert _post(client, pre, body).status_code == 422
+
+
+def test_failure_after_floors_rolls_everything_back(client, monkeypatch):
+    from sqlalchemy import func, select
+
+    from api.db import GenerationRow, ProjectRow, ProjectVersionRow, session
+
+    def counts():
+        with session() as db:
+            return [db.scalar(select(func.count()).select_from(m)) for m in (ProjectRow, ProjectVersionRow, GenerationRow)]
+
+    before = counts()
+
+    def boom(*a, **kw):
+        raise RuntimeError("forced failure after the floors were written")
+
+    monkeypatch.setattr(uploads, "record_version", boom)
+    pre = _upload(client)
+    crashing = TestClient(app, raise_server_exceptions=False)
+    crashing.cookies.update(client.cookies)  # same account
+    assert _post(crashing, pre, _body(pre)).status_code == 500
+    assert counts() == before  # no project, version or generation row persisted
+    assert client.get("/api/v1/projects").json() == []
+    assert client.get("/api/v1/generations/recent").json() == []
+
+
+def test_split_writes_a_single_version(client):
+    pre = _upload(client)
+    r = _post(client, pre, _body(pre))
+    assert r.status_code == 201
+    vs = client.get(f"/api/v1/projects/{r.json()['project_id']}/versions").json()
+    assert [(v["number"], v["floor_count"]) for v in vs] == [(1, 2)]
+
+
+def test_empty_elevation_message_and_order_follow_request_order(client):
+    pre = _upload(client)
+    body = _body(pre)
+    for fl in body["floors"]:
+        del fl["elevation"]
+    body["floors"].reverse()  # elevations follow the order the floors are listed
+    r = _post(client, pre, body)
+    assert r.status_code == 201
+    by_name = {fl["floor"]["name"]: fl for fl in r.json()["floors"]}
+    assert by_name["First"]["floor"]["elevation"]["value"] == 0.0
+    assert by_name["Ground"]["floor"]["elevation"]["value"] == 3000.0  # residential step
+    msg = next(i["message"] for i in by_name["Ground"]["issues"] if i["code"] == "elevation_defaulted")
+    assert "floor 2 in floor order" in msg and "detected" not in msg

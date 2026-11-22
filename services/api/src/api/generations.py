@@ -10,13 +10,15 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
+from api.access import owned
 from api.auth import CurrentUser, current_user
-from api.db import GenerationRow, session
+from api.db import GenerationRow, ProjectRow, UploadRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.canonical.model import Project
 from api.pipeline import has_blocking, write_artifacts
-from api.storage import blob_path, new_id, upload_path, valid_id
+from api.storage import blob_path, new_id, upload_path
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
@@ -47,10 +49,12 @@ def _prefix(generation_id: str) -> str:
     return f"generations/{generation_id}"
 
 
-def read_project(req: GenerationRequest, **floor) -> Project:
-    """Read the upload into a Project; nothing is stored. `floor` = floor_id/
-    floor_name/floor_elevation/scope, passed to read_dxf."""
-    if not valid_id(req.upload_id) or not upload_path(req.upload_id).is_file():
+def read_project(req: GenerationRequest, user_id: str | None = None, **floor) -> Project:
+    """Read the upload (owned by `user_id`) into a Project; nothing is stored. `floor` =
+    floor_id/floor_name/floor_elevation/scope, passed to read_dxf."""
+    with session() as db:
+        owned(db, UploadRow, req.upload_id, user_id or "", "unknown upload_id")
+    if not upload_path(req.upload_id).is_file():
         raise HTTPException(404, "unknown upload_id")
     try:
         project = read_dxf(
@@ -72,19 +76,24 @@ def read_project(req: GenerationRequest, **floor) -> Project:
 
 
 def run_generation(
-    req: GenerationRequest, owner_id: str | None = None, **floor
+    req: GenerationRequest, owner_id: str | None = None, db=None, **floor
 ) -> tuple[str | None, list[dict]]:
     """Shared by /generations and project floors. Returns (generation_id, issues);
-    the id is None when blocking issues stopped it (nothing is stored)."""
-    project = read_project(req, **floor)
+    the id is None when blocking issues stopped it (nothing is stored). With `db` the
+    row joins the caller's transaction (the caller commits); blobs are never rolled back."""
+    project = read_project(req, owner_id, **floor)
     issues = [i.model_dump(mode="json") for i in project.issues]
     if has_blocking(project):  # nothing is stored: the client fixes inputs and retries
         return None, issues
     gid = new_id()
     write_artifacts(project, blob_path(f"{_prefix(gid)}/{_STEM}.glb").parent, _STEM)
-    with session() as db:
-        db.add(GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id))
-        db.commit()
+    row = GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id)
+    if db is not None:
+        db.add(row)
+    else:
+        with session() as own:
+            own.add(row)
+            own.commit()
     return gid, issues
 
 
@@ -109,10 +118,37 @@ def create_generation(req: GenerationRequest, user: CurrentUser):
     return blocked_response(issues) if gid is None else result(gid, issues)
 
 
+@router.get("/generations/recent")
+def recent_generations(user: CurrentUser):
+    """My last 10 generations with their project and floor names (none for standalone ones).
+    Generations of deleted projects are hidden."""
+    with session() as db:
+        where = {}  # generation id -> (project row, floor name)
+        for p in db.scalars(select(ProjectRow).where(ProjectRow.owner_id == user.id)):
+            for f in p.data["floors"]:
+                where[f["generation_id"]] = (p, f)
+        gens = db.scalars(select(GenerationRow).where(GenerationRow.owner_id == user.id)
+                          .order_by(GenerationRow.created_at.desc())).all()
+    out = []
+    for g in gens:
+        p, floor = where.get(g.id, (None, None))
+        if p is not None and p.deleted_at is not None:
+            continue
+        out.append({"generation_id": g.id, "created_at": g.created_at.isoformat(),
+                    "project_id": p and p.id, "project_name": p and p.data["name"],
+                    "floor_name": floor and floor["name"], "floor_id": floor and floor["id"],
+                    "artifacts": result(g.id, [])["artifacts"]})
+        if len(out) == 10:
+            break
+    return out
+
+
 @router.get("/generations/{generation_id}/artifacts/{name}")
-def get_artifact(generation_id: str, name: str):
-    if not valid_id(generation_id) or name not in ARTIFACTS:
+def get_artifact(generation_id: str, name: str, user: CurrentUser):
+    if name not in ARTIFACTS:
         raise HTTPException(404, "not found")
+    with session() as db:
+        owned(db, GenerationRow, generation_id, user.id, "not found")
     suffix, media = ARTIFACTS[name]
     path = blob_path(f"{_prefix(generation_id)}/{_STEM}.{suffix}")
     if not path.is_file():

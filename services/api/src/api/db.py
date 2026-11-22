@@ -7,6 +7,7 @@ from functools import lru_cache
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
     create_engine,
@@ -58,9 +59,25 @@ class ProjectRow(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     # the project manifest ({id, name, floors}) as served by GET /projects/{id}
     data: Mapped[dict] = mapped_column(JSONB)
-    # nullable: legacy rows and CLI imports have no owner; enforcement is a later subtask
+    # nullable: legacy rows have no owner and stay inaccessible until `import-projects --owner`
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProjectVersionRow(Base):
+    """Immutable history entry; the project's current state is its highest number."""
+
+    __tablename__ = "project_versions"
+    __table_args__ = (UniqueConstraint("project_id", "number"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    number: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    message: Mapped[str] = mapped_column(String(200))
+    # {floors, generation_ids, params: {floor_id: {name: {value, source}}}}
+    snapshot: Mapped[dict] = mapped_column(JSONB)
 
 
 class UploadRow(Base):

@@ -29,8 +29,10 @@ export function parseManifest(x: unknown): Manifest | null {
 export const sortFloors = (floors: Floor[]): Floor[] =>
   [...floors].sort((a, b) => a.elevation.value - b.elevation.value);
 
-export const viewerUrl = (projectId: string, floorId: string) =>
-  `/viewer?project=${encodeURIComponent(projectId)}&floor=${encodeURIComponent(floorId)}`;
+export const viewerUrl = (projectId: string, floorId?: string, version?: number) =>
+  `/viewer?project=${encodeURIComponent(projectId)}` +
+  (floorId ? `&floor=${encodeURIComponent(floorId)}` : "") +
+  (version ? `&version=${version}` : "");
 
 /** The floor to show: the requested one if present, else the lowest. */
 export const pickFloor = (m: Manifest, floorId: string | null): Floor | null =>

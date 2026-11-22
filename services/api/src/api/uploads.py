@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from api.access import owned
 from api.auth import CurrentUser, current_user
 from api.db import UploadRow, session
 from api.engine.adapters.dxf.inspect import build_inventory
@@ -20,8 +21,8 @@ from api.engine.adapters.dxf.split import FloorScope, detect_floors, excluded_is
 from api.engine.settings import DEFAULTS
 from api.generations import GenerationRequest, read_project
 from api.pipeline import has_blocking
-from api.projects import FloorRequest, add_floor, create_project
-from api.storage import new_id, upload_key, upload_path, valid_id
+from api.projects import FloorRequest, add_floor, create_project, record_version
+from api.storage import new_id, upload_key, upload_path
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
@@ -114,8 +115,10 @@ class SplitRequest(GenerationRequest):
 @router.post("/uploads/{upload_id}/split", status_code=201)
 def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
     """Confirm the floors of a consolidated DXF: one project, one generation per floor."""
-    path = upload_path(upload_id) if valid_id(upload_id) else None
-    if not path or not path.is_file():
+    with session() as db:
+        owned(db, UploadRow, upload_id, user.id, "unknown upload_id")
+    path = upload_path(upload_id)
+    if not path.is_file():
         raise HTTPException(404, "unknown upload_id")
     try:
         doc = load_doc(path)
@@ -138,14 +141,14 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
         raise HTTPException(422, "at least one floor must be built")
     if len({f.name.strip().casefold() for f in kept}) < len(kept):
         raise HTTPException(422, "floor names must be unique")
-    # empty elevation: position in the detected floor order x floor-to-floor, tagged
+    # empty elevation: position among the built floors in request order x floor-to-floor, tagged
     step = DEFAULTS.preset(req.building_type).floor_to_floor
     elev, assumed = {}, {}
     for n, f in enumerate(kept):
         if f.elevation is None:
             elev[f.key] = n * step
             assumed[f.key] = (
-                f"Floor elevation assumed {n * step:g} mm (floor {n + 1} in detected order "
+                f"Floor elevation assumed {n * step:g} mm (floor {n + 1} in floor order "
                 f"x {step:g} mm {req.building_type} floor-to-floor)"
             )
         else:
@@ -167,7 +170,7 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
     # floor is read twice (check, then generate); share the Project if it gets slow.
     blocked = {}
     for n, (key, freq, scope, why) in enumerate(jobs):
-        p = read_project(freq, floor_id=f"floor-{n}", floor_name=freq.floor_name.strip(),
+        p = read_project(freq, user.id, floor_id=f"floor-{n}", floor_name=freq.floor_name.strip(),
                          floor_elevation=freq.elevation, elevation_assumed=why, scope=scope)
         if has_blocking(p):
             blocked[key] = [i.model_dump(mode="json") for i in p.issues]
@@ -180,13 +183,16 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
                 "floors": blocked,
             },
         )
-    pid = create_project(req.project_name, user.id)
     floors = []
-    for key, freq, scope, why in jobs:
-        out = add_floor(pid, freq, scope, user.id, why)
-        if isinstance(out, JSONResponse):  # cannot happen after the check above
-            raise HTTPException(500, "floor blocked after the pre-check")
-        floors.append({"key": key, **out})
+    # one transaction: project, floors, generation rows and its single version commit together
+    with session() as db, db.begin():
+        pid = create_project(req.project_name, user.id, version=False, db=db)
+        for key, freq, scope, why in jobs:
+            out = add_floor(pid, freq, scope, user.id, why, version=False, db=db)
+            if isinstance(out, JSONResponse):  # cannot happen after the check above
+                raise HTTPException(500, "floor blocked after the pre-check")
+            floors.append({"key": key, **out})
+        record_version(db, pid, user.id, f"Created from floor split ({len(floors)} floors)")
     return {
         "project_id": pid,
         "floors": floors,
