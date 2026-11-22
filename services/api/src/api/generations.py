@@ -100,11 +100,13 @@ def request_settings(req: "GenerationRequest"):
     return DEFAULTS if c is None else resolve(c.preset, c.mapping)
 
 
-def read_project(req: GenerationRequest, user_id: str | None = None, **floor) -> Project:
+def read_project(req: GenerationRequest, user_id: str | None = None, check_upload: bool = True,
+                 **floor) -> Project:
     """Read the upload (owned by `user_id`) into a Project; nothing is stored. `floor` =
     floor_id/floor_name/floor_elevation/scope, passed to read_dxf."""
-    with session() as db:
-        owned(db, UploadRow, req.upload_id, user_id or "", "unknown upload_id")
+    if check_upload:  # False: the caller already holds project access to a stored request
+        with session() as db:
+            owned(db, UploadRow, req.upload_id, user_id or "", "unknown upload_id")
     if not upload_path(req.upload_id).is_file():
         raise HTTPException(404, "unknown upload_id")
     try:
@@ -129,14 +131,15 @@ def read_project(req: GenerationRequest, user_id: str | None = None, **floor) ->
 
 
 def run_generation(
-    req: GenerationRequest, owner_id: str | None = None, db=None, progress=None, **floor
+    req: GenerationRequest, owner_id: str | None = None, db=None, progress=None,
+    check_upload: bool = True, **floor
 ) -> tuple[str | None, list[dict]]:
     """Shared by /generations and project floors. Returns (generation_id, issues);
     `progress(stage)` reports stages to a job; the id is None when blocking issues stopped it (nothing is stored). With `db` the
     row joins the caller's transaction (the caller commits); blobs are never rolled back."""
     if progress:
         progress("parsing")
-    project = read_project(req, owner_id, **floor)
+    project = read_project(req, owner_id, check_upload, **floor)
     if progress:
         progress("building-model")
     issues = [i.model_dump(mode="json") for i in project.issues]

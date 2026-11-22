@@ -119,7 +119,8 @@ def _start(user, kind: str, pid: str | None, req) -> JSONResponse:
         owned(db, UploadRow, req.upload_id, user.id, "unknown upload_id")
         if pid is not None:
             owned(db, ProjectRow, pid, user.id, "unknown project", need="editor")
-        job = _create(db, user, kind, pid, req.model_dump(mode="json"))
+        # exclude_unset: which fields the caller set matters (project parameters fill the rest)
+        job = _create(db, user, kind, pid, req.model_dump(mode="json", exclude_unset=True))
         jid = job.id
     submit(jid)
     return JSONResponse(status_code=202, content={"job_id": jid})

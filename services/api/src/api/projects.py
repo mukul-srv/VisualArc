@@ -452,7 +452,8 @@ def regenerate(pid: str, overrides: dict, user_id: str, progress=None):
                 gid, found = run_generation(
                     req, user_id, db=db, floor_id=f["id"], floor_name=f["name"],
                     floor_elevation=f["elevation"]["value"], elevation_assumed=f.get("elevation_assumed"),
-                    scope=scope, progress=progress)
+                    scope=scope, progress=progress,
+                    check_upload=False)  # editor access to the project covers its stored uploads
                 if gid is None:
                     issues += found
                     continue

@@ -111,3 +111,28 @@ def test_invalid_empty_and_read_only(client):
     assert c.post(f"/api/v1/jobs/projects/{pid}/parameters", json={"roof_pitch": 90}).status_code == 422
     assert c.post(f"/api/v1/jobs/projects/{pid}/parameters", json={"roof_type": "dome"}).status_code == 422
     assert c.post(f"/api/v1/jobs/projects/{'0' * 32}/parameters", json={"stair_rise": 170}).status_code == 404
+
+
+def test_floor_added_through_the_job_route_inherits_project_parameters(client):
+    c = client
+    pid = _project(c)
+    _change(c, pid, slab_thickness=300)
+    up = c.post("/api/v1/uploads", content=A.read_bytes()).json()["upload_id"]
+    r = c.post(f"/api/v1/jobs/projects/{pid}/floors", json={"upload_id": up, "floor_name": "Up", "elevation": 3000})
+    jobs.execute(r.json()["job_id"])
+    done = c.get(f"/api/v1/jobs/{r.json()['job_id']}").json()
+    assert done["status"] == "succeeded", done
+    slab = _canon(c, done["result"]["generation_id"])["slabs"][0]["thickness"]
+    assert slab == {"value": 300.0, "unit": "mm", "source": "user_provided"}
+
+
+def test_editor_can_change_parameters_on_an_owners_upload(client, tmp_path, monkeypatch):
+    owner = client
+    pid = _project(owner)
+    editor = TestClient(app)
+    email = editor.get("/api/v1/auth/me").json()["email"]
+    assert owner.put(f"{P}/{pid}/access", json={"email": email, "role": "editor"}).status_code in (200, 201)
+    job = _change(editor, pid, ceiling_height=2500)
+    assert job["status"] == "succeeded", job
+    gid = owner.get(f"{P}/{pid}").json()["floors"][0]["generation_id"]
+    assert _canon(owner, gid)["ceiling_height"]["source"] == "user_provided"
