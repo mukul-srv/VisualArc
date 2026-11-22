@@ -195,3 +195,121 @@ test("CORS: disallowed origin gets no allow header", async () => {
   const res = await fetch(`${base}/health`, { headers: { Origin: "http://evil.example" } });
   expect(res.headers.get("access-control-allow-origin")).toBeNull();
 });
+
+test("changing a parameter regenerates the floor and the served GLB changes (real worker thread)", async () => {
+  const jobs = await import("./jobs");
+  const projects = await import("./projects");
+  const created = await api.createProject("Params");
+  if (!created.ok) throw new Error(created.message);
+  const pid = (created as unknown as { project_id: string }).project_id;
+  const up = await api.uploadDxf(fixture("fixture_a.dxf"));
+  if (!up.ok) throw new Error(up.message);
+  const add = await jobs.addFloorJob(pid, { upload_id: up.upload_id, floor_name: "Ground", elevation: 0, wall_height: 3000, ceiling_height: 3000 });
+  if (!add.ok) throw new Error(add.message);
+  const before = await api.getProject(pid);
+  if (!before.ok) throw new Error(before.message);
+  const gid0 = (before.manifest as { floors: { generation_id: string }[] }).floors[0].generation_id;
+  const box0 = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(gid0))).scene);
+
+  const changed = await jobs.changeParametersJob(pid, { slab_thickness: 400 });
+  if (!changed.ok) throw new Error(changed.message);
+  const after = await api.getProject(pid);
+  if (!after.ok) throw new Error(after.message);
+  const gid1 = (after.manifest as { floors: { generation_id: string }[] }).floors[0].generation_id;
+  expect(gid1).not.toBe(gid0); // a new generation, so a new GLB url
+  const box1 = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(gid1))).scene);
+  expect(box0.min.y).toBeCloseTo(-0.2, 3);
+  expect(box1.min.y).toBeCloseTo(-0.4, 3); // the 400 mm slab
+  const p = await projects.getParameters(pid);
+  expect(p).toMatchObject({ ok: true, slab_thickness: { value: 400, source: "user_provided" } });
+}, 60_000);
+
+// --- the viewer's own logic on real engine output (real server, real GLB) ---
+async function generated(name: string, extra: Record<string, unknown> = {}) {
+  const up = await api.uploadDxf(fixture(name));
+  if (!up.ok) throw new Error(up.message);
+  const gen = await api.generate({ upload_id: up.upload_id, ceiling_height: 2700, wall_height: 2700, ...extra } as never);
+  if (!gen.ok) throw new Error(gen.message);
+  const scene = (await loadGlb(api.glbUrl(gen.generation_id))).scene;
+  scene.updateMatrixWorld(true);
+  return scene;
+}
+
+test("slab top is flush with the floor and the ground level is the floor level (walls do not float)", async () => {
+  const { groundLevel } = await import("./ground");
+  const scene = await generated("fixture_a.dxf");
+  let slabMin = Infinity, slabMax = -Infinity, wallMin = Infinity;
+  scene.traverse((o) => {
+    const b = new THREE.Box3().setFromObject(o);
+    if (o.userData?.type === "slab") { slabMin = Math.min(slabMin, b.min.y); slabMax = Math.max(slabMax, b.max.y); }
+    if (o.userData?.type === "wall") wallMin = Math.min(wallMin, b.min.y);
+  });
+  expect(slabMax).toBeCloseTo(0, 6); // the slab top is the floor elevation
+  expect(wallMin).toBeCloseTo(slabMax, 6); // walls start on the slab top: no gap
+  expect(slabMin).toBeCloseTo(-0.2, 6); // the slab is below grade
+  expect(groundLevel(scene)).toBeCloseTo(0, 6); // the grid sits at the floor, not at the slab underside
+  // the slab also lies under every wall, so none stands on air
+  const slab = new THREE.Box3();
+  const walls = new THREE.Box3();
+  scene.traverse((o) => {
+    if (o.userData?.type === "slab") slab.expandByObject(o);
+    if (o.userData?.type === "wall") walls.expandByObject(o);
+  });
+  expect(slab.containsBox(new THREE.Box3(new THREE.Vector3(walls.min.x, slab.min.y, walls.min.z), new THREE.Vector3(walls.max.x, slab.max.y, walls.max.z)))).toBe(true);
+});
+
+test("with default presets the ceiling and the roof underside share a plane (the walk-mode z-fight), and the fix separates them", async () => {
+  const { ceilingMeetsRoof, separateCoplanar } = await import("./roof");
+  const scene = await generated("fixture_roofs.dxf", { building_type: "residential" });
+  expect(ceilingMeetsRoof(scene)).toBe(true);
+  separateCoplanar(scene);
+  let offset = 0;
+  scene.traverse((o) => o.userData?.type === "ceiling" && ((o as THREE.Mesh).material as THREE.Material).polygonOffset && offset++);
+  expect(offset).toBeGreaterThan(0);
+});
+
+test("walking up the real stair of fixture_stairs climbs to the top tread", async () => {
+  const { collectSupports, resolveHeight, stepUpLimit } = await import("./ground");
+  const scene = await generated("fixture_stairs.dxf", { ceiling_height: 3000, wall_height: 3000, building_type: "residential", stair_rise: 160, stair_run: 250 });
+  const supports = collectSupports(scene);
+  const limit = stepUpLimit(scene);
+  expect(limit).toBeCloseTo(0.16 + 0.02); // from the stair's own riser
+  let x = 0.3, feet = 0;
+  while (x < 5.1) { // stays on the stair (x 0.45 .. 5.2)
+    const nx = x + 0.05;
+    const y = resolveHeight(nx, -1.0, feet, 0.05, supports, 0, limit);
+    // plan y 1000 mm = three z -1.0, along the arrow
+    expect(y).not.toBeNull();
+    x = nx;
+    feet = y as number;
+  }
+  expect(feet).toBeCloseTo(19 * 0.16, 3);
+  // and the ramp slab (3200 over 4750 mm) is walkable too
+  let rx = 0.35, rf = 0; // from the floor in front, where the ramp starts at x = 0.45
+  while (rx < 5.1) { // the ramp spans x 0.45 .. 5.2
+    const nx = rx + 0.05;
+    const y = resolveHeight(nx, -3.0, rf, 0.05, supports, 0, limit);
+    expect(y).not.toBeNull();
+    rx = nx;
+    rf = y as number;
+  }
+  expect(rf).toBeGreaterThan(2.5);
+});
+
+test("a door of fixture_openings opens about its hinge and becomes passable", async () => {
+  const { blocking, animate, buildDoors, toggle } = await import("./doors");
+  const scene = await generated("fixture_openings.dxf");
+  const doors = buildDoors(scene);
+  expect(doors.map((d) => d.opening.id).sort()).toEqual(["opening-003", "opening-004", "opening-007"]); // doors with swing arcs
+  const d = doors.find((x) => x.opening.id === "opening-003")!;
+  const closed = new THREE.Box3().setFromObject(d.leaf);
+  expect(blocking(doors)).toContain(d.leaf);
+  toggle(d);
+  for (let i = 0; i < 80; i++) animate(doors, 0.02);
+  const open = new THREE.Box3().setFromObject(d.leaf);
+  expect(blocking(doors)).not.toContain(d.leaf);
+  // hinged at the start (x = 7.55), opening toward +y (three -z): the leaf now runs along z, hung at x = 7.55
+  expect(open.max.x - open.min.x).toBeLessThan(0.1);
+  expect(closed.max.x - closed.min.x).toBeGreaterThan(0.7);
+  expect(open.min.z).toBeLessThan(-0.7);
+});

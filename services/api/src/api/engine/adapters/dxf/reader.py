@@ -15,6 +15,7 @@ from pathlib import Path
 import ezdxf
 from ezdxf import units
 from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
@@ -143,6 +144,9 @@ def resolve_scale(doc, user_units: str | None = None) -> float | None:
         return None
 
 
+AREA_EPS_MM2 = 1.0  # a hole smaller than a square millimetre uncovered is float noise
+
+
 def _ref(e) -> SourceRef:
     return SourceRef(layer=e.dxf.layer, entity_handle=e.dxf.handle)
 
@@ -249,7 +253,8 @@ def read_dxf(
     if window_sill is not None and window_sill < 0:
         raise ValueError(f"window sill must be >= 0 mm, got {window_sill}")
     given = {k: v for k, v in {"ceiling_height": ceiling_height, "window_sill": window_sill,
-                               **(params or {})}.items() if v is not None}
+                               "wall_height": wall_height, **(params or {})}.items()
+             if v is not None}
     if unknown := set(given) - set(PARAMS):
         raise ValueError(f"unknown parameters {sorted(unknown)}")
     if given.get("slab_thickness", 1) <= 0:
@@ -969,20 +974,38 @@ def read_dxf(
                 railings=p.railings if railing_h is not None else [],
                 sources=[p.ref]))
     slabs = []
-    if boundaries and (
+    if (boundaries or paired) and (
         slab_t := given.get("slab_thickness", preset.slab_thickness if preset else None)
     ):
         slab_src = "user_provided" if "slab_thickness" in given else "defaulted"
-        slabs = [
-            Slab(
-                id=b.id.replace("fb-", "slab-", 1),
-                boundary_id=b.id,
-                polygon=b.polygon,
+        # one slab per connected part of the building, under the walls too (so no wall floats
+        # above the ground): the exterior of the union of walls, junctions and floor boundaries
+        shapes = ([w.rect() for w in paired] + [Polygon(j.polygon) for j in pieces]
+                  + [Polygon(b.polygon) for b in boundaries])
+        floors = unary_union([Polygon(b.polygon) for b in boundaries]) if boundaries else Polygon()
+        for n, o in enumerate(wall_outlines(shapes, settings), 1):
+            inside = [b for b in boundaries
+                      if Polygon(o.polygon).buffer(settings.tolerance_mm).covers(Polygon(b.polygon))]
+            # an enclosed region no floor boundary covers (a courtyard, or a room drawn without
+            # A-FLOR) gets no slab: a floor there is not in the drawing
+            bare = [list(h) for h in o.holes
+                    if Polygon(h).difference(floors).area > AREA_EPS_MM2]
+            if bare:
+                issues.append(Issue(
+                    code="slab_hole_without_floor", severity="warning",
+                    message=f"{len(bare)} enclosed region(s) inside slab-{n:03d} have no floor "
+                    "boundary on the floor layer (courtyard, or a room drawn without one), so "
+                    "no slab is built there",
+                    sources=[s for b in inside for s in b.sources]))
+            slabs.append(Slab(
+                id=f"slab-{n:03d}",
+                boundary_id=inside[0].id if len(inside) == 1 else None,
+                boundary_ids=[b.id for b in inside],
+                polygon=o.polygon,
+                holes=bare,
                 thickness=Measured(value=slab_t, source=slab_src),
-                sources=b.sources,
-            )
-            for b in boundaries
-        ]
+                sources=[s for b in inside for s in b.sources],
+            ))
     # one report for the default, whichever of slabs, balconies, stairs or ramps use it
     slab_default = given.get("slab_thickness") is None and preset is not None
     if slab_default and (

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteProject, listProjects, recentGenerations, saveAsProject, type ProjectSummary, type RecentGeneration } from "../lib/projects";
+import { deleteGeneration, deleteProject, listProjects, recentGenerations, renameGeneration, saveAsProject, type ProjectSummary, type RecentGeneration } from "../lib/projects";
 import { AppNav } from "./AppNav";
 import { ProjectList, RecentList } from "./lists";
 import styles from "./dashboard.module.css";
@@ -41,6 +41,8 @@ export function Dashboard() {
       {projects && <ProjectList projects={projects} busy={busy} onDelete={(p) => act(() => deleteProject(p.id), reload)} />}
       <h2>Recent buildings</h2>
       <RecentList items={recent} busy={busy}
+        onRename={(gid, name) => act(() => renameGeneration(gid, name), reload)}
+        onDelete={(gid) => act(() => deleteGeneration(gid), reload)}
         onSave={async (gid, name) => {
           setBusy(true);
           setError(null);

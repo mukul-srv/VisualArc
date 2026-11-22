@@ -21,6 +21,7 @@ class Outline:
     polygon: list[Point2]
     source: str  # "roof_layer" | "walls"
     refs: list[SourceRef]
+    holes: tuple = ()  # enclosed rings of the wall union (rooms, courtyards); roofs ignore them
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,8 @@ def wall_outlines(shapes: list[Polygon], settings: Settings = DEFAULTS) -> list[
     for g in getattr(u, "geoms", [u]):
         if isinstance(g, Polygon) and g.area > settings.tolerance_mm:
             ring = list(g.simplify(0).exterior.coords)[:-1]
-            out.append(Outline(ring, "walls", []))
+            holes = tuple(list(i.coords)[:-1] for i in g.interiors)
+            out.append(Outline(ring, "walls", [], holes))
     return out
 
 

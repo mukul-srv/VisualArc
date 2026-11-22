@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { changeParametersJob, STAGE_LABEL } from "../lib/jobs";
 import { diffParameters, PARAM_LABEL, ROOF_TYPES, SOURCE_LABEL } from "../lib/parameters";
 import { getParameters, type ProjectParam } from "../lib/projects";
+import type { Issue } from "../lib/api";
+import { IssueList } from "./IssueList";
 import styles from "./dashboard.module.css";
 
 // Project parameters with provenance. Saving regenerates every floor (a job) as one new version;
@@ -14,6 +16,8 @@ export function ParametersPanel({ projectId, readOnly, onChanged }: { projectId:
   const [status, setStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [issues, setIssues] = useState<Issue[]>([]); // what the last regeneration reported
+  const [saved, setSaved] = useState<number | null>(null); // version it produced
 
   const load = useCallback(async () => {
     const r = await getParameters(projectId);
@@ -33,11 +37,14 @@ export function ParametersPanel({ projectId, readOnly, onChanged }: { projectId:
     if (!d.ok) return setErrors(d.errors);
     if (!Object.keys(d.values).length) return setErrors(["Nothing changed."]);
     setErrors([]);
+    setSaved(null);
     setBusy(true);
     const r = await changeParametersJob(projectId, d.values, (p) => setStatus(STAGE_LABEL[p.stage] ?? p.stage));
     setBusy(false);
     setStatus(null);
     if (!r.ok) return setErrors([r.message, ...r.issues.map((i) => i.message)]);
+    setIssues(r.issues ?? []);
+    setSaved(r.version ?? null);
     await load();
     onChanged();
   }
@@ -69,6 +76,8 @@ export function ParametersPanel({ projectId, readOnly, onChanged }: { projectId:
       </table>
       {readOnly ? <p>Only editors and the owner can change parameters.</p> : <button type="button" disabled={busy} onClick={save}>Save and regenerate</button>}
       {status && <p role="status">{status}…</p>}
+      {saved !== null && <p role="status">Regenerated every floor as version {saved}. Open the viewer to see the new model.</p>}
+      {issues.length > 0 && <IssueList issues={issues} />}
     </section>
   );
 }

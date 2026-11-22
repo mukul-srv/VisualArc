@@ -1,7 +1,8 @@
 import type { ProjectParam } from "./projects";
 
 export const PARAM_LABEL: Record<string, string> = {
-  ceiling_height: "Ceiling height (mm)",
+  wall_height: "Wall height (mm): the room height you see",
+  ceiling_height: "Ceiling height (mm): drawn only in walk mode",
   slab_thickness: "Slab thickness (mm)",
   roof_type: "Roof type",
   roof_pitch: "Roof pitch (degrees)",

@@ -141,6 +141,7 @@ class UploadRow(Base):
     __tablename__ = "uploads"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     blob_key: Mapped[str] = mapped_column(String(255))
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)  # as uploaded, for display
     # nullable: legacy rows and CLI imports have no owner; enforcement is a later subtask
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -150,6 +151,9 @@ class GenerationRow(Base):
     __tablename__ = "generations"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     blob_prefix: Mapped[str] = mapped_column(String(255))  # artifacts live under this key prefix
+    # display name of a standalone model: the uploaded file name unless the owner renamed it
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # nullable: legacy rows and CLI imports have no owner; enforcement is a later subtask
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

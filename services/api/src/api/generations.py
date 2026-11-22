@@ -5,16 +5,17 @@ string is ever joined into a filesystem path beyond a validated hex id and an
 allowlisted name.
 """
 
+from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 
 from api.access import owned
 from api.auth import CurrentUser, current_user
-from api.db import GenerationRow, ProjectRow, UploadRow, session
+from api.db import GenerationRow, ProjectRow, ProjectVersionRow, UploadRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.canonical.model import Project
 from api.engine.conventions import resolve
@@ -61,13 +62,14 @@ class ConventionsSpec(BaseModel):
 
 
 # parameters with no dedicated reader argument (ceiling_height and window_sill have one)
-EXTRA_PARAMS = tuple(k for k in PARAMS if k not in ("ceiling_height", "window_sill"))
+EXTRA_PARAMS = tuple(k for k in PARAMS if k not in ("ceiling_height", "window_sill", "wall_height"))
 
 
 class ParamFields(BaseModel):
     """The project parameters (engine/parameters.py). None = the preset's value, tagged `defaulted`."""
 
     model_config = ConfigDict(extra="forbid")
+    wall_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     ceiling_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
     slab_thickness: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
@@ -81,7 +83,6 @@ class ParamFields(BaseModel):
 
 class GenerationRequest(ParamFields):
     upload_id: str
-    wall_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     units: Literal[tuple(USER_UNITS)] | None = None  # type: ignore[valid-type]
     door_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     window_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
@@ -148,7 +149,10 @@ def run_generation(
     gid = new_id()
     write_artifacts(project, blob_path(f"{_prefix(gid)}/{_STEM}.glb").parent, _STEM,
                     progress=progress)
-    row = GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id)
+    with session() as q:
+        up = q.get(UploadRow, req.upload_id)
+        name = up.filename[:100] if up and up.filename else None
+    row = GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id, name=name)
     if db is not None:
         db.add(row)
     else:
@@ -188,20 +192,64 @@ def recent_generations(user: CurrentUser):
         for p in db.scalars(select(ProjectRow).where(ProjectRow.owner_id == user.id)):
             for f in p.data["floors"]:
                 where[f["generation_id"]] = (p, f)
-        gens = db.scalars(select(GenerationRow).where(GenerationRow.owner_id == user.id)
-                          .order_by(GenerationRow.created_at.desc())).all()
+        # every generation a project of mine ever used (older versions, deleted projects too) is the
+        # project's, not a standalone model: it is changed through the project
+        used = {gid for (ids,) in db.execute(
+            select(ProjectVersionRow.snapshot["generation_ids"]).join(
+                ProjectRow, ProjectRow.id == ProjectVersionRow.project_id)
+            .where(ProjectRow.owner_id == user.id)) for gid in (ids or [])}
+        gens = db.scalars(select(GenerationRow).where(
+            GenerationRow.owner_id == user.id, GenerationRow.deleted_at.is_(None))
+            .order_by(GenerationRow.created_at.desc())).all()
     out = []
     for g in gens:
         p, floor = where.get(g.id, (None, None))
+        if p is None and g.id in used:
+            continue
         if p is not None and p.deleted_at is not None:
             continue
         out.append({"generation_id": g.id, "created_at": g.created_at.isoformat(),
+                    "name": g.name,
                     "project_id": p and p.id, "project_name": p and p.data["name"],
                     "floor_name": floor and floor["name"], "floor_id": floor and floor["id"],
                     "artifacts": result(g.id, [])["artifacts"]})
         if len(out) == 10:
             break
     return out
+
+
+class GenerationRename(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=100)
+
+
+def _standalone(db, g: GenerationRow) -> None:
+    """409 when a project uses the generation: those are changed through the project."""
+    used = db.scalar(select(ProjectVersionRow.id).where(
+        ProjectVersionRow.snapshot["generation_ids"].contains([g.id])).limit(1))
+    if used is not None:
+        raise HTTPException(409, "this model belongs to a project; change it there")
+
+
+@router.patch("/generations/{generation_id}")
+def rename_generation(generation_id: str, req: GenerationRename, user: CurrentUser) -> dict:
+    """Rename a standalone model (owner). Its default name is the uploaded file name."""
+    with session() as db, db.begin():
+        g = owned(db, GenerationRow, generation_id, user.id, "unknown generation")
+        _standalone(db, g)
+        g.name = req.name
+    return {"generation_id": generation_id, "name": req.name}
+
+
+@router.delete("/generations/{generation_id}", status_code=204)
+def delete_generation(generation_id: str, user: CurrentUser) -> Response:
+    """Soft delete a standalone model (owner): it leaves the lists and its files give 404, the
+    stored files stay (same as projects)."""
+    with session() as db, db.begin():
+        g = owned(db, GenerationRow, generation_id, user.id, "unknown generation")
+        _standalone(db, g)
+        g.deleted_at = datetime.now(UTC)
+    return Response(status_code=204)
 
 
 @public_router.get("/generations/{generation_id}/artifacts/{name}")

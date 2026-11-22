@@ -93,9 +93,10 @@ export async function send<T>(call: () => Promise<Response>): Promise<Result<T>>
   return { ok: false, kind, message: await detail(res), issues: [] };
 }
 
-export const uploadDxf = (file: Blob, f: Fetch = fetch) =>
+export const uploadDxf = (file: Blob & { name?: string }, f: Fetch = fetch) =>
   send<Preflight>(() =>
-    f(`${API_BASE}/api/v1/uploads`, {
+    // the file name is only for display (the default name of a standalone model)
+    f(`${API_BASE}/api/v1/uploads${file.name ? `?filename=${encodeURIComponent(file.name)}` : ""}`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/octet-stream" },

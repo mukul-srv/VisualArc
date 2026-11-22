@@ -66,20 +66,54 @@ export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSum
 
 /** Recent models. A standalone one (generated without a project) has no project page, so it cannot
  *  be shared, versioned or extended until it is saved as a project. */
-export function RecentList({ items, onSave, busy }: { items: RecentGeneration[]; onSave?: (generationId: string, name: string) => void; busy?: boolean }) {
+export const STANDALONE_HELP =
+  "Generated from a single upload, outside any project. It cannot be shared, versioned or extended until you save it as a project; deleting it removes it from your lists.";
+/** What a recent entry is called: project / floor, else its (file or renamed) name, else a short id. */
+export const recentLabel = (g: RecentGeneration) =>
+  g.project_name ? `${g.project_name} / ${g.floor_name}` : g.name?.trim() || `Model ${g.generation_id.slice(0, 8)}`;
+
+export function RecentList({ items, onSave, onRename, onDelete, busy }: {
+  items: RecentGeneration[];
+  onSave?: (generationId: string, name: string) => void;
+  onRename?: (generationId: string, name: string) => void;
+  onDelete?: (generationId: string) => void;
+  busy?: boolean;
+}) {
   const [saving, setSaving] = useState<{ id: string; name: string } | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
   if (items.length === 0) return <p>No buildings generated yet.</p>;
   return (
     <ul aria-label="Recent buildings">
       {items.map((g) => (
         <li key={g.generation_id}>
           <a href={g.project_id ? viewerUrl(g.project_id, g.floor_id ?? undefined) : `/viewer?generation=${g.generation_id}`}>
-            {g.project_name ? `${g.project_name} / ${g.floor_name}` : `Model ${g.generation_id.slice(0, 8)}`}
+            {recentLabel(g)}
           </a>{" "}
           <small>{shortDate(g.created_at)}</small>
           {!g.project_id && (
             <>
-              {" "}<small>Standalone model: not in a project, so it cannot be shared or extended.</small>{" "}
+              {" "}<small title={STANDALONE_HELP} style={{ cursor: "help", textDecoration: "underline dotted" }}>Standalone model</small>{" "}
+              {onRename && renaming?.id !== g.generation_id && (
+                <button type="button" disabled={busy} aria-label={`Rename ${recentLabel(g)}`} onClick={() => setRenaming({ id: g.generation_id, name: recentLabel(g) })}>Rename</button>
+              )}
+              {onRename && renaming?.id === g.generation_id && (
+                <form style={{ display: "inline" }} onSubmit={(e) => { e.preventDefault(); onRename(g.generation_id, renaming.name.trim()); setRenaming(null); }}>
+                  <input aria-label="Model name" value={renaming.name} maxLength={100} onChange={(e) => setRenaming({ id: g.generation_id, name: e.target.value })} />{" "}
+                  <button disabled={busy || !renaming.name.trim()}>Save name</button>{" "}
+                  <button type="button" onClick={() => setRenaming(null)}>Cancel</button>
+                </form>
+              )}
+              {onDelete && confirming !== g.generation_id && (
+                <button type="button" disabled={busy} aria-label={`Delete ${recentLabel(g)}`} onClick={() => setConfirming(g.generation_id)}>Delete</button>
+              )}
+              {onDelete && confirming === g.generation_id && (
+                <span role="alertdialog" aria-label={`Confirm delete ${recentLabel(g)}`}>
+                  Delete &quot;{recentLabel(g)}&quot;?{" "}
+                  <button type="button" disabled={busy} onClick={() => { onDelete(g.generation_id); setConfirming(null); }}>Confirm delete</button>{" "}
+                  <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
+                </span>
+              )}
               {onSave && saving?.id !== g.generation_id && (
                 <button type="button" disabled={busy} onClick={() => setSaving({ id: g.generation_id, name: "" })}>Save as project</button>
               )}

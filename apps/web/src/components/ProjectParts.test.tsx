@@ -78,11 +78,26 @@ test("dashboard rows: visible actions by role", () => {
 });
 
 test("recent list: a standalone model is labelled and can be saved as a project", () => {
-  const g = { generation_id: "d".repeat(32), created_at: "2026-05-01T10:20:30+00:00", project_id: null, project_name: null, floor_id: null, floor_name: null };
+  const g = { name: null, generation_id: "d".repeat(32), created_at: "2026-05-01T10:20:30+00:00", project_id: null, project_name: null, floor_id: null, floor_name: null };
   const html = renderToStaticMarkup(<RecentList items={[g]} onSave={() => {}} />);
   expect(html).toContain("Standalone model");
   expect(html).toContain("Save as project");
   expect(renderToStaticMarkup(<RecentList items={[{ ...g, project_id: id, project_name: "House", floor_id: "floor-0", floor_name: "Ground" }]} onSave={() => {}} />)).not.toContain("Standalone");
+});
+
+test("recent list: the name is the uploaded file name, with rename and delete only for standalone models and a tooltip", () => {
+  const g = { name: "Villa plan.dxf", generation_id: "e".repeat(32), created_at: "2026-05-01T10:20:30+00:00", project_id: null, project_name: null, floor_id: null, floor_name: null };
+  const html = renderToStaticMarkup(<RecentList items={[g]} onRename={() => {}} onDelete={() => {}} />);
+  expect(html).toContain("Villa plan.dxf");
+  expect(html).not.toContain("Model eeeeeeee"); // the file name, not the id, when there is one
+  expect(html).toMatch(/title="[^"]*cannot be shared[^"]*"/); // hover explanation on the label
+  expect(html).toContain('aria-label="Rename Villa plan.dxf"');
+  expect(html).toContain('aria-label="Delete Villa plan.dxf"');
+  expect(renderToStaticMarkup(<RecentList items={[{ ...g, name: null }]} />)).toContain("Model eeeeeeee"); // no name: short id
+  const inProject = { ...g, project_id: id, project_name: "House", floor_id: "floor-0", floor_name: "Ground" };
+  const projectHtml = renderToStaticMarkup(<RecentList items={[inProject]} onRename={() => {}} onDelete={() => {}} />);
+  expect(projectHtml).toContain("House / Ground");
+  expect(projectHtml).not.toMatch(/Rename|Delete/); // those are changed through the project
 });
 
 test("sharing cap: a new email is blocked at the cap, a role change is not", () => {

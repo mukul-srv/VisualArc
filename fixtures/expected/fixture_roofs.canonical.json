@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.7.0",
+  "schema_version": "0.7.1",
   "id": "fixture_roofs",
   "units": "mm",
   "source_file": "fixture_roofs.dxf",
@@ -366,24 +366,28 @@
               "id": "slab-001",
               "type": "slab",
               "boundary_id": "fb-001",
+              "boundary_ids": [
+                "fb-001"
+              ],
               "polygon": [
                 [
-                  200.0,
-                  200.0
+                  0.0,
+                  0.0
                 ],
                 [
-                  6200.0,
-                  200.0
+                  0.0,
+                  4400.0
                 ],
                 [
-                  6200.0,
-                  4200.0
+                  6400.0,
+                  4400.0
                 ],
                 [
-                  200.0,
-                  4200.0
+                  6400.0,
+                  0.0
                 ]
               ],
+              "holes": [],
               "thickness": {
                 "value": 200.0,
                 "unit": "mm",
@@ -575,6 +579,11 @@
     }
   ],
   "parameters": {
+    "wall_height": {
+      "value": 3000.0,
+      "unit": "mm",
+      "source": "user_provided"
+    },
     "ceiling_height": {
       "value": 3000.0,
       "unit": "mm",

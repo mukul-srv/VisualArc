@@ -24,6 +24,14 @@ export function resetForNewFile(proj: ProjectTarget, locked: boolean) {
   };
 }
 
+/** Remount key of the upload page: one per query string, so a different project target never
+ *  inherits the previous file name, form or split rows. */
+export const uploadKey = (search: string) => `new:${search}`;
+
+/** A page restored from the browser's back/forward cache keeps its old DOM, including the file
+ *  input's file name; the flow must start over then. */
+export const restoredFromCache = (e: { persisted?: boolean }) => e.persisted === true;
+
 const HEX32 = /^[0-9a-f]{32}$/;
 const existing = (t: ProjectTarget) => t.on && HEX32.test(t.target.trim());
 
