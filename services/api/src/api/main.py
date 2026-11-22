@@ -15,6 +15,7 @@ from api.generations import public_router as generations_public
 from api.generations import router as generations_router
 from api.jobs import recover_jobs
 from api.jobs import router as jobs_router
+from api.layer_conventions import router as conventions_router
 from api.projects import public_router as projects_public
 from api.projects import router as projects_router
 from api.sharing import router as sharing_router
@@ -56,6 +57,7 @@ app.include_router(projects_public)
 app.include_router(generations_public)
 app.include_router(sharing_router)
 app.include_router(jobs_router)
+app.include_router(conventions_router)
 
 
 @app.exception_handler(RequestValidationError)

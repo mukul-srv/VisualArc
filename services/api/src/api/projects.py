@@ -17,11 +17,23 @@ from sqlalchemy.orm import Session
 
 from api.access import owned, project_role
 from api.auth import CurrentUser, current_user
-from api.db import ProjectGrantRow, ProjectRow, ProjectVersionRow, session
+from api.db import (
+    ProjectConventionsRow,
+    ProjectGrantRow,
+    ProjectRow,
+    ProjectVersionRow,
+    session,
+)
 from api.engine.adapters.dxf.split import FloorScope
 from api.engine.canonical.model import Measured
 from api.engine.settings import DEFAULTS
-from api.generations import GenerationRequest, blocked_response, result, run_generation
+from api.generations import (
+    ConventionsSpec,
+    GenerationRequest,
+    blocked_response,
+    result,
+    run_generation,
+)
 from api.sharing import Principal
 from api.storage import new_id
 
@@ -123,6 +135,10 @@ def add_floor(
     with _tx(db) as db:  # noqa: PLR1704
         row = owned(db, ProjectRow, pid, owner_id or "", "unknown project", lock=True, need="editor")
         manifest = row.data
+        saved = db.get(ProjectConventionsRow, pid)
+        if req.conventions is None and saved is not None:  # the project's conventions apply
+            req = req.model_copy(update={
+                "conventions": ConventionsSpec(preset=saved.preset, mapping=saved.mapping)})
         name = req.floor_name.strip()
         if any(f["name"].casefold() == name.casefold() for f in manifest["floors"]):
             raise HTTPException(422, f"floor name {name!r} already exists in this project")

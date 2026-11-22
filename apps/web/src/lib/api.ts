@@ -42,6 +42,7 @@ export type GenerationParams = {
   door_height?: number;
   window_height?: number;
   window_sill?: number;
+  conventions?: { preset: string; mapping: Record<string, string> }; // default: the project's, else AIA
 };
 
 export type Failure = {

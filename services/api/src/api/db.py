@@ -109,6 +109,16 @@ class ShareLinkRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ProjectConventionsRow(Base):
+    """Per-project layer conventions: a preset name plus the user's layer -> role mapping."""
+
+    __tablename__ = "project_conventions"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    preset: Mapped[str] = mapped_column(String(20))
+    mapping: Mapped[dict] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class JobRow(Base):
     """A background generation (kind 'generation' | 'floor'); see api.jobs."""
 

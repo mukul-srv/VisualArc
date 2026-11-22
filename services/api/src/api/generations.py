@@ -9,7 +9,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 
 from api.access import owned
@@ -17,6 +17,8 @@ from api.auth import CurrentUser, current_user
 from api.db import GenerationRow, ProjectRow, UploadRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.canonical.model import Project
+from api.engine.conventions import resolve
+from api.engine.settings import DEFAULTS
 from api.pipeline import has_blocking, write_artifacts
 from api.sharing import Principal
 from api.storage import blob_path, new_id, upload_path
@@ -34,6 +36,29 @@ ARTIFACTS = {
 _STEM = "model"
 
 
+class ConventionsSpec(BaseModel):
+    """Layer conventions for one generation: a preset and extra layer -> role entries."""
+
+    model_config = ConfigDict(extra="forbid")
+    preset: str = Field("aia", max_length=20)
+    mapping: dict[str, str] = Field(default_factory=dict, max_length=200)
+
+    @field_validator("mapping")
+    @classmethod
+    def _key_length(cls, m: dict[str, str]) -> dict[str, str]:
+        if any(len(k) > 255 or len(v) > 20 for k, v in m.items()):  # DXF layer names are <= 255
+            raise ValueError("layer names are at most 255 characters and roles at most 20")
+        return m
+
+    @model_validator(mode="after")
+    def _valid(self) -> "ConventionsSpec":
+        try:
+            resolve(self.preset, self.mapping)
+        except ValueError as e:
+            raise ValueError(str(e)) from e
+        return self
+
+
 class GenerationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     upload_id: str
@@ -45,10 +70,17 @@ class GenerationRequest(BaseModel):
     window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
     # missing heights are filled from this type's preset (tagged `defaulted`, with a warning)
     building_type: Literal["residential", "commercial"] = "residential"
+    # None: the project's saved conventions (floors) or the AIA default
+    conventions: ConventionsSpec | None = None
 
 
 def _prefix(generation_id: str) -> str:
     return f"generations/{generation_id}"
+
+
+def request_settings(req: "GenerationRequest"):
+    c = req.conventions
+    return DEFAULTS if c is None else resolve(c.preset, c.mapping)
 
 
 def read_project(req: GenerationRequest, user_id: str | None = None, **floor) -> Project:
@@ -68,6 +100,7 @@ def read_project(req: GenerationRequest, user_id: str | None = None, **floor) ->
             window_sill=req.window_sill,
             ceiling_height=req.ceiling_height,
             building_type=req.building_type,
+            settings=request_settings(req),
             **floor,
         )
     except InputError as e:
