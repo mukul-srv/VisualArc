@@ -13,7 +13,7 @@ def has_blocking(project: Project) -> bool:
 
 
 def write_artifacts(
-    project: Project, out: Path, stem: str, expected: Project | None = None
+    project: Project, out: Path, stem: str, expected: Project | None = None, progress=None
 ) -> list[str]:
     """Write canonical JSON + report always (they explain a block); GLB + meta
     only when nothing blocks. Returns the names of the files written."""
@@ -22,6 +22,8 @@ def write_artifacts(
     (out / names[0]).write_text(project.model_dump_json(indent=2) + "\n", "utf-8")
     (out / names[1]).write_text(build_report(project, expected), "utf-8")
     if not has_blocking(project):
+        if progress:
+            progress("exporting")
         scene = build_scene(project)
         (out / f"{stem}.glb").write_bytes(scene.export(file_type="glb"))
         meta = json.dumps(build_meta(project, scene), indent=2) + "\n"

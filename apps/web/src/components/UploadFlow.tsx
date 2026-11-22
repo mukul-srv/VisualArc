@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { addFloorJob, generateJob, STAGE_LABEL, type JobProgress } from "@/lib/jobs";
 import { useRouter } from "next/navigation";
-import { addFloor, createProject, generate, getPresets, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
+import { createProject, getPresets, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
 import { viewerUrl, type Floor } from "@/lib/project";
 import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
@@ -16,6 +17,7 @@ const FORM_RESOLVABLE = ["units_missing", "floor_split_unconfirmed"];
 export function UploadFlow() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<JobProgress | null>(null);
   const [pre, setPre] = useState<Preflight | null>(null);
   const [form, setForm] = useState<FormValues>(EMPTY);
   const [errors, setErrors] = useState<string[]>([]);
@@ -94,10 +96,11 @@ export function UploadFlow() {
         pid = c.project_id;
       }
       target = pid;
-      r = await addFloor(pid, { ...req.params, floor_name: proj.floorName.trim(), ...(elev === undefined ? {} : { elevation: elev }) });
+      r = await addFloorJob(pid, { ...req.params, floor_name: proj.floorName.trim(), ...(elev === undefined ? {} : { elevation: elev }) }, setJob);
       if (r.ok) setProj({ ...proj, target: pid }); // keep the id so the next floor joins it
-    } else r = await generate(req.params);
+    } else r = await generateJob(req.params, setJob);
     setBusy(false);
+    setJob(null);
     if (r.ok) router.push("floor" in r ? viewerUrl(target, (r.floor as Floor).id) : `/viewer?generation=${r.generation_id}`);
     else if (r.kind === "blocked") setBlockedIssues(r.issues);
     else setFailure(r);
@@ -113,7 +116,12 @@ export function UploadFlow() {
       <h1>DXF floor plan to 3D</h1>
       <p>Upload a DXF drawn to the supported convention. Values the drawing lacks use nominal defaults, and every one is reported as assumed.</p>
       <input type="file" accept=".dxf" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
-      {busy && <p role="status">Working…</p>}
+      {busy && (
+        <p role="status">
+          {job ? `${STAGE_LABEL[job.stage] ?? job.stage} (${job.progress}%)` : "Working…"}
+          {job && <progress max={100} value={job.progress} style={{ marginLeft: 8 }} />}
+        </p>
+      )}
       {failure && (
         <p role="alert" style={{ color: "#b00020" }}>
           <strong>{failure.kind === "rejected" ? "File rejected:" : "Error:"}</strong> {failure.message}

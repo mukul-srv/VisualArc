@@ -113,6 +113,7 @@ def add_floor(
     assumed: str | None = None,  # set by the split flow when it filled the elevation
     version: bool = True,  # False: the split flow records one version for all its floors
     db: Session | None = None,  # the caller's transaction (it commits); default: our own
+    progress=None,  # job stage callback, see api.jobs
 ):
     """Generate and append a floor (a new version). HTTPException 404 (unknown or foreign ids)
     / 422 (duplicate name or elevation); returns the 409 response when blocking issues stop it."""
@@ -144,7 +145,7 @@ def add_floor(
         fid = f"floor-{len(manifest['floors'])}"
         gid, issues = run_generation(
             req, owner_id, db=db, floor_id=fid, floor_name=name, floor_elevation=elevation,
-            elevation_assumed=assumed, scope=scope,
+            elevation_assumed=assumed, scope=scope, progress=progress,
         )
         if gid is None:
             return blocked_response(issues)

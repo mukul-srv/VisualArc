@@ -1,6 +1,7 @@
 import math
 import os
 import secrets
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -12,12 +13,21 @@ from starlette.middleware.sessions import SessionMiddleware
 from api.auth import router as auth_router
 from api.generations import public_router as generations_public
 from api.generations import router as generations_router
+from api.jobs import recover_jobs
+from api.jobs import router as jobs_router
 from api.projects import public_router as projects_public
 from api.projects import router as projects_router
 from api.sharing import router as sharing_router
 from api.uploads import router as uploads_router
 
-app = FastAPI(title="Architectural Reconstruction API")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    recover_jobs()  # single runner: jobs left running by a dead process can never finish
+    yield
+
+
+app = FastAPI(title="Architectural Reconstruction API", lifespan=_lifespan)
 # Browser origins allowed to call the API (local web dev by default).
 _ORIGINS = os.environ.get(
     "API_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
@@ -45,6 +55,7 @@ app.include_router(projects_router)
 app.include_router(projects_public)
 app.include_router(generations_public)
 app.include_router(sharing_router)
+app.include_router(jobs_router)
 
 
 @app.exception_handler(RequestValidationError)
