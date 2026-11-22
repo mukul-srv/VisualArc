@@ -183,14 +183,16 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
                 "floors": blocked,
             },
         )
-    pid = create_project(req.project_name, user.id, version=False)
     floors = []
-    for key, freq, scope, why in jobs:
-        out = add_floor(pid, freq, scope, user.id, why, version=False)
-        if isinstance(out, JSONResponse):  # cannot happen after the check above
-            raise HTTPException(500, "floor blocked after the pre-check")
-        floors.append({"key": key, **out})
-    record_version(pid, user.id, f"Created from floor split ({len(floors)} floors)")
+    # one transaction: project, floors, generation rows and its single version commit together
+    with session() as db, db.begin():
+        pid = create_project(req.project_name, user.id, version=False, db=db)
+        for key, freq, scope, why in jobs:
+            out = add_floor(pid, freq, scope, user.id, why, version=False, db=db)
+            if isinstance(out, JSONResponse):  # cannot happen after the check above
+                raise HTTPException(500, "floor blocked after the pre-check")
+            floors.append({"key": key, **out})
+        record_version(db, pid, user.id, f"Created from floor split ({len(floors)} floors)")
     return {
         "project_id": pid,
         "floors": floors,

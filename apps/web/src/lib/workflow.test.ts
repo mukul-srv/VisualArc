@@ -45,6 +45,10 @@ beforeAll(async () => {
   // The app calls same-origin `/api/*` (Next rewrites to the API) and the browser keeps the
   // session cookie. Emulate both here: prefix relative URLs with the test server and carry
   // the cookie by hand.
+  // never touch the dev database `visual_arc`: the spawned API writes users, projects and sessions
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || /\/visual_arc(\?|$)/.test(dbUrl))
+    throw new Error("workflow.test.ts writes to Postgres: set DATABASE_URL to a scratch database (not `visual_arc`), e.g. postgresql+psycopg://visual_arc:visual_arc@localhost:5432/visual_arc_agent");
   const realFetch = globalThis.fetch;
   let cookie = "";
   globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {

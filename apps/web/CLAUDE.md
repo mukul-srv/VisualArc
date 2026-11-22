@@ -5,6 +5,7 @@ Browser viewer for engine output. Never duplicates parsing or geometry rules (th
 ## Commands
 - Dev: `npm run dev` · Test: `npm test` · Typecheck: `npm run typecheck`
 - Lint: `npm run lint` · Build: `npm run build`
+- `npm test` includes `workflow.test.ts`, which spawns the real API: `DATABASE_URL` must point at a migrated scratch DB, never `visual_arc` (the test fails otherwise).
 - Next.js has breaking changes: read `node_modules/next/dist/docs/` first (see AGENTS.md).
 
 ## Worktree tip

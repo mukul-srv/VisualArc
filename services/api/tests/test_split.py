@@ -309,6 +309,30 @@ def test_user_elevation_wins_and_mixed_collision_is_422(client):
     assert _post(client, pre, body).status_code == 422
 
 
+def test_failure_after_floors_rolls_everything_back(client, monkeypatch):
+    from sqlalchemy import func, select
+
+    from api.db import GenerationRow, ProjectRow, ProjectVersionRow, session
+
+    def counts():
+        with session() as db:
+            return [db.scalar(select(func.count()).select_from(m)) for m in (ProjectRow, ProjectVersionRow, GenerationRow)]
+
+    before = counts()
+
+    def boom(*a, **kw):
+        raise RuntimeError("forced failure after the floors were written")
+
+    monkeypatch.setattr(uploads, "record_version", boom)
+    pre = _upload(client)
+    crashing = TestClient(app, raise_server_exceptions=False)
+    crashing.cookies.update(client.cookies)  # same account
+    assert _post(crashing, pre, _body(pre)).status_code == 500
+    assert counts() == before  # no project, version or generation row persisted
+    assert client.get("/api/v1/projects").json() == []
+    assert client.get("/api/v1/generations/recent").json() == []
+
+
 def test_split_writes_a_single_version(client):
     pre = _upload(client)
     r = _post(client, pre, _body(pre))

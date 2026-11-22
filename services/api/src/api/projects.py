@@ -7,6 +7,7 @@ version. Plain Python helpers (`create_project`, `add_floor`) let the floor-spli
 projects without HTTP.
 """
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -70,22 +71,34 @@ def _latest(db: Session, pid: str) -> ProjectVersionRow | None:
                       .order_by(ProjectVersionRow.number.desc()).limit(1)).first()
 
 
-def create_project(name: str, owner_id: str | None = None, version: bool = True) -> str:
-    """`version=False`: the caller (floor split) writes the first version after adding floors."""
+@contextmanager
+def _tx(db: Session | None):
+    """The caller's session as is, or a fresh one in a committed transaction."""
+    if db is not None:
+        yield db
+    else:
+        with session() as own, own.begin():
+            yield own
+
+
+def create_project(name: str, owner_id: str | None = None, version: bool = True,
+                   db: Session | None = None) -> str:
+    """`version=False`: the caller (floor split) writes the first version after adding floors.
+    `db`: the caller's transaction (it commits)."""
     pid = new_id()
-    with session() as db:
+    with _tx(db) as db:  # noqa: PLR1704
         row = ProjectRow(id=pid, data={"id": pid, "name": name.strip(), "floors": [], "params": {}},
                          owner_id=owner_id)
         db.add(row)
+        db.flush()
         if version:
             _version(db, row, owner_id, "Project created")
-        db.commit()
     return pid
 
 
-def record_version(pid: str, user_id: str, message: str) -> None:
-    with session() as db, db.begin():
-        _version(db, owned(db, ProjectRow, pid, user_id, "unknown project", lock=True), user_id, message)
+def record_version(db: Session, pid: str, user_id: str, message: str) -> None:
+    """In the caller's transaction, which it commits."""
+    _version(db, owned(db, ProjectRow, pid, user_id, "unknown project", lock=True), user_id, message)
 
 
 def add_floor(
@@ -95,13 +108,14 @@ def add_floor(
     owner_id: str | None = None,
     assumed: str | None = None,  # set by the split flow when it filled the elevation
     version: bool = True,  # False: the split flow records one version for all its floors
+    db: Session | None = None,  # the caller's transaction (it commits); default: our own
 ):
     """Generate and append a floor (a new version). HTTPException 404 (unknown or foreign ids)
     / 422 (duplicate name or elevation); returns the 409 response when blocking issues stop it."""
     # the row lock serialises adds to one project, so no floor is lost (and floor ids
     # stay unique); generation runs inside it. shortcut: a long generation blocks
     # other adds to the same project, fine at this scale.
-    with session() as db, db.begin():
+    with _tx(db) as db:  # noqa: PLR1704
         row = owned(db, ProjectRow, pid, owner_id or "", "unknown project", lock=True)
         manifest = row.data
         name = req.floor_name.strip()
@@ -125,7 +139,7 @@ def add_floor(
         # unique within a version (a restore may reuse an id for a different generation)
         fid = f"floor-{len(manifest['floors'])}"
         gid, issues = run_generation(
-            req, owner_id, floor_id=fid, floor_name=name, floor_elevation=elevation,
+            req, owner_id, db=db, floor_id=fid, floor_name=name, floor_elevation=elevation,
             elevation_assumed=assumed, scope=scope,
         )
         if gid is None:
