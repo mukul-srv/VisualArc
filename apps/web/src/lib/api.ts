@@ -133,14 +133,16 @@ export const getPresets = (f: Fetch = fetch) =>
     return res.ok ? new Response(JSON.stringify({ presets: await res.json() })) : res;
   });
 
-export const getProject = (projectId: string, f: Fetch = fetch, version?: number) =>
+export const getProject = (projectId: string, f: Fetch = fetch, version?: number, share?: string | null) =>
   send<{ manifest: unknown }>(async () => {
-    const q = version === undefined ? "" : `?version=${version}`;
-    const res = await f(`${API_BASE}/api/v1/projects/${projectId}${q}`, { credentials: "include" });
+    const q = new URLSearchParams();
+    if (version !== undefined) q.set("version", String(version));
+    if (share) q.set("share", share);
+    const res = await f(`${API_BASE}/api/v1/projects/${projectId}${q.size ? `?${q}` : ""}`, { credentials: "include" });
     // wrap so the shared `send` can spread it; the caller validates with parseManifest
     return res.ok ? new Response(JSON.stringify({ manifest: await res.json() })) : res;
   });
 
-export const glbUrl = (generationId: string) =>
-  `${API_BASE}/api/v1/generations/${generationId}/artifacts/glb`;
+export const glbUrl = (generationId: string, share?: string | null) =>
+  `${API_BASE}/api/v1/generations/${generationId}/artifacts/glb${share ? `?share=${encodeURIComponent(share)}` : ""}`;
 export const isGenerationId = (s: string) => /^[0-9a-f]{32}$/.test(s);

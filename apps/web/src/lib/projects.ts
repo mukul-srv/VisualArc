@@ -1,7 +1,7 @@
 import { API_BASE, send } from "./api";
 
 // Client for the project/version endpoints (owner-only; other users' ids give 404).
-export type ProjectSummary = { id: string; name: string; floor_count: number; version: number; updated_at: string; thumbnail: string | null };
+export type ProjectSummary = { id: string; role?: string; name: string; floor_count: number; version: number; updated_at: string; thumbnail: string | null };
 export type RecentGeneration = {
   generation_id: string;
   created_at: string;
@@ -39,3 +39,19 @@ export const deleteProject = (pid: string, f: Fetch = fetch) => call("DELETE", `
 
 /** "2026-05-01T10:20:30+00:00" -> "2026-05-01 10:20 UTC" (stable across locales and SSR). */
 export const shortDate = (iso: string) => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+
+// Sharing (owner only; the link token opens `/viewer?project=<id>&share=<token>` read-only).
+export type Collaborator = { user_id: string; email: string; display_name: string; role: "viewer" | "editor" };
+export type AccessInfo = {
+  collaborators: Collaborator[];
+  invites: { email: string; role: "viewer" | "editor" }[];
+  link_token: string | null;
+  max_collaborators: number;
+};
+export const getAccess = (pid: string, f: Fetch = fetch) => call("GET", `/projects/${pid}/access`, f);
+export const grantAccess = (pid: string, email: string, role: "viewer" | "editor", f: Fetch = fetch) =>
+  call("PUT", `/projects/${pid}/access`, f, { email, role });
+export const removeAccess = (pid: string, email: string, f: Fetch = fetch) =>
+  call("DELETE", `/projects/${pid}/access?email=${encodeURIComponent(email)}`, f);
+export const createLink = (pid: string, f: Fetch = fetch) => call("POST", `/projects/${pid}/link`, f);
+export const revokeLink = (pid: string, f: Fetch = fetch) => call("DELETE", `/projects/${pid}/link`, f);

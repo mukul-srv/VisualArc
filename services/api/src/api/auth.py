@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import delete, select
 
+from api.access import claim_invites
 from api.db import OAuthAccountRow, SessionRow, UserRow, session
 from api.storage import new_id
 
@@ -70,6 +71,13 @@ def _set_cookie(response: Response, token: str) -> None:
         secure=os.environ.get("AUTH_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
         path="/",
     )
+
+
+def optional_user(request: Request) -> UserRow | None:
+    try:
+        return current_user(request)
+    except HTTPException:
+        return None
 
 
 def current_user(request: Request) -> UserRow:
@@ -175,6 +183,8 @@ def register(req: RegisterRequest):
         if db.scalar(select(UserRow.id).where(UserRow.email == req.email)):
             raise HTTPException(409, "an account with this email already exists")
         db.add(user)
+        db.flush()
+        claim_invites(db, user)
         db.commit()
     return _login_response(user, 201)
 
@@ -364,6 +374,7 @@ def user_for_profile(provider: str, p: OAuthProfile) -> UserRow | str:
             )
             db.add(user)
             db.flush()
+            claim_invites(db, user)
         db.add(OAuthAccountRow(
             id=new_id(), provider=provider, provider_user_id=p.provider_user_id, user_id=user.id
         ))

@@ -18,12 +18,14 @@ export function RetryNotice({ message, onRetry }: { message: string; onRetry: ()
   );
 }
 
-export function RequireAuth({ children, onUser }: { children: ReactNode; onUser?: (u: User) => void }) {
+// `allowShare`: a `?share=<token>` link opens the page without sign-in (the API checks the token).
+export function RequireAuth({ children, onUser, allowShare }: { children: ReactNode; onUser?: (u: User) => void; allowShare?: boolean }) {
   const router = useRouter();
   const [ok, setOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (allowShare && new URLSearchParams(window.location.search).has("share")) return queueMicrotask(() => setOk(true));
     me().then((r) => {
       if (r.ok) {
         onUser?.(r);

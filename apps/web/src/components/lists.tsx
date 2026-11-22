@@ -25,7 +25,7 @@ export function ProjectList({ projects }: { projects: ProjectSummary[] }) {
       <tbody>
         {projects.map((p) => (
           <tr key={p.id}>
-            <td><Link href={`/projects/${p.id}`}>{p.name}</Link></td>
+            <td><Link href={`/projects/${p.id}`}>{p.name}</Link>{p.role && p.role !== "owner" ? ` (shared: ${p.role})` : ""}</td>
             <td>{p.floor_count}</td>
             <td>v{p.version}</td>
             <td>{shortDate(p.updated_at)}</td>
@@ -53,7 +53,7 @@ export function RecentList({ items }: { items: RecentGeneration[] }) {
 }
 
 /** Newest first. Past versions open read-only in the viewer; restoring makes a new version. */
-export function VersionList({ projectId, versions, onRestore, busy }: { projectId: string; versions: VersionInfo[]; onRestore: (n: number) => void; busy?: boolean }) {
+export function VersionList({ projectId, versions, onRestore, busy, readOnly }: { projectId: string; versions: VersionInfo[]; onRestore: (n: number) => void; busy?: boolean; readOnly?: boolean }) {
   const latest = versions[0]?.number;
   return (
     <ol reversed className={styles.versions} aria-label="Version history">
@@ -61,7 +61,7 @@ export function VersionList({ projectId, versions, onRestore, busy }: { projectI
         <li key={v.number} value={v.number}>
           <strong>Version {v.number}</strong>: {v.message} ({v.floor_count} floors, {shortDate(v.created_at)}){" "}
           <a href={viewerUrl(projectId, undefined, v.number)}>View</a>{" "}
-          {v.number === latest ? (
+          {readOnly ? null : v.number === latest ? (
             <em>current</em>
           ) : (
             <button type="button" disabled={busy} aria-label={`Restore version ${v.number}`} onClick={() => onRestore(v.number)}>
