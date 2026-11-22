@@ -126,7 +126,8 @@ export function UploadForm(p: Props) {
         {!splitting && (
           <>
             <label style={block}>
-              <input type="checkbox" checked={p.proj.on} onChange={(e) => p.setProj({ ...p.proj, on: e.target.checked })} /> Add to a project (multi-floor)
+              <input type="checkbox" checked={p.proj.on} onChange={(e) => p.setProj({ ...p.proj, on: e.target.checked })} /> Add to a project (multi-floor){" "}
+              <small>Needed to share, keep versions or edit floors later; without it the model stays standalone.</small>
             </label>
             {p.proj.on && (
               <>

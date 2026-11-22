@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -33,12 +34,14 @@ export default function ViewerPage() {
   const [floorId, setFloorId] = useState<string | null>(null);
   const [target, setTarget] = useState<{ url: string; stem: string } | null>(null);
   const share = useRef<string | null>(null); // read-only link token
+  const [shared, setShared] = useState(false); // opened through a share link: no account pages
   const floorTarget = (m: Manifest, f: Floor) => ({ url: glbUrl(f.generation_id, share.current), stem: `${m.name} / ${f.name}` });
 
   // Resolve what to load from the query string. The scene effect below reloads on `target`.
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     share.current = query.get("share");
+    queueMicrotask(() => setShared(share.current !== null));
     // ?project=<id>[&floor=<id>] loads a project floor; ?generation=<id> one API model;
     // ?model=<stem> a local /models file
     const project = query.get("project");
@@ -405,9 +408,12 @@ export default function ViewerPage() {
           {measuring ? "Measure: on (Esc)" : "Measure"}
         </button>{" "}
         {walking ? "WASD/arrows move, drag to look" : status}
+        {!manifest && !shared && (
+          <div><Link href="/" style={{ color: "#8cf" }}>All projects</Link></div>
+        )}
         {manifest && (
           <div>
-            <a href={`/projects/${manifest.id}`} style={{ color: "#8cf" }}>Project: {manifest.name}</a>
+            {shared ? <span>Shared view (read-only): {manifest.name}</span> : <a href={`/projects/${manifest.id}`} style={{ color: "#8cf" }}>Project: {manifest.name}</a>}
             {viewing !== null && <b role="status"> Viewing version {viewing} (read-only)</b>}
           </div>
         )}

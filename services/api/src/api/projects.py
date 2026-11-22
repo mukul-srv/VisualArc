@@ -7,6 +7,8 @@ version. Plain Python helpers (`create_project`, `add_floor`) let the floor-spli
 projects without HTTP.
 """
 
+import json
+import re
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
@@ -18,6 +20,7 @@ from sqlalchemy.orm import Session
 from api.access import owned, project_role
 from api.auth import CurrentUser, current_user
 from api.db import (
+    GenerationRow,
     ProjectConventionsRow,
     ProjectGrantRow,
     ProjectRow,
@@ -35,7 +38,7 @@ from api.generations import (
     run_generation,
 )
 from api.sharing import Principal
-from api.storage import new_id
+from api.storage import blob_path, new_id
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 # read-only endpoints a share link may open (no session required)
@@ -158,7 +161,8 @@ def add_floor(
             )
         # id = creation index: deterministic, stable when the viewer sorts by elevation,
         # unique within a version (a restore may reuse an id for a different generation)
-        fid = f"floor-{len(manifest['floors'])}"
+        # (next after the highest existing index, so ids stay unique after a floor was removed)
+        fid = f"floor-{1 + max((_floor_index(f['id']) for f in manifest['floors']), default=-1)}"
         gid, issues = run_generation(
             req, owner_id, db=db, floor_id=fid, floor_name=name, floor_elevation=elevation,
             elevation_assumed=assumed, scope=scope, progress=progress,
@@ -181,6 +185,12 @@ def add_floor(
         if version:
             _version(db, row, owner_id, f"Added floor {name}")
     return {"floor": floor, **result(gid, issues)}
+
+
+def _floor_index(floor_id: str) -> int:
+    """N of `floor-N`; -1 for any other id (legacy or imported), so it never breaks the next id."""
+    m = re.fullmatch(r"floor-(\d+)", floor_id)
+    return int(m[1]) if m else -1
 
 
 def _manifest(row: ProjectRow, v: ProjectVersionRow, role: str) -> dict:
@@ -207,6 +217,38 @@ def _version_row(db: Session, pid: str, n: int) -> ProjectVersionRow:
 @router.post("/projects", status_code=201)
 def post_project(req: ProjectRequest, user: CurrentUser):
     return {"project_id": create_project(req.name, user.id)}
+
+
+class FromGeneration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    generation_id: str
+    name: str = Field(min_length=1, max_length=100, description="project name")
+
+
+@router.post("/projects/from-generation", status_code=201)
+def project_from_generation(req: FromGeneration, user: CurrentUser):
+    """Turn one of my standalone models into a project (so it can be shared, versioned and
+    extended). One floor whose name and elevation (with its provenance) are those recorded in the
+    model's own canonical data, so nothing is restated; the model itself is not regenerated."""
+    with session() as db, db.begin():
+        g = owned(db, GenerationRow, req.generation_id, user.id, "unknown generation")
+        used = db.scalar(select(ProjectVersionRow.id).where(
+            ProjectVersionRow.snapshot["generation_ids"].contains([g.id])).limit(1))
+        if used is not None:
+            raise HTTPException(409, "this model already belongs to a project")
+        try:
+            canon = json.loads(blob_path(f"{g.blob_prefix}/model.canonical.json").read_text("utf-8"))
+            src = canon["buildings"][0]["floors"][0]
+            elevation = Measured.model_validate(src["elevation"]).model_dump(mode="json")
+            name = src["name"]
+        except (OSError, ValueError, KeyError, IndexError) as e:
+            raise HTTPException(409, "this model's data is missing or unreadable") from e
+        pid = create_project(req.name, user.id, version=False, db=db)
+        row = db.get(ProjectRow, pid)
+        floor = {"id": "floor-0", "name": name, "elevation": elevation, "generation_id": g.id}
+        row.data = {**row.data, "floors": [floor]}
+        _version(db, row, user.id, "Created from a standalone model")
+    return {"project_id": pid}
 
 
 @router.get("/projects")
@@ -249,6 +291,48 @@ def rename_project(pid: str, req: ProjectRequest, user: CurrentUser):
         row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
         row.data = {**row.data, "name": req.name.strip()}
     return {"id": pid, "name": req.name.strip()}
+
+
+class FloorRename(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=100)
+
+
+def _floor(row: ProjectRow, floor_id: str) -> dict:
+    f = next((f for f in row.data["floors"] if f["id"] == floor_id), None)
+    if f is None:
+        raise HTTPException(404, "unknown floor")
+    return f
+
+
+@router.patch("/projects/{pid}/floors/{floor_id}")
+def rename_floor(pid: str, floor_id: str, req: FloorRename, user: CurrentUser):
+    """Rename a floor; a new version (editor or owner). Geometry is not editable here."""
+    name = req.name.strip()
+    with session() as db, db.begin():
+        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
+        old = _floor(row, floor_id)
+        if any(f["id"] != floor_id and f["name"].casefold() == name.casefold()
+               for f in row.data["floors"]):
+            raise HTTPException(422, f"floor name {name!r} already exists in this project")
+        row.data = {**row.data, "floors": [{**f, "name": name} if f["id"] == floor_id else f
+                                            for f in row.data["floors"]]}
+        _version(db, row, user.id, f"Renamed floor {old['name']} to {name}")
+    return {"id": floor_id, "name": name}
+
+
+@router.delete("/projects/{pid}/floors/{floor_id}", status_code=204)
+def remove_floor(pid: str, floor_id: str, user: CurrentUser):
+    """Remove a floor from the current state; a new version. Older versions and the generated
+    files stay, so a restore brings the floor back."""
+    with session() as db, db.begin():
+        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
+        gone = _floor(row, floor_id)
+        params = {k: v for k, v in row.data.get("params", {}).items() if k != floor_id}
+        row.data = {**row.data, "params": params,
+                    "floors": [f for f in row.data["floors"] if f["id"] != floor_id]}
+        _version(db, row, user.id, f"Removed floor {gone['name']}")
+    return Response(status_code=204)
 
 
 @router.delete("/projects/{pid}", status_code=204)

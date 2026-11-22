@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProject } from "../lib/api";
-import { parseManifest, sortFloors, viewerUrl, type Manifest } from "../lib/project";
-import { deleteProject, listVersions, renameProject, restoreVersion, type VersionInfo } from "../lib/projects";
+import { parseManifest, type Manifest } from "../lib/project";
+import { deleteProject, listVersions, removeFloor, renameFloor, renameProject, restoreVersion, type VersionInfo } from "../lib/projects";
 import { ConventionsPanel } from "./ConventionsPanel";
 import { getProjectConventions, listConventions, putProjectConventions, type ConventionsSpec, type PresetInfo } from "../lib/conventions";
 import { AccessPanel } from "./AccessPanel";
+import { AppNav } from "./AppNav";
 import { VersionList } from "./lists";
+import { can, FloorList, ProjectTabs, ProjectToolbar, tabsFor, type TabId } from "./ProjectParts";
 import styles from "./dashboard.module.css";
 
 type Outcome = { ok: boolean; message?: string };
@@ -20,8 +22,10 @@ export function ProjectView({ id }: { id: string }) {
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<TabId>("floors");
   const [conv, setConv] = useState<ConventionsSpec | null>(null);
   const [convInfo, setConvInfo] = useState<{ presets: PresetInfo[]; roles: string[] } | null>(null);
 
@@ -39,6 +43,15 @@ export function ProjectView({ id }: { id: string }) {
   useEffect(() => {
     queueMicrotask(load);
   }, [load]);
+  // /projects/<id>#sharing (the dashboard's Share button) opens that section directly
+  useEffect(() => {
+    const t = window.location.hash.slice(1);
+    if (["floors", "conventions", "versions", "sharing"].includes(t)) queueMicrotask(() => setTab(t as TabId));
+  }, []);
+  const select = (t: TabId) => {
+    setTab(t);
+    window.history.replaceState(null, "", `#${t}`);
+  };
 
   async function run(call: () => Promise<Outcome>, then: () => void | Promise<void>) {
     setBusy(true);
@@ -52,53 +65,63 @@ export function ProjectView({ id }: { id: string }) {
   if (!manifest)
     return (
       <main className={styles.page}>
+        <AppNav />
         {error ? <p role="alert" className={styles.error}>{error}</p> : <p role="status">Loading…</p>}
         <Link href="/">All projects</Link>
       </main>
     );
-  const role = manifest.role ?? "owner";
-  const canEdit = role !== "viewer";
+  const role = manifest.role ?? "viewer";
+  const { edit, manage } = can(role);
+  // a tab the role cannot see (e.g. #sharing for an editor) falls back to Floors
+  const shown: TabId = tabsFor(role).some((t) => t.id === tab) ? tab : "floors";
   return (
     <main className={styles.page}>
-      <p><Link href="/">All projects</Link></p>
+      <AppNav />
       <h1>{manifest.name}</h1>
+      {!edit && <p>You have view-only access to this project.</p>}
+      <ProjectToolbar id={id} role={role} floors={manifest.floors} busy={busy}
+        onShare={() => select("sharing")} onRename={() => setRenaming(true)} onDelete={() => setConfirming(true)} />
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
-      {!canEdit && <p>You have view-only access to this project.</p>}
-      {canEdit && <form className={styles.row} onSubmit={(e) => { e.preventDefault(); run(() => renameProject(id, name.trim()), load); }}>
-        <label>Project name <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} /></label>
-        <button disabled={busy || !name.trim() || name.trim() === manifest.name}>Rename</button>
-      </form>}
-      <h2>Floors</h2>
-      {manifest.floors.length === 0 ? <p>No floors yet.</p> : (
-        <ul>
-          {sortFloors(manifest.floors).map((f) => (
-            <li key={f.id}>{f.name} at {f.elevation.value} mm <a href={viewerUrl(id, f.id)}>Open in viewer</a></li>
-          ))}
-        </ul>
+      {renaming && (
+        <form className={styles.row} onSubmit={(e) => { e.preventDefault(); run(() => renameProject(id, name.trim()), () => { setRenaming(false); return load(); }); }}>
+          <label>Project name <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} /></label>
+          <button disabled={busy || !name.trim() || name.trim() === manifest.name} title={name.trim() === manifest.name ? "Change the name first" : undefined}>Save name</button>
+          <button type="button" onClick={() => { setRenaming(false); setName(manifest.name); }}>Cancel</button>
+        </form>
       )}
-      {conv && convInfo && (
-        <>
-          <h2>Layer conventions</h2>
-          <ConventionsPanel spec={conv} setSpec={setConv} presets={convInfo.presets} roles={convInfo.roles} layers={[]} disabled={busy} readOnly={!canEdit} />
-          {canEdit && <button type="button" disabled={busy} onClick={() => run(() => putProjectConventions(id, conv), load)}>Save conventions</button>}
-          <p><small>Applies to floors added from now on; existing floors are not regenerated.</small></p>
-        </>
-      )}
-      <h2>Version history</h2>
-      <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} readOnly={!canEdit} />
-      {role === "owner" && <AccessPanel projectId={id} />}
-      {role === "owner" && <>
-      <h2>Delete</h2>
-      {confirming ? (
+      {confirming && manage && (
         <div role="alertdialog" aria-label="Confirm delete" className={styles.row}>
-          <span>Delete &quot;{manifest.name}&quot;? It disappears from your list; stored files are kept.</span>
+          <span>Delete &quot;{manifest.name}&quot;? It disappears from every list (collaborators lose access); stored files are kept.</span>
           <button disabled={busy} onClick={() => run(() => deleteProject(id), () => router.push("/"))}>Confirm delete</button>
           <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
         </div>
-      ) : (
-        <button type="button" onClick={() => setConfirming(true)}>Delete project</button>
       )}
-      </>}
+      <ProjectTabs role={role} tab={shown} onSelect={select} />
+      <section role="tabpanel" id={`panel-${shown}`} aria-labelledby={`tab-${shown}`}>
+        {shown === "floors" && (
+          <>
+            <FloorList projectId={id} floors={manifest.floors} role={role} busy={busy}
+              onRename={(fid, n) => run(() => renameFloor(id, fid, n), load)}
+              onRemove={(fid) => run(() => removeFloor(id, fid), load)} />
+            <p><small>Renaming and removing floors is available here. Editing walls, openings and other model elements is not supported yet (planned); to change the geometry, fix the DXF and add it as a new floor.</small></p>
+          </>
+        )}
+        {shown === "conventions" && conv && convInfo && (
+          <>
+            <ConventionsPanel spec={conv} setSpec={setConv} presets={convInfo.presets} roles={convInfo.roles} layers={[]} disabled={busy} readOnly={!edit} />
+            {edit ? (
+              <button type="button" disabled={busy} onClick={() => run(() => putProjectConventions(id, conv), load)}>Save conventions</button>
+            ) : (
+              <p>Only editors and the owner can change conventions.</p>
+            )}
+            <p><small>New layers are mapped when you upload a drawing (Add floor). Changes apply to floors added from now on; existing floors are not regenerated.</small></p>
+          </>
+        )}
+        {shown === "versions" && (
+          <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} readOnly={!edit} />
+        )}
+        {shown === "sharing" && manage && <AccessPanel projectId={id} />}
+      </section>
     </main>
   );
 }

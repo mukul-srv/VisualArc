@@ -1,10 +1,16 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import { shortDate, type ProjectSummary, type RecentGeneration, type VersionInfo } from "../lib/projects";
-import { viewerUrl } from "../lib/project";
+import { viewerUrl, type Role } from "../lib/project";
+import { can } from "./ProjectParts";
 import styles from "./dashboard.module.css";
 
-/** My projects, newest first; an empty list shows the empty state. */
-export function ProjectList({ projects }: { projects: ProjectSummary[] }) {
+/** My projects (and those shared with me), newest first, each row with its actions by role:
+ *  Open (all), Add floor (editor+), Share and Delete (owner). */
+export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSummary[]; onDelete?: (p: ProjectSummary) => void; busy?: boolean }) {
+  const [confirming, setConfirming] = useState<string | null>(null);
   if (projects.length === 0)
     return (
       <p>
@@ -20,23 +26,48 @@ export function ProjectList({ projects }: { projects: ProjectSummary[] }) {
           <th scope="col">Floors</th>
           <th scope="col">Version</th>
           <th scope="col">Updated</th>
+          <th scope="col">Actions</th>
         </tr>
       </thead>
       <tbody>
-        {projects.map((p) => (
-          <tr key={p.id}>
-            <td><Link href={`/projects/${p.id}`}>{p.name}</Link>{p.role && p.role !== "owner" ? ` (shared: ${p.role})` : ""}</td>
-            <td>{p.floor_count}</td>
-            <td>v{p.version}</td>
-            <td>{shortDate(p.updated_at)}</td>
-          </tr>
-        ))}
+        {projects.map((p) => {
+          const role = (p.role ?? "viewer") as Role;
+          const { edit, manage } = can(role);
+          return (
+            <tr key={p.id}>
+              <td><Link href={`/projects/${p.id}`}>{p.name}</Link>{role !== "owner" ? ` (shared: ${role})` : ""}</td>
+              <td>{p.floor_count}</td>
+              <td>v{p.version}</td>
+              <td>{shortDate(p.updated_at)}</td>
+              <td>
+                <span className={styles.actions}>
+                  {p.floor_count > 0 ? <a href={viewerUrl(p.id)}>Open</a> : <span title="Add a floor first" aria-disabled="true">Open (no floors)</span>}
+                  {edit && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
+                  {manage && <Link href={`/projects/${p.id}#sharing`}>Share</Link>}
+                  {manage && onDelete && confirming !== p.id && (
+                    <button type="button" disabled={busy} aria-label={`Delete ${p.name}`} onClick={() => setConfirming(p.id)}>Delete</button>
+                  )}
+                  {manage && onDelete && confirming === p.id && (
+                    <span role="alertdialog" aria-label={`Confirm delete ${p.name}`}>
+                      Delete &quot;{p.name}&quot;?{" "}
+                      <button type="button" disabled={busy} onClick={() => { onDelete(p); setConfirming(null); }}>Confirm delete</button>{" "}
+                      <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
+                    </span>
+                  )}
+                </span>
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
-export function RecentList({ items }: { items: RecentGeneration[] }) {
+/** Recent models. A standalone one (generated without a project) has no project page, so it cannot
+ *  be shared, versioned or extended until it is saved as a project. */
+export function RecentList({ items, onSave, busy }: { items: RecentGeneration[]; onSave?: (generationId: string, name: string) => void; busy?: boolean }) {
+  const [saving, setSaving] = useState<{ id: string; name: string } | null>(null);
   if (items.length === 0) return <p>No buildings generated yet.</p>;
   return (
     <ul aria-label="Recent buildings">
@@ -46,6 +77,21 @@ export function RecentList({ items }: { items: RecentGeneration[] }) {
             {g.project_name ? `${g.project_name} / ${g.floor_name}` : `Model ${g.generation_id.slice(0, 8)}`}
           </a>{" "}
           <small>{shortDate(g.created_at)}</small>
+          {!g.project_id && (
+            <>
+              {" "}<small>Standalone model: not in a project, so it cannot be shared or extended.</small>{" "}
+              {onSave && saving?.id !== g.generation_id && (
+                <button type="button" disabled={busy} onClick={() => setSaving({ id: g.generation_id, name: "" })}>Save as project</button>
+              )}
+              {onSave && saving?.id === g.generation_id && (
+                <form style={{ display: "inline" }} onSubmit={(e) => { e.preventDefault(); onSave(g.generation_id, saving.name.trim()); setSaving(null); }}>
+                  <input aria-label="Project name" placeholder="Project name" value={saving.name} maxLength={100} onChange={(e) => setSaving({ id: g.generation_id, name: e.target.value })} />{" "}
+                  <button disabled={busy || !saving.name.trim()} title={saving.name.trim() ? undefined : "Enter a project name"}>Create project</button>{" "}
+                  <button type="button" onClick={() => setSaving(null)}>Cancel</button>
+                </form>
+              )}
+            </>
+          )}
         </li>
       ))}
     </ul>

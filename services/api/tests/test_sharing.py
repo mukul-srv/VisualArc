@@ -179,3 +179,14 @@ def test_pending_invite_converts_on_oauth_first_login(proj, owner):
     assert not isinstance(user, str)
     v = owner.get(f"{P}/{proj}/access").json()
     assert v["invites"] == [] and v["collaborators"][0]["user_id"] == user.id
+
+
+def test_no_per_user_project_share_limit(owner, tmp_path, monkeypatch):
+    """The cap is per project; an owner can share any number of projects, each with its own link."""
+    _, email = _user(tmp_path, monkeypatch)
+    tokens = set()
+    for n in range(3):
+        pid = owner.post(P, json={"name": f"P{n}"}).json()["project_id"]
+        assert _grant(owner, pid, email, "viewer").status_code == 200
+        tokens.add(owner.post(f"{P}/{pid}/link").json()["token"])
+    assert len(tokens) == 3

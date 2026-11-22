@@ -6,6 +6,7 @@ dependency for every other /api/v1 router. Ownership checks are NOT here (subtas
 """
 
 import hashlib
+import logging
 import os
 import re
 import secrets
@@ -257,6 +258,8 @@ PROVIDERS = {
         "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "access_token_url": "https://oauth2.googleapis.com/token",
         "api_base_url": "https://openidconnect.googleapis.com/v1/",
+        # gives authlib the jwks_uri it needs to verify Google's id_token
+        "server_metadata_url": "https://accounts.google.com/.well-known/openid-configuration",
         "client_kwargs": {"scope": "openid email profile"},
     },
 }
@@ -386,7 +389,8 @@ async def oauth_callback(provider: str, request: Request):
     _client(provider)  # 404/503 before anything else
     try:
         profile = await fetch_profile(provider, request)
-    except Exception:  # noqa: BLE001  bad/denied/expired code, provider outage: back to the login page
+    except Exception:
+        logging.getLogger("uvicorn.error").exception("%s oauth callback failed", provider)
         return _fail(f"{provider} sign-in failed")
     user = user_for_profile(provider, profile)
     if isinstance(user, str):
