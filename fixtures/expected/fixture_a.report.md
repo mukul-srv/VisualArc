@@ -3,7 +3,7 @@
 - Source file: `fixture_a.dxf`
 - Schema version: 0.7.0
 - Units: mm
-- Result: **OK** (0 blocking, 2 warnings)
+- Result: **OK** (0 blocking, 3 warnings)
 
 ## Blocking issues
 
@@ -13,6 +13,7 @@ None.
 
 - `elevation_defaulted`: floor elevation assumed 0 mm; DXF plan carries no elevation (sources: -)
 - `wall_role_inferred`: 7 wall(s) have no role layer (A-WALL-EXTR, A-WALL-INTR); role inferred from geometry (a face on the outer boundary of all walls = exterior). Walls around an interior courtyard read as interior. (sources: A-WALL:31, A-WALL:35, A-WALL:36, A-WALL:34, A-WALL:3A, A-WALL:3B, A-WALL:3C, A-WALL:37, A-WALL:32, A-WALL:39, A-WALL:33, A-WALL:38)
+- `room_name_defaulted`: no label inside Room 1, Room 2; numbered names assumed (sources: -)
 
 ## Values by provenance
 
@@ -46,6 +47,7 @@ Junctions (6) are always `inferred`: corner/T fill between paired-line walls, no
 - Junctions: 6
 - Floor boundaries: 2
 - Slabs: 0
+- Rooms: 2
 - Openings: 0
 
 ## Expected versus generated
@@ -57,6 +59,7 @@ Junctions (6) are always `inferred`: corner/T fill between paired-line walls, no
 | junctions | 6 | 6 | yes |
 | floor boundaries | 2 | 2 | yes |
 | slabs | 0 | 0 | yes |
+| rooms | 2 | 2 | yes |
 | openings | 0 | 0 | yes |
 | Wall heights (mm) | 3000 | 3000 | yes |
 

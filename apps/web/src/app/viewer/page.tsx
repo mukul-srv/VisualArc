@@ -4,16 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { getProject, glbUrl, isGenerationId } from "@/lib/api";
+import { canonicalUrl, getProject, glbUrl, isGenerationId } from "@/lib/api";
 import { parseManifest, pickFloor, sortFloors, viewerUrl, type Floor, type Manifest } from "@/lib/project";
 import { resolveStem } from "@/lib/model-stem";
 import { ViewerNav } from "@/components/ViewerNav";
 import { MetadataPanel } from "@/components/MetadataPanel";
+import { RoomList } from "@/components/RoomList";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
-import { describeElement, describeOpening, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel } from "@/lib/selection";
+import { describeElement, describeOpening, describeRoom, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel, type RoomData } from "@/lib/selection";
 
 // Viewer only renders. GLB is already metres, Y-up (ADR-001); no unit/axis fixes here.
 
@@ -25,6 +26,7 @@ export default function ViewerPage() {
   const [top, setTopState] = useState(false);
   const [status, setStatus] = useState("loading…");
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [rooms, setRooms] = useState<RoomData[]>([]);
   const toggleMeasure = useRef<() => void>(() => {});
   const [measuring, setMeasuring] = useState(false);
   const [result, setResult] = useState<{ m: Measurement; a: SnapKind; b: SnapKind } | null>(null);
@@ -70,6 +72,19 @@ export default function ViewerPage() {
       queueMicrotask(() => setTarget({ url: `/models/${name}.glb`, stem: name }));
     }
   }, []);
+
+  // Rooms live in the canonical JSON, not the GLB: list them for the loaded model (API models only).
+  useEffect(() => {
+    if (!target || !target.url.includes("/artifacts/glb")) return queueMicrotask(() => setRooms([]));
+    let live = true;
+    fetch(canonicalUrl(target.url), { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => live && setRooms(c?.buildings?.[0]?.floors?.[0]?.rooms ?? []))
+      .catch(() => live && setRooms([]));
+    return () => {
+      live = false;
+    };
+  }, [target]);
 
   useEffect(() => {
     if (!target) return;
@@ -452,6 +467,7 @@ export default function ViewerPage() {
             {PROVENANCE_LABEL[current.elevation.source]}]
           </div>
         )}
+        <RoomList rooms={rooms} onSelect={(r) => setPanel(describeRoom(r, current?.id))} />
         <MetadataPanel panel={panel} />
         {measuring && (
           <div>

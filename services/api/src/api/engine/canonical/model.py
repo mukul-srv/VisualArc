@@ -104,6 +104,30 @@ class Param(_Model):
     source: Provenance
 
 
+class Area(_Model):
+    value: float
+    unit: Literal["mm2"] = "mm2"
+    source: Provenance
+
+
+class Room(_Model):
+    """Closed region enclosed by walls (inner faces). Name: the label inside it, else "Room N"."""
+
+    id: str
+    type: Literal["room"] = "room"
+    name: str
+    name_source: Provenance  # source_extracted (a drawing label) or defaulted ("Room N")
+    polygon: list[Point2]
+    area: Area  # derived from the walls, so inferred
+    label_sources: list[SourceRef] = []  # every label inside, reading order; the first names it
+
+    @model_validator(mode="after")
+    def _check(self) -> "Room":
+        if self.area.value <= 0:
+            raise ValueError(f"{self.id}: room area must be > 0")
+        return self
+
+
 class Slab(_Model):
     """Floor slab under a floor boundary: top at floor elevation, `thickness` below it."""
 
@@ -189,6 +213,7 @@ class Floor(_Model):
     openings: list[Opening] = []
     ceilings: list[Ceiling] = []
     slabs: list[Slab] = []
+    rooms: list[Room] = []
     plan_offset: PlanOffset | None = None  # None = plan coordinates are the source's
 
     @model_validator(mode="after")

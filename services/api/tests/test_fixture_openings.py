@@ -159,6 +159,7 @@ def test_reader_junctions_and_issues(floor_project):
     assert sizes == {(200, 200): 4, (100, 200): 4}  # 4 corners, 4 T-junctions
     assert Counter(i.code for i in floor_project.issues) == {
         "opening_symbol_ignored": 1,
+        "room_name_defaulted": 1,
         "opening_dimension_defaulted": 2,
         "elevation_defaulted": 1,
         "wall_role_inferred": 1,

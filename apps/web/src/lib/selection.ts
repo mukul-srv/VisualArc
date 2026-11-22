@@ -20,6 +20,9 @@ export type OpeningData = {
   sources: SourceRef[];
 };
 
+export type Area = { value: number; unit: "mm2"; source: Provenance };
+export type RoomData = { id: string; name: string; name_source: Provenance; area: Area; label_sources: SourceRef[] };
+
 export type ElementData = {
   id: string;
   type: "wall" | "junction" | "floor_boundary" | "slab" | "ceiling";
@@ -88,6 +91,23 @@ export function describeOpening(o: OpeningData): Panel {
     ],
     sourcesLabel: "Source entities (marker first, then jamb lines)",
     sources: refs(o.sources),
+  };
+}
+
+/** Square metres with the provenance; the canonical value stays in mm2. */
+export const m2 = (a: Area) => `${(a.value / 1e6).toFixed(2)} m²`;
+
+export function describeRoom(r: RoomData, floorId?: string): Panel {
+  return {
+    title: "Room",
+    id: r.id,
+    rows: [
+      ...(floorId ? [{ label: "Floor", value: floorId }] : []),
+      { label: "Name", value: r.name, provenance: r.name_source },
+      { label: "Area (inner wall faces)", value: m2(r.area), provenance: r.area.source },
+    ],
+    sourcesLabel: "Label entities (first names the room)",
+    sources: refs(r.label_sources),
   };
 }
 
