@@ -9,7 +9,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 
 from api.access import owned
@@ -42,6 +42,13 @@ class ConventionsSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     preset: str = Field("aia", max_length=20)
     mapping: dict[str, str] = Field(default_factory=dict, max_length=200)
+
+    @field_validator("mapping")
+    @classmethod
+    def _key_length(cls, m: dict[str, str]) -> dict[str, str]:
+        if any(len(k) > 255 or len(v) > 20 for k, v in m.items()):  # DXF layer names are <= 255
+            raise ValueError("layer names are at most 255 characters and roles at most 20")
+        return m
 
     @model_validator(mode="after")
     def _valid(self) -> "ConventionsSpec":

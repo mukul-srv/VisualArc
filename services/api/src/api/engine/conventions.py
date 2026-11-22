@@ -22,12 +22,10 @@ Sources (read this before trusting a preset):
 """
 
 from dataclasses import dataclass, replace
-from typing import Literal
 
 from api.engine.adapters.dxf.split import strip_floor_prefix
 from api.engine.settings import DEFAULTS, Settings
 
-Role = Literal["wall", "wall_exterior", "wall_interior", "floor", "door", "window", "ignore"]
 ROLES: tuple[str, ...] = ("wall", "wall_exterior", "wall_interior", "floor", "door", "window", "ignore")
 
 
@@ -75,16 +73,21 @@ def resolve(preset: str, mapping: dict[str, str] | None = None) -> Settings:
     base = PRESETS[preset].settings
     known = known_roles(base)
     extra: dict[str, list[str]] = {r: [] for r in ROLES}
+    seen: dict[str, str] = {}  # normalised layer -> role
     for layer, role in (mapping or {}).items():
-        up = layer.strip().upper()
+        # the reader matches names with the floor prefix stripped (L1|WALLS -> WALLS), upper case
+        up = strip_floor_prefix(layer.strip(), base).upper()
         if not up:
             raise ValueError("layer names in the mapping must not be empty")
         if role not in ROLES:
             raise ValueError(f"unknown role {role!r} for layer {layer!r}; choose one of {list(ROLES)}")
         if up in known:
             raise ValueError(f"layer {layer!r} is already mapped by the {preset} preset ({known[up]})")
-        if any(up in v for v in extra.values()):
-            raise ValueError(f"layer {layer!r} is mapped twice")
+        if up in seen:  # the same layer on several floors may repeat, with one role
+            if seen[up] != role:
+                raise ValueError(f"layer {up!r} is mapped to both {seen[up]} and {role}")
+            continue
+        seen[up] = role
         extra[role].append(up)
     return replace(
         base,

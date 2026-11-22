@@ -1,13 +1,7 @@
 import { expect, test, vi } from "vitest";
-import { DEFAULT_CONVENTIONS, inspectLayers, isDefault, putProjectConventions } from "./conventions";
+import { inspectLayers, putProjectConventions } from "./conventions";
 
 const ok = (body: unknown) => vi.fn(async () => new Response(JSON.stringify(body))) as unknown as typeof fetch;
-
-test("only a non-default selection is sent with a request", () => {
-  expect(isDefault(DEFAULT_CONVENTIONS)).toBe(true);
-  expect(isDefault({ preset: "iso13567", mapping: {} })).toBe(false);
-  expect(isDefault({ preset: "aia", mapping: { WALLS: "wall" } })).toBe(false);
-});
 
 test("inspectLayers posts the spec and returns layers with the re-run preflight", async () => {
   const f = ok({ layers: [{ layer: "WALLS", role: null, entities: 3 }], issues: [], needs: [], floor_candidates: [] });

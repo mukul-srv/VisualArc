@@ -20,9 +20,6 @@ const req = <T,>(method: string, path: string, f: Fetch, body?: unknown) =>
     }),
   );
 
-/** Sent with a request only when it differs from the AIA default (the server then applies it). */
-export const isDefault = (c: ConventionsSpec) => c.preset === "aia" && Object.keys(c.mapping).length === 0;
-
 export const listConventions = (f: Fetch = fetch) => req<{ roles: string[]; presets: PresetInfo[] }>("GET", "/conventions", f);
 export const inspectLayers = (uploadId: string, spec: ConventionsSpec, f: Fetch = fetch) =>
   req<LayerInfo>("POST", `/uploads/${uploadId}/layers`, f, spec);

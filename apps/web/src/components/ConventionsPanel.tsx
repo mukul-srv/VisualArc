@@ -27,7 +27,8 @@ export function ConventionsPanel(p: {
   const preset = presets.find((x) => x.id === spec.preset);
   const known = new Set(Object.keys(preset?.layers ?? {}));
   // listed: the drawing's layers the preset does not know (mapped or not), plus saved mapping entries
-  const names = [...new Set([...layers.filter((l) => !known.has(l.layer.toUpperCase())).map((l) => l.layer), ...Object.keys(spec.mapping)])]
+  // (the server's role, not a name match, decides what the preset knows: floor prefixes are stripped)
+  const names = [...new Set([...layers.filter((l) => l.role === null || l.layer in spec.mapping).map((l) => l.layer), ...Object.keys(spec.mapping)])]
     .filter((n) => !known.has(n.toUpperCase()))
     .sort();
   const count = (n: string) => layers.find((l) => l.layer === n)?.entities;

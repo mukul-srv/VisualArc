@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from api import jobs
 from api.engine.adapters.dxf.reader import read_dxf
-from api.engine.conventions import PRESETS, resolve
+from api.engine.conventions import PRESETS, layer_roles, resolve
 from api.engine.settings import DEFAULTS
 from api.main import app
 
@@ -45,7 +45,8 @@ def test_custom_mapping_resolution():
     ("nope", {}, "unknown conventions preset"),
     ("aia", {"X": "roof"}, "unknown role"),
     ("aia", {"a-wall": "door"}, "already mapped"),
-    ("aia", {"X": "wall", "x": "door"}, "mapped twice"),
+    ("aia", {"X": "wall", "x": "door"}, "mapped to both"),
+    ("aia", {"L1|A-WALL": "door"}, "already mapped"),
     ("aia", {" ": "wall"}, "must not be empty"),
 ])
 def test_bad_conventions(preset, mapping, msg):
@@ -75,6 +76,31 @@ def test_nonstandard_fixture_needs_mapping():
     for new, old in back.items():
         text = text.replace(new, old)
     assert text == ref.buildings[0].model_dump_json()
+
+
+def test_prefixed_layers_map_by_stripped_name(tmp_path):
+    # consolidated-drawing style names: one floor prefix per floor, same layer on each
+    doc = ezdxf.readfile(INPUT / "fixture_nonstandard.dxf")
+    for e in doc.modelspace():
+        e.dxf.layer = f"L1|{e.dxf.layer}"
+    out = tmp_path / "prefixed.dxf"
+    doc.saveas(out)
+    prefixed_map = {f"L1|{k}": v for k, v in MAP.items()}
+    s = resolve("custom", prefixed_map)
+    assert s.wall_extra == ("WALLS",) and s.door_extra == ("DOORS",)
+    assert resolve("custom", {**prefixed_map, "L2|WALLS": "wall"}).wall_extra == ("WALLS",)  # repeat ok
+    p = read_dxf(out, **H, settings=s, scope=None)
+    assert not [i for i in p.issues if i.severity == "blocking"], p.issues
+    assert "unmapped_layer" not in {i.code for i in p.issues}
+    roles = {r["layer"]: r["role"] for r in layer_roles("custom", prefixed_map, ["L1|WALLS", "L1|DOORS"])}
+    assert roles == {"L1|WALLS": "wall", "L1|DOORS": "door"}
+
+
+def test_mapping_key_length_capped():
+    from api.generations import ConventionsSpec
+
+    with pytest.raises(ValueError, match="at most 255"):
+        ConventionsSpec(preset="custom", mapping={"X" * 256: "wall"})
 
 
 def test_partial_mapping_keeps_reporting_the_rest():

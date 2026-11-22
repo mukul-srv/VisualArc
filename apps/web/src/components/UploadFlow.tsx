@@ -5,7 +5,7 @@ import { addFloorJob, generateJob, STAGE_LABEL, type JobProgress } from "@/lib/j
 import { useRouter } from "next/navigation";
 import { createProject, getPresets, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
 import { viewerUrl, type Floor } from "@/lib/project";
-import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, isDefault, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
+import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
 import { ConventionsPanel } from "./ConventionsPanel";
@@ -81,7 +81,7 @@ export function UploadFlow() {
     setFailure(null);
     setBlockedIssues(null);
     setBusy(true);
-    const r = await splitUpload(pre.upload_id, { ...req.body, ...(isDefault(conv) ? {} : { conventions: conv }) });
+    const r = await splitUpload(pre.upload_id, { ...req.body, conventions: conv });
     setBusy(false);
     if (r.ok) router.push(`/viewer?project=${r.project_id}`);
     else if (r.kind === "blocked") setBlockedIssues(r.issues);
@@ -122,17 +122,15 @@ export function UploadFlow() {
         pid = c.project_id;
       }
       target = pid;
-      // saved on the project, so this and later floors use them (the floor request omits them)
-      if (!isDefault(conv)) {
-        const saved = await putProjectConventions(pid, conv);
-        if (!saved.ok) {
-          setBusy(false);
-          return setFailure(saved);
-        }
+      // always saved on the project (a reset to AIA included), so this and later floors use them
+      const saved = await putProjectConventions(pid, conv);
+      if (!saved.ok) {
+        setBusy(false);
+        return setFailure(saved);
       }
       r = await addFloorJob(pid, { ...req.params, floor_name: proj.floorName.trim(), ...(elev === undefined ? {} : { elevation: elev }) }, setJob);
       if (r.ok) setProj({ ...proj, target: pid }); // keep the id so the next floor joins it
-    } else r = await generateJob({ ...req.params, ...(isDefault(conv) ? {} : { conventions: conv }) }, setJob);
+    } else r = await generateJob({ ...req.params, conventions: conv }, setJob);
     setBusy(false);
     setJob(null);
     if (r.ok) router.push("floor" in r ? viewerUrl(target, (r.floor as Floor).id) : `/viewer?generation=${r.generation_id}`);
