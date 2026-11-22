@@ -92,9 +92,27 @@ def test_standalone_model_becomes_a_project():
     pid = r.json()["project_id"]
     m = c.get(f"{P}/{pid}").json()
     assert m["name"] == "Saved" and m["floors"][0]["generation_id"] == gid
-    assert m["floors"][0]["elevation"]["source"] == "defaulted"
+    # elevation and name come from the model's own canonical data, provenance included
+    canon = c.get(f"/api/v1/generations/{gid}/artifacts/canonical").json()["buildings"][0]["floors"][0]
+    assert m["floors"][0]["elevation"] == canon["elevation"] and m["floors"][0]["name"] == canon["name"]
     assert c.get(f"/api/v1/generations/{gid}/artifacts/glb").status_code == 200
     # already in a project; someone else's model
     assert c.post(f"{P}/from-generation", json={"generation_id": gid, "name": "Again"}).status_code == 409
     other = TestClient(app)
     assert other.post(f"{P}/from-generation", json={"generation_id": gid, "name": "X"}).status_code == 404
+
+
+def test_odd_floor_ids_do_not_break_adding_a_floor():
+    from api.db import ProjectRow, session
+    from api.projects import _floor_index
+
+    assert [_floor_index(i) for i in ("floor-3", "floor-x", "ground", "floor-", "a-b-7")] == [3, -1, -1, -1, -1]
+    c = TestClient(app)
+    pid = c.post(P, json={"name": "H"}).json()["project_id"]
+    g = _floor(c, pid, "Ground", 0)
+    with session() as db:  # a legacy/imported id that is not floor-N
+        row = db.get(ProjectRow, pid)
+        row.data = {**row.data, "floors": [{**row.data["floors"][0], "id": "legacy"}]}
+        db.commit()
+    new = _floor(c, pid, "Up", 3000)
+    assert new["id"] == "floor-0" and g["name"] == "Ground"

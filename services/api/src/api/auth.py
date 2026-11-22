@@ -389,7 +389,7 @@ async def oauth_callback(provider: str, request: Request):
     _client(provider)  # 404/503 before anything else
     try:
         profile = await fetch_profile(provider, request)
-    except Exception:  # noqa: BLE001  bad/denied/expired code, provider outage: back to the login page
+    except Exception:
         logging.getLogger("uvicorn.error").exception("%s oauth callback failed", provider)
         return _fail(f"{provider} sign-in failed")
     user = user_for_profile(provider, profile)

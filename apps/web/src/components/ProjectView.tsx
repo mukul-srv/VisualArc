@@ -70,7 +70,7 @@ export function ProjectView({ id }: { id: string }) {
         <Link href="/">All projects</Link>
       </main>
     );
-  const role = manifest.role ?? "owner";
+  const role = manifest.role ?? "viewer";
   const { edit, manage } = can(role);
   // a tab the role cannot see (e.g. #sharing for an editor) falls back to Floors
   const shown: TabId = tabsFor(role).some((t) => t.id === tab) ? tab : "floors";

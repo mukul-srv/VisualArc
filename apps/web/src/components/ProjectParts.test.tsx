@@ -93,3 +93,9 @@ test("sharing cap: a new email is blocked at the cap, a role change is not", () 
   expect(addBlocked(full, "i2@x.io")).toBeNull();
   expect(addBlocked({ ...full, collaborators: rows(5) }, "new@x.io")).toBeNull();
 });
+
+test("a missing role fails closed to viewer", () => {
+  const html = renderToStaticMarkup(<ProjectList projects={[{ ...summary, role: undefined }]} onDelete={() => {}} />);
+  expect(html).not.toMatch(/Add floor|>Share<|>Delete</);
+  expect(html).toContain("(shared: viewer)");
+});

@@ -31,7 +31,7 @@ export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSum
       </thead>
       <tbody>
         {projects.map((p) => {
-          const role = (p.role ?? "owner") as Role;
+          const role = (p.role ?? "viewer") as Role;
           const { edit, manage } = can(role);
           return (
             <tr key={p.id}>

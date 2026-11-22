@@ -7,6 +7,8 @@ version. Plain Python helpers (`create_project`, `add_floor`) let the floor-spli
 projects without HTTP.
 """
 
+import json
+import re
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
@@ -36,7 +38,7 @@ from api.generations import (
     run_generation,
 )
 from api.sharing import Principal
-from api.storage import new_id
+from api.storage import blob_path, new_id
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 # read-only endpoints a share link may open (no session required)
@@ -160,7 +162,7 @@ def add_floor(
         # id = creation index: deterministic, stable when the viewer sorts by elevation,
         # unique within a version (a restore may reuse an id for a different generation)
         # (next after the highest existing index, so ids stay unique after a floor was removed)
-        fid = f"floor-{1 + max((int(f['id'].rsplit('-', 1)[1]) for f in manifest['floors']), default=-1)}"
+        fid = f"floor-{1 + max((_floor_index(f['id']) for f in manifest['floors']), default=-1)}"
         gid, issues = run_generation(
             req, owner_id, db=db, floor_id=fid, floor_name=name, floor_elevation=elevation,
             elevation_assumed=assumed, scope=scope, progress=progress,
@@ -183,6 +185,12 @@ def add_floor(
         if version:
             _version(db, row, owner_id, f"Added floor {name}")
     return {"floor": floor, **result(gid, issues)}
+
+
+def _floor_index(floor_id: str) -> int:
+    """N of `floor-N`; -1 for any other id (legacy or imported), so it never breaks the next id."""
+    m = re.fullmatch(r"floor-(\d+)", floor_id)
+    return int(m[1]) if m else -1
 
 
 def _manifest(row: ProjectRow, v: ProjectVersionRow, role: str) -> dict:
@@ -220,18 +228,24 @@ class FromGeneration(BaseModel):
 @router.post("/projects/from-generation", status_code=201)
 def project_from_generation(req: FromGeneration, user: CurrentUser):
     """Turn one of my standalone models into a project (so it can be shared, versioned and
-    extended). One floor, elevation 0 tagged `defaulted`; the model itself is not regenerated."""
+    extended). One floor whose name and elevation (with its provenance) are those recorded in the
+    model's own canonical data, so nothing is restated; the model itself is not regenerated."""
     with session() as db, db.begin():
         g = owned(db, GenerationRow, req.generation_id, user.id, "unknown generation")
         used = db.scalar(select(ProjectVersionRow.id).where(
             ProjectVersionRow.snapshot["generation_ids"].contains([g.id])).limit(1))
         if used is not None:
             raise HTTPException(409, "this model already belongs to a project")
+        try:
+            canon = json.loads(blob_path(f"{g.blob_prefix}/model.canonical.json").read_text("utf-8"))
+            src = canon["buildings"][0]["floors"][0]
+            elevation = Measured.model_validate(src["elevation"]).model_dump(mode="json")
+            name = src["name"]
+        except (OSError, ValueError, KeyError, IndexError) as e:
+            raise HTTPException(409, "this model's data is missing or unreadable") from e
         pid = create_project(req.name, user.id, version=False, db=db)
         row = db.get(ProjectRow, pid)
-        floor = {"id": "floor-0", "name": "Ground",
-                 "elevation": Measured(value=0.0, source="defaulted").model_dump(mode="json"),
-                 "generation_id": g.id}
+        floor = {"id": "floor-0", "name": name, "elevation": elevation, "generation_id": g.id}
         row.data = {**row.data, "floors": [floor]}
         _version(db, row, user.id, "Created from a standalone model")
     return {"project_id": pid}
