@@ -1,16 +1,14 @@
 # Orchestration
 Global orchestration rules: ~/.claude/CLAUDE.md. This file adds project specifics only.
 
-- Roadmap/status: `docs/implementation/remaining-work-plan.md` (may be outdated). Before work, check git status, recent commits, relevant code, actual task status.
-- Act as coordinator. Parallelize only independent tasks and read-only research/reviews. Keep dependent geometry/schema work sequential. No overlapping edits.
-- Model roles: Opus designs geometry algorithms and schema changes (in the plan) and reviews critical geometry/schema PRs; Sonnet implements them; plan names the model per task; complex PR review: Haiku first, Sonnet if Haiku fails.
-- Review subagent changes; run relevant tests and the full suite before accepting.
-- Do batches of related tasks without asking on routine decisions covered by approved specs.
-- Commit locally after review + tests pass; conventional messages. Never push to `main` directly; push feature branches and merge PRs only after review.
-- Update the plan as task status changes.
+- Plan/status: `docs/implementation/phase-1-plan.md` (local). Check `git log` for actual progress.
+- Agents: `implementer` (Sonnet) and `reviewer` (Haiku) in `.claude/agents/` hold the standing rules; dispatch prompts give only the subtask and new facts.
+- One warm implementer per section; resume it per subtask. Geometry/schema work stays sequential.
+- Opus (plan mode) designs geometry algorithms and schema changes before a section starts.
+- CI (`.github/workflows/ci.yml`) is the test gate. Merge = green CI + passing reviewer.
+- Agents never use DB `visual_arc` (user's dev DB); they use `visual_arc_agent`.
 
 ## Merge flow
-- Before merging: remove the task's worktree if it is not locked.
-- If the worktree is locked by a live session, merge with `gh pr merge N --squash` (no `--delete-branch`), then `git push origin --delete <branch>`.
-- Remote branch deletion after merge is part of the approved merge flow; deleting any other remote branch needs user approval.
+- Merge with `gh pr merge N --squash`, then `git push origin --delete <branch>`; remove finished worktrees.
+- Remote branch deletion after merge is approved; deleting any other remote branch needs user approval.
 - Web typecheck: `npm run typecheck`. Never bare `tsc` in a fresh worktree.

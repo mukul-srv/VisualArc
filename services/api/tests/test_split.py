@@ -12,9 +12,9 @@ import pytest
 import trimesh
 from fastapi.testclient import TestClient
 
+from api import uploads
 from api.engine.adapters.dxf.reader import load_doc, read_dxf
 from api.engine.adapters.dxf.split import FloorScope, detect_floors
-from api import uploads
 from api.engine.canonical.model import Issue
 from api.engine.settings import DEFAULTS, Settings
 from api.main import app
