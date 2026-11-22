@@ -7,6 +7,16 @@ import styles from "./dashboard.module.css";
 
 type Role = "viewer" | "editor";
 
+/** A new email needs a free slot; changing an existing collaborator's role does not. */
+export function addBlocked(info: AccessInfo, email: string): string | null {
+  const e = email.trim().toLowerCase();
+  const exists = [...info.collaborators, ...info.invites].some((x) => x.email === e);
+  const used = info.collaborators.length + info.invites.length;
+  if (!exists && used >= info.max_collaborators)
+    return `Limit of ${info.max_collaborators} collaborators reached. Remove someone to invite more.`;
+  return null;
+}
+
 // Owner-only sharing panel: collaborators and pending invites (role change, remove) and the read-only link.
 export function AccessPanel({ projectId }: { projectId: string }) {
   const [info, setInfo] = useState<AccessInfo | null>(null);
@@ -39,6 +49,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
   }
 
   const link = info?.link_token ? `${window.location.origin}${viewerUrl(projectId, undefined, undefined, info.link_token)}` : null;
+  const blocked = info ? addBlocked(info, email) : null;
   const used = info ? info.collaborators.length + info.invites.length : 0;
   const rows = info ? [
     ...info.collaborators.map((c) => ({ email: c.email, label: `${c.display_name} <${c.email}>`, role: c.role })),
@@ -50,7 +61,9 @@ export function AccessPanel({ projectId }: { projectId: string }) {
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {info && (
         <>
-          <p>{used} of {info.max_collaborators} collaborator slots used.</p>
+          <p>{used} of {info.max_collaborators} collaborator slots used (people with access plus pending invites).</p>
+          {blocked && email.trim() && <p role="status">{blocked}</p>}
+          {used >= info.max_collaborators && !email.trim() && <p role="status">Limit of {info.max_collaborators} collaborators reached. Remove someone to invite more.</p>}
           <ul>
             {rows.map((r) => (
               <li key={r.email} className={styles.row}>
@@ -70,7 +83,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
               <option value="viewer">viewer</option>
               <option value="editor">editor</option>
             </select>
-            <button disabled={busy || !email.trim()}>Add</button>
+            <button disabled={busy || !email.trim() || blocked !== null} title={blocked ?? (email.trim() ? undefined : "Enter an email first")}>Add</button>
           </form>
           <p>Invites for emails without an account convert only when that person signs in with GitHub or Google using the same verified email. Someone who signs up with a password must be added again after registering.</p>
           <h3>Read-only link</h3>

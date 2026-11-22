@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { addFloorJob, generateJob, STAGE_LABEL, type JobProgress } from "@/lib/jobs";
 import { useRouter } from "next/navigation";
-import { createProject, getPresets, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
-import { viewerUrl, type Floor } from "@/lib/project";
+import { createProject, getPresets, getProject, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
+import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
+import { AppNav } from "./AppNav";
 import { ConventionsPanel } from "./ConventionsPanel";
 import { IssueList } from "./IssueList";
 import { UploadForm } from "./UploadForm";
@@ -36,6 +37,19 @@ export function UploadFlow() {
   useEffect(() => {
     getPresets().then((r) => r.ok && setPresets(r.presets)); // placeholders only; the backend applies them
     listConventions().then((r) => r.ok && setConvInfo({ presets: r.presets, roles: r.roles }));
+  }, []);
+
+  // /new?project=<id> (Add floor on the project page or dashboard): add to that project
+  const [addingTo, setAddingTo] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("project");
+    if (!id || !isGenerationId(id)) return;
+    getProject(id).then((r) => {
+      const m = r.ok ? parseManifest(r.manifest) : null;
+      if (!m) return setFailure(r.ok ? { ok: false, kind: "error", message: "Malformed project.", issues: [] } : r);
+      setAddingTo({ id, name: m.name });
+      setProj((p) => ({ ...p, on: true, target: id }));
+    });
   }, []);
 
   // An existing project target brings its saved conventions along.
@@ -145,11 +159,14 @@ export function UploadFlow() {
 
   return (
     <main style={{ maxWidth: 760, margin: "32px auto", padding: "0 16px", font: "15px system-ui" }}>
-      <h1>DXF floor plan to 3D</h1>
+      <AppNav />
+      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "DXF floor plan to 3D"}</h1>
+      {addingTo && <p><a href={`/projects/${addingTo.id}`}>Back to the project</a></p>}
       <p>Upload a DXF drawn to the supported convention. Values the drawing lacks use nominal defaults, and every one is reported as assumed.</p>
       <input type="file" accept=".dxf" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
         <p role="status">
+          {job && "Large drawings can take a minute; keep this page open. "}
           {job ? `${STAGE_LABEL[job.stage] ?? job.stage} (${job.progress}%)` : "Working…"}
           {job && <progress max={100} value={job.progress} style={{ marginLeft: 8 }} />}
         </p>

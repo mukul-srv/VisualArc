@@ -35,6 +35,11 @@ export const recentGenerations = (f: Fetch = fetch) => listOf<RecentGeneration>(
 export const listVersions = (pid: string, f: Fetch = fetch) => listOf<VersionInfo>(`/projects/${pid}/versions`, f);
 export const restoreVersion = (pid: string, n: number, f: Fetch = fetch) => call("POST", `/projects/${pid}/versions/${n}/restore`, f);
 export const renameProject = (pid: string, name: string, f: Fetch = fetch) => call("PATCH", `/projects/${pid}`, f, { name });
+export const renameFloor = (pid: string, floorId: string, name: string, f: Fetch = fetch) =>
+  call("PATCH", `/projects/${pid}/floors/${floorId}`, f, { name });
+export const removeFloor = (pid: string, floorId: string, f: Fetch = fetch) => call("DELETE", `/projects/${pid}/floors/${floorId}`, f);
+export const saveAsProject = (generationId: string, name: string, f: Fetch = fetch) =>
+  call("POST", "/projects/from-generation", f, { generation_id: generationId, name });
 export const deleteProject = (pid: string, f: Fetch = fetch) => call("DELETE", `/projects/${pid}`, f);
 
 /** "2026-05-01T10:20:30+00:00" -> "2026-05-01 10:20 UTC" (stable across locales and SSR). */

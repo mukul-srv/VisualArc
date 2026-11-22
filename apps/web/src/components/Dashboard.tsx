@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { listProjects, recentGenerations, type ProjectSummary, type RecentGeneration } from "../lib/projects";
+import { useRouter } from "next/navigation";
+import { deleteProject, listProjects, recentGenerations, saveAsProject, type ProjectSummary, type RecentGeneration } from "../lib/projects";
+import { AppNav } from "./AppNav";
 import { ProjectList, RecentList } from "./lists";
 import styles from "./dashboard.module.css";
 
@@ -10,21 +12,43 @@ export function Dashboard() {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [recent, setRecent] = useState<RecentGeneration[]>([]);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+  const reload = () => {
     listProjects().then((r) => (r.ok ? setProjects(r.items) : setError(r.message)));
     recentGenerations().then((r) => r.ok && setRecent(r.items));
+  };
+  useEffect(() => {
+    queueMicrotask(reload);
   }, []);
+  async function act(call: () => Promise<{ ok: boolean; message?: string }>, then: () => void) {
+    setBusy(true);
+    setError(null);
+    const r = await call();
+    setBusy(false);
+    if (r.ok) then();
+    else setError(r.message ?? "failed");
+  }
   return (
     <main className={styles.page}>
+      <AppNav />
       <div className={styles.head}>
         <h1>My projects</h1>
         <Link href="/new">New project</Link>
       </div>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {projects === null && !error && <p role="status">Loading…</p>}
-      {projects && <ProjectList projects={projects} />}
+      {projects && <ProjectList projects={projects} busy={busy} onDelete={(p) => act(() => deleteProject(p.id), reload)} />}
       <h2>Recent buildings</h2>
-      <RecentList items={recent} />
+      <RecentList items={recent} busy={busy}
+        onSave={async (gid, name) => {
+          setBusy(true);
+          setError(null);
+          const r = await saveAsProject(gid, name);
+          setBusy(false);
+          if (r.ok) router.push(`/projects/${String(r.project_id)}`);
+          else setError(r.message);
+        }} />
     </main>
   );
 }
