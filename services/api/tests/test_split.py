@@ -307,3 +307,26 @@ def test_user_elevation_wins_and_mixed_collision_is_422(client):
     pre = _upload(client)
     body = _body(pre, elevs=(0, 0))  # user-given duplicate still rejected
     assert _post(client, pre, body).status_code == 422
+
+
+def test_split_writes_a_single_version(client):
+    pre = _upload(client)
+    r = _post(client, pre, _body(pre))
+    assert r.status_code == 201
+    vs = client.get(f"/api/v1/projects/{r.json()['project_id']}/versions").json()
+    assert [(v["number"], v["floor_count"]) for v in vs] == [(1, 2)]
+
+
+def test_empty_elevation_message_and_order_follow_request_order(client):
+    pre = _upload(client)
+    body = _body(pre)
+    for fl in body["floors"]:
+        del fl["elevation"]
+    body["floors"].reverse()  # elevations follow the order the floors are listed
+    r = _post(client, pre, body)
+    assert r.status_code == 201
+    by_name = {fl["floor"]["name"]: fl for fl in r.json()["floors"]}
+    assert by_name["First"]["floor"]["elevation"]["value"] == 0.0
+    assert by_name["Ground"]["floor"]["elevation"]["value"] == 3000.0  # residential step
+    msg = next(i["message"] for i in by_name["Ground"]["issues"] if i["code"] == "elevation_defaulted")
+    assert "floor 2 in floor order" in msg and "detected" not in msg

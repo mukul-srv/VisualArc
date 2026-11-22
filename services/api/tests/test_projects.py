@@ -173,4 +173,8 @@ def test_import_projects_is_idempotent(client, tmp_path):
     (d / "project.json").write_text(json.dumps({"id": pid, "name": "Old", "floors": []}))
     assert import_projects() == (1, 0)
     assert import_projects() == (0, 1)
+    assert client.get(f"{P}/{pid}").status_code == 404  # ownerless rows are inaccessible
+    email = client.get("/api/v1/auth/me").json()["email"]
+    assert import_projects(email) == (0, 1)  # --owner claims the ownerless project
     assert client.get(f"{P}/{pid}").json()["name"] == "Old"
+    assert [v["number"] for v in client.get(f"{P}/{pid}/versions").json()] == [1]

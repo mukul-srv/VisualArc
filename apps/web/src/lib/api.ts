@@ -133,9 +133,10 @@ export const getPresets = (f: Fetch = fetch) =>
     return res.ok ? new Response(JSON.stringify({ presets: await res.json() })) : res;
   });
 
-export const getProject = (projectId: string, f: Fetch = fetch) =>
+export const getProject = (projectId: string, f: Fetch = fetch, version?: number) =>
   send<{ manifest: unknown }>(async () => {
-    const res = await f(`${API_BASE}/api/v1/projects/${projectId}`, { credentials: "include" });
+    const q = version === undefined ? "" : `?version=${version}`;
+    const res = await f(`${API_BASE}/api/v1/projects/${projectId}${q}`, { credentials: "include" });
     // wrap so the shared `send` can spread it; the caller validates with parseManifest
     return res.ok ? new Response(JSON.stringify({ manifest: await res.json() })) : res;
   });

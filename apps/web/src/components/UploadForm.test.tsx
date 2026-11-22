@@ -18,18 +18,18 @@ const cands = [0, 1].map((n) => ({
 }));
 const pre = (o: Partial<Preflight> = {}): Preflight => ({ upload_id: "u", issues: [], needs: [], inventory: { layers: [], entity_counts: {} }, ...o });
 
-const render = (p: Preflight, f: FormValues = form) =>
+const render = (p: Preflight, f: FormValues = form, over: { exclude?: number; target?: string } = {}) =>
   renderToStaticMarkup(
     <UploadForm
       pre={p}
       form={f}
       setForm={() => {}}
       presets={presets}
-      rows={initialRows(p.floor_candidates ?? [])}
+      rows={initialRows(p.floor_candidates ?? []).map((r, i) => ({ ...r, exclude: i === over.exclude }))}
       setRow={() => {}}
       projectName=""
       setProjectName={() => {}}
-      proj={{ on: false, target: "", floorName: "", elevation: "" }}
+      proj={{ on: over.target !== undefined, target: over.target ?? "", floorName: "", elevation: "" }}
       setProj={() => {}}
       errors={[]}
       disabled={false}
@@ -78,4 +78,15 @@ test("split: floor list shows Build + Name only in General; elevation and offset
   expect(html).toContain("Elevation L1");
   expect(html).toContain("Offset X L1");
   expect(html).toContain('placeholder="default 3000"'); // second floor: order index 1 x residential 3000
+});
+
+test("an excluded floor row has no elevation placeholder", () => {
+  const html = render(pre({ floor_candidates: cands }), form, { exclude: 0 });
+  expect(html.match(/<input[^>]*aria-label="Elevation L0"[^>]*>/)?.[0]).not.toContain("placeholder");
+  expect(html.match(/<input[^>]*aria-label="Elevation L1"[^>]*>/)?.[0]).toContain('placeholder="default 0"'); // first kept floor
+});
+
+test("project elevation placeholder: first floor of a new project says default 0", () => {
+  expect(render(pre(), form, { target: "New house" })).toContain('placeholder="default 0"');
+  expect(render(pre(), form, { target: "a".repeat(32) })).toContain('placeholder="default highest floor + 3000"');
 });
