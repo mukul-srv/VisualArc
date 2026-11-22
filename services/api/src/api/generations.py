@@ -78,17 +78,22 @@ def read_project(req: GenerationRequest, user_id: str | None = None, **floor) ->
 
 
 def run_generation(
-    req: GenerationRequest, owner_id: str | None = None, db=None, **floor
+    req: GenerationRequest, owner_id: str | None = None, db=None, progress=None, **floor
 ) -> tuple[str | None, list[dict]]:
     """Shared by /generations and project floors. Returns (generation_id, issues);
-    the id is None when blocking issues stopped it (nothing is stored). With `db` the
+    `progress(stage)` reports stages to a job; the id is None when blocking issues stopped it (nothing is stored). With `db` the
     row joins the caller's transaction (the caller commits); blobs are never rolled back."""
+    if progress:
+        progress("parsing")
     project = read_project(req, owner_id, **floor)
+    if progress:
+        progress("building-model")
     issues = [i.model_dump(mode="json") for i in project.issues]
     if has_blocking(project):  # nothing is stored: the client fixes inputs and retries
         return None, issues
     gid = new_id()
-    write_artifacts(project, blob_path(f"{_prefix(gid)}/{_STEM}.glb").parent, _STEM)
+    write_artifacts(project, blob_path(f"{_prefix(gid)}/{_STEM}.glb").parent, _STEM,
+                    progress=progress)
     row = GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id)
     if db is not None:
         db.add(row)
