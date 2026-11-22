@@ -21,6 +21,8 @@ export const STAGE_LABEL: Record<string, string> = {
   done: "Done",
 };
 
+const POLL_RETRIES = 4;
+const POLL_TIMEOUT_MS = 10 * 60 * 1000;
 const url = (p: string) => `${API_BASE}/api/v1/jobs${p}`;
 
 async function run<T>(
@@ -28,19 +30,33 @@ async function run<T>(
   onProgress: ((p: JobProgress) => void) | undefined,
   f: Fetch,
   intervalMs: number,
+  timeoutMs = POLL_TIMEOUT_MS,
 ): Promise<Result<T>> {
   const started = await send<{ job_id: string }>(start);
   if (!started.ok) return started;
+  const deadline = Date.now() + timeoutMs;
+  let errors = 0;
   for (;;) {
-    const polled = await send<JobStatus>(() => f(url(`/${started.job_id}`), { credentials: "include" }));
-    if (!polled.ok) return polled;
-    onProgress?.({ stage: polled.stage, progress: polled.progress });
-    if (polled.status === "succeeded") return { ok: true, ...(polled.result as object) } as Result<T>;
-    if (polled.status === "failed") {
-      const issues = polled.result?.issues ?? [];
-      const fail: Failure = { ok: false, kind: issues.length ? "blocked" : "error", message: polled.error ?? "job failed", issues };
-      return fail;
+    let code = 0; // stays 0 when the request never got a response
+    const polled = await send<JobStatus>(async () => {
+      const res = await f(url(`/${started.job_id}`), { credentials: "include" });
+      code = res.status;
+      return res;
+    });
+    if (!polled.ok) {
+      // transient poll errors (network blip, 5xx) are retried; 401/404 and the like are final
+      if ((code !== 0 && code < 500) || ++errors > POLL_RETRIES) return polled;
+    } else {
+      errors = 0;
+      onProgress?.({ stage: polled.stage, progress: polled.progress });
+      if (polled.status === "succeeded") return { ok: true, ...(polled.result as object) } as Result<T>;
+      if (polled.status === "failed") {
+        const issues = polled.result?.issues ?? [];
+        return { ok: false, kind: issues.length ? "blocked" : "error", message: polled.error ?? "job failed", issues } as Failure;
+      }
     }
+    if (Date.now() > deadline)
+      return { ok: false, kind: "error", message: "Timed out waiting for the job. It may still finish; check the project later.", issues: [] };
     await new Promise((r) => setTimeout(r, intervalMs));
   }
 }

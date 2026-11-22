@@ -28,3 +28,20 @@ test("start failure (viewer 404) is returned as is", async () => {
   const r = await generateJob({ upload_id: "u" }, undefined, seq(json({ detail: "unknown upload_id" }, 404)), 0);
   expect(r).toMatchObject({ ok: false, message: "unknown upload_id" });
 });
+
+test("transient poll errors are retried, then the job result is used", async () => {
+  const f = seq(
+    json({ job_id: "j" }, 202),
+    json({ detail: "oops" }, 502),
+    json({ detail: "oops" }, 502),
+    json({ status: "succeeded", stage: "done", progress: 100, error: null, result: { generation_id: "g", issues: [] } }),
+  );
+  expect(await generateJob({ upload_id: "u" }, undefined, f, 0)).toMatchObject({ ok: true, generation_id: "g" });
+});
+
+test("persistent poll errors fail; 404 fails at once", async () => {
+  const many = vi.fn(async (u: RequestInfo | URL) => (String(u).endsWith("/generations") ? json({ job_id: "j" }, 202) : json({}, 502))) as unknown as typeof fetch;
+  expect(await generateJob({ upload_id: "u" }, undefined, many, 0)).toMatchObject({ ok: false, kind: "error" });
+  const gone = seq(json({ job_id: "j" }, 202), json({ detail: "unknown job" }, 404));
+  expect(await generateJob({ upload_id: "u" }, undefined, gone, 0)).toMatchObject({ ok: false, message: "unknown job" });
+});

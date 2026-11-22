@@ -86,7 +86,8 @@ def test_unexpected_error_and_blocking_issues(monkeypatch):
     monkeypatch.setattr(jobs, "run_generation", boom)
     jobs.execute(jid)
     s = _status(c, jid).json()
-    assert s["status"] == "failed" and "kaboom" in s["error"]
+    assert s["status"] == "failed" and "kaboom" not in s["error"] and "RuntimeError" not in s["error"]
+    assert s["error"].startswith("Generation failed during")
 
     monkeypatch.setattr(jobs, "run_generation", lambda *a, **k: (None, [{"code": "X", "severity": "blocking"}]))
     jid = _start(c).json()["job_id"]
@@ -145,3 +146,19 @@ def test_real_worker_runs_job(monkeypatch):
             break
         time.sleep(0.1)
     assert s["status"] == "succeeded", s
+
+
+def test_db_error_on_final_write_still_fails_job(monkeypatch):
+    c = TestClient(app)
+    jid = _start(c).json()["job_id"]
+    orig = jobs._set
+
+    def flaky(job_id, **f):
+        if f.get("status") == "succeeded":
+            raise RuntimeError("db down")
+        orig(job_id, **f)
+
+    monkeypatch.setattr(jobs, "_set", flaky)
+    jobs.execute(jid)  # must not raise
+    s = _status(c, jid).json()
+    assert s["status"] == "failed" and "db down" not in s["error"]

@@ -29,18 +29,12 @@ log = logging.getLogger(__name__)
 STAGES = {"queued": 0, "parsing": 10, "building-model": 50, "exporting": 75, "done": 100}
 RESTART_ERROR = "The API restarted while this job was running; start it again."
 
-_pool: ThreadPoolExecutor | None = None
-
-
-def _executor() -> ThreadPoolExecutor:
-    global _pool
-    if _pool is None:
-        _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="job")
-    return _pool
+# created at import: the single-runner invariant must not depend on a lazy-init race
+_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="job")
 
 
 def submit(job_id: str) -> None:
-    _executor().submit(execute, job_id)
+    _pool.submit(execute, job_id)
 
 
 def _set(job_id: str, **fields) -> None:
@@ -49,10 +43,12 @@ def _set(job_id: str, **fields) -> None:
             updated_at=datetime.now(UTC), **fields))
 
 
-def _stage(job_id: str):
-    def progress(stage: str) -> None:
-        _set(job_id, stage=stage, progress=STAGES[stage])
-    return progress
+def _fail(job_id: str, error: str, result: dict | None = None) -> None:
+    """Best effort: a DB error here is logged; recover_jobs cleans up on the next start."""
+    try:
+        _set(job_id, status="failed", error=error[:2000], result=result)
+    except Exception:
+        log.exception("job %s: could not record failure", job_id)
 
 
 def _detail(e: HTTPException) -> str:
@@ -60,30 +56,38 @@ def _detail(e: HTTPException) -> str:
 
 
 def execute(job_id: str) -> None:
-    """Run one job to a terminal state; never raises."""
-    with session() as db:
-        job = db.get(JobRow, job_id)
-        if job is None or job.status != "queued":
-            return
-        kind, owner, pid, request = job.kind, job.owner_id, job.project_id, job.request
-    _set(job_id, status="running")
-    progress = _stage(job_id)
+    """Run one job to a terminal state; never raises. Engine input errors (HTTPException, written
+    for the user) are stored as is; anything else is stored generically and logged in full."""
+    stage = "queued"
+
+    def progress(new: str) -> None:
+        nonlocal stage
+        _set(job_id, stage=new, progress=STAGES[new])
+        stage = new
+
     try:
+        with session() as db:
+            job = db.get(JobRow, job_id)
+            if job is None or job.status != "queued":
+                return
+            kind, owner, pid, request = job.kind, job.owner_id, job.project_id, job.request
+        _set(job_id, status="running")
         if kind == "floor":
             out = add_floor(pid, FloorRequest(**request), None, owner, progress=progress)
         else:
             gid, issues = run_generation(GenerationRequest(**request), owner, progress=progress)
-            out = JSONResponse(status_code=409, content={"issues": issues}) if gid is None                 else result(gid, issues)
+            out = (JSONResponse(status_code=409, content={"issues": issues}) if gid is None
+                   else result(gid, issues))
         if isinstance(out, JSONResponse):  # blocking issues: nothing stored
-            issues = json.loads(out.body)["issues"]
-            return _set(job_id, status="failed", error="Blocking issues; no model generated.",
-                        result={"issues": issues})
-        _set(job_id, status="succeeded", stage="done", progress=100, result=out)
+            _fail(job_id, "Blocking issues; no model generated.",
+                  {"issues": json.loads(out.body)["issues"]})
+        else:
+            _set(job_id, status="succeeded", stage="done", progress=100, result=out)
     except HTTPException as e:
-        _set(job_id, status="failed", error=_detail(e)[:2000])
-    except Exception as e:
-        log.exception("job %s failed", job_id)
-        _set(job_id, status="failed", error=f"Unexpected error: {type(e).__name__}: {e}"[:2000])
+        _fail(job_id, _detail(e))
+    except Exception:
+        log.exception("job %s failed during %s", job_id, stage)
+        _fail(job_id, f"Generation failed during {stage}. Try again; if it keeps failing, contact the operator.")
 
 
 def recover_jobs() -> int:
