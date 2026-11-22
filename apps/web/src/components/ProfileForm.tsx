@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { logout, me, MIN_PASSWORD, updateProfile, type User } from "../lib/auth";
 import { RetryNotice } from "./RequireAuth";
 import styles from "./auth.module.css";
@@ -46,6 +47,7 @@ export function ProfileForm() {
   if (!user) return <p role="status">Loading…</p>;
   return (
     <main className={styles.card}>
+      <Breadcrumbs trail={[{ label: "Dashboard", href: "/" }, { label: "Profile" }]} />
       <h1>Profile</h1>
       <p>Signed in as {user.email}</p>
       {msg && (

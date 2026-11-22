@@ -1,30 +1,71 @@
 import type { Issue } from "../lib/api";
-import { refs } from "../lib/selection";
-import { splitIssues } from "../lib/params";
+import { groupIssues, LEVEL_LABEL, locations, summarize, summaryLine, type IssueGroup } from "../lib/issues";
 
-// Blocking and warnings are distinct in text and structure (never colour alone).
-export function IssueList({ issues }: { issues: Issue[] }) {
-  const { blocking, warnings } = splitIssues(issues);
-  if (!issues.length) return <p>No issues found.</p>;
-  const item = (i: Issue, label: string, color: string) => (
-    <li key={`${i.code}-${i.message}`} style={{ color }}>
-      <strong>{i.code.endsWith("_defaulted") ? "assumed default" : label}</strong> <code>{i.code}</code>: {i.message}{" "}
-      <small>({i.sources.length ? refs(i.sources).join(", ") : "no source entity"})</small>
-    </li>
-  );
+const COLOR = { error: "#b00020", warning: "#8a6100", info: "#35516b" } as const;
+
+function Items({ issues }: { issues: Issue[] }) {
   return (
-    <div>
-      {blocking.length > 0 && (
+    <ul>
+      {issues.map((i, n) => {
+        const locs = locations(i);
+        return (
+          <li key={`${n}-${i.message}`}>
+            {i.message}{" "}
+            {locs.length > 0 ? (
+              <details style={{ display: "inline" }}>
+                <summary style={{ display: "inline", cursor: "pointer" }}>
+                  <small>{locs.length} {locs.length === 1 ? "location" : "locations"}</small>
+                </summary>{" "}
+                <small>{locs.join(", ")}</small>
+              </details>
+            ) : (
+              <small>(no source entity)</small>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Group({ g, open }: { g: IssueGroup; open?: boolean }) {
+  return (
+    <details open={open} style={{ margin: "6px 0" }}>
+      <summary style={{ cursor: "pointer", color: COLOR[g.level] }}>
+        <strong>{LEVEL_LABEL[g.level]}{g.level === "info" ? " (engine warning)" : ""}:</strong> {g.title} ({g.issues.length})
+        {g.tag && <> <em>[{g.tag}]</em></>}
+      </summary>
+      <p style={{ margin: "4px 0" }}>{g.help}</p>
+      <Items issues={g.issues} />
+      <p style={{ margin: 0 }}><small>Code: <code>{g.code}</code></small></p>
+    </details>
+  );
+}
+
+// Errors (blocking issues) stay open and visible; warnings and info sit in one collapsed
+// accordion, grouped by what they mean. Presentation only: every issue is listed in its group.
+export function IssueList({ issues }: { issues: Issue[] }) {
+  if (!issues.length) return <p>No issues found.</p>;
+  const groups = groupIssues(issues);
+  const s = summarize(issues);
+  const errors = groups.filter((g) => g.level === "error");
+  const rest = groups.filter((g) => g.level !== "error");
+  const restLine = summaryLine({ ...s, error: 0 });
+  return (
+    <div role="region" aria-label="Issues">
+      <p role="status"><strong>{summaryLine(s)}</strong></p>
+      {errors.length > 0 && (
         <section aria-label="Blocking issues">
-          <h3>Blocking issues ({blocking.length}): generation is not possible until resolved</h3>
-          <ul>{blocking.map((i) => item(i, "BLOCKING", "#b00020"))}</ul>
+          <h3>Blocking issues ({s.error}): generation is not possible until resolved</h3>
+          {errors.map((g) => <Group key={`${g.level}:${g.code}`} g={g} open />)}
         </section>
       )}
-      {warnings.length > 0 && (
-        <section aria-label="Warnings">
-          <h3>Warnings ({warnings.length})</h3>
-          <ul>{warnings.map((i) => item(i, "warning", "#8a6100"))}</ul>
-        </section>
+      {rest.length > 0 && (
+        <details>
+          <summary style={{ cursor: "pointer" }}>Warnings and notes ({restLine})</summary>
+          {s.info > 0 && <p style={{ margin: "4px 0" }}><small>Info items are engine warnings about values the engine assumed or noted (for example assumed defaults). They are listed here, none are hidden.</small></p>}
+          {rest.map((g) => <Group key={`${g.level}:${g.code}`} g={g} />)}
+        </details>
       )}
     </div>
   );

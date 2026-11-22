@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProject } from "../lib/api";
@@ -10,6 +9,7 @@ import { ConventionsPanel } from "./ConventionsPanel";
 import { getProjectConventions, listConventions, putProjectConventions, type ConventionsSpec, type PresetInfo } from "../lib/conventions";
 import { AccessPanel } from "./AccessPanel";
 import { AppNav } from "./AppNav";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { VersionList } from "./lists";
 import { can, FloorList, ProjectTabs, ProjectToolbar, tabsFor, type TabId } from "./ProjectParts";
 import styles from "./dashboard.module.css";
@@ -66,8 +66,8 @@ export function ProjectView({ id }: { id: string }) {
     return (
       <main className={styles.page}>
         <AppNav />
+        <Breadcrumbs trail={[{ label: "Dashboard", href: "/" }, { label: "Project" }]} />
         {error ? <p role="alert" className={styles.error}>{error}</p> : <p role="status">Loading…</p>}
-        <Link href="/">All projects</Link>
       </main>
     );
   const role = manifest.role ?? "viewer";
@@ -77,6 +77,7 @@ export function ProjectView({ id }: { id: string }) {
   return (
     <main className={styles.page}>
       <AppNav />
+      <Breadcrumbs trail={[{ label: "Dashboard", href: "/" }, { label: manifest.name }]} />
       <h1>{manifest.name}</h1>
       {!edit && <p>You have view-only access to this project.</p>}
       <ProjectToolbar id={id} role={role} floors={manifest.floors} busy={busy}

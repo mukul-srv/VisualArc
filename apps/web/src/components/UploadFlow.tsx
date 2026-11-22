@@ -7,13 +7,14 @@ import { createProject, getPresets, getProject, isGenerationId, splitUpload, upl
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
+import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile } from "@/lib/upload-state";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
 import { AppNav } from "./AppNav";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { ConventionsPanel } from "./ConventionsPanel";
 import { IssueList } from "./IssueList";
 import { UploadForm } from "./UploadForm";
 
-const EMPTY: FormValues = { buildingType: "residential", wallHeight: "", ceilingHeight: "", units: "", doorHeight: "", windowHeight: "", windowSill: "" };
 // Blocking issues the parameter form itself resolves; they must not lock the button.
 const FORM_RESOLVABLE = ["units_missing", "floor_split_unconfirmed"];
 
@@ -22,13 +23,13 @@ export function UploadFlow() {
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<JobProgress | null>(null);
   const [pre, setPre] = useState<Preflight | null>(null);
-  const [form, setForm] = useState<FormValues>(EMPTY);
+  const [form, setForm] = useState<FormValues>(EMPTY_FORM);
   const [errors, setErrors] = useState<string[]>([]);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [blockedIssues, setBlockedIssues] = useState<Issue[] | null>(null);
   const [rows, setRows] = useState<SplitRow[]>([]);
   const [projectName, setProjectName] = useState("");
-  const [proj, setProj] = useState({ on: false, target: "", floorName: "", elevation: "" });
+  const [proj, setProj] = useState(NO_TARGET);
 
   const [presets, setPresets] = useState<Presets | null>(null);
   const [conv, setConv] = useState<ConventionsSpec>(DEFAULT_CONVENTIONS);
@@ -52,12 +53,24 @@ export function UploadFlow() {
     });
   }, []);
 
-  // An existing project target brings its saved conventions along.
+  // An existing project target brings its saved conventions along (also for a new file).
+  const uploadId = pre?.upload_id;
   useEffect(() => {
     const t = proj.target.trim();
-    if (proj.on && isGenerationId(t)) getProjectConventions(t).then((r) => r.ok && setConv({ preset: r.preset, mapping: r.mapping }));
-  }, [proj.on, proj.target]);
+    if (proj.on && isGenerationId(t))
+      getProjectConventions(t).then((r) => {
+        if (r.ok) applyConventions({ preset: r.preset, mapping: r.mapping }, uploadId);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the target or file changes
+  }, [proj.on, proj.target, uploadId]);
 
+  // Changing the target clears what depended on the old one (elevation default, conventions).
+  function changeProj(next: typeof proj) {
+    const r = changeTarget(proj, next);
+    setProj(r.proj);
+    setErrors([]);
+    if (r.resetConventions) applyConventions(DEFAULT_CONVENTIONS);
+  }
   // Re-run the preflight under the chosen conventions: the mapping can resolve blocking issues.
   async function applyConventions(spec: ConventionsSpec, uploadId = pre?.upload_id) {
     setConv(spec);
@@ -65,6 +78,7 @@ export function UploadFlow() {
     const r = await inspectLayers(uploadId, spec);
     if (!r.ok) return setFailure(r);
     setFailure(null);
+    setBlockedIssues(null); // a 409 from an earlier attempt no longer applies under new conventions
     setLayers(r.layers);
     setPre((cur) => (cur && cur.upload_id === uploadId ? { ...cur, issues: r.issues, needs: r.needs, floor_candidates: r.floor_candidates } : cur));
     setRows((cur) => (cur.length === r.floor_candidates.length ? cur : initialRows(r.floor_candidates)));
@@ -77,13 +91,20 @@ export function UploadFlow() {
     setFailure(null);
     setBlockedIssues(null);
     setErrors([]);
+    // everything typed or chosen for the previous file goes; a ?project= target stays
+    const fresh = resetForNewFile(proj, addingTo !== null);
+    setForm(fresh.form);
+    setProjectName(fresh.projectName);
+    setProj(fresh.proj);
+    setLayers([]);
     const r = await uploadDxf(file);
     setBusy(false);
     if (r.ok) {
       setPre(r);
       setRows(initialRows(r.floor_candidates ?? []));
       setConv(DEFAULT_CONVENTIONS);
-      applyConventions(DEFAULT_CONVENTIONS, r.upload_id);
+      // an existing project's conventions are loaded by the effect above instead
+      if (!(fresh.proj.on && isGenerationId(fresh.proj.target.trim()))) applyConventions(DEFAULT_CONVENTIONS, r.upload_id);
     } else setFailure(r);
   }
 
@@ -160,8 +181,10 @@ export function UploadFlow() {
   return (
     <main style={{ maxWidth: 760, margin: "32px auto", padding: "0 16px", font: "15px system-ui" }}>
       <AppNav />
+      <Breadcrumbs trail={addingTo
+        ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
+        : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
       <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "DXF floor plan to 3D"}</h1>
-      {addingTo && <p><a href={`/projects/${addingTo.id}`}>Back to the project</a></p>}
       <p>Upload a DXF drawn to the supported convention. Values the drawing lacks use nominal defaults, and every one is reported as assumed.</p>
       <input type="file" accept=".dxf" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
@@ -194,7 +217,7 @@ export function UploadFlow() {
             projectName={projectName}
             setProjectName={setProjectName}
             proj={proj}
-            setProj={setProj}
+            setProj={changeProj}
             errors={errors}
             disabled={busy || unresolvable.length > 0}
             onSubmit={splitting ? onSplit : onGenerate}
