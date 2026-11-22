@@ -195,3 +195,31 @@ test("CORS: disallowed origin gets no allow header", async () => {
   const res = await fetch(`${base}/health`, { headers: { Origin: "http://evil.example" } });
   expect(res.headers.get("access-control-allow-origin")).toBeNull();
 });
+
+test("changing a parameter regenerates the floor and the served GLB changes (real worker thread)", async () => {
+  const jobs = await import("./jobs");
+  const projects = await import("./projects");
+  const created = await api.createProject("Params");
+  if (!created.ok) throw new Error(created.message);
+  const pid = (created as unknown as { project_id: string }).project_id;
+  const up = await api.uploadDxf(fixture("fixture_a.dxf"));
+  if (!up.ok) throw new Error(up.message);
+  const add = await jobs.addFloorJob(pid, { upload_id: up.upload_id, floor_name: "Ground", elevation: 0, wall_height: 3000, ceiling_height: 3000 });
+  if (!add.ok) throw new Error(add.message);
+  const before = await api.getProject(pid);
+  if (!before.ok) throw new Error(before.message);
+  const gid0 = (before.manifest as { floors: { generation_id: string }[] }).floors[0].generation_id;
+  const box0 = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(gid0))).scene);
+
+  const changed = await jobs.changeParametersJob(pid, { slab_thickness: 400 });
+  if (!changed.ok) throw new Error(changed.message);
+  const after = await api.getProject(pid);
+  if (!after.ok) throw new Error(after.message);
+  const gid1 = (after.manifest as { floors: { generation_id: string }[] }).floors[0].generation_id;
+  expect(gid1).not.toBe(gid0); // a new generation, so a new GLB url
+  const box1 = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(gid1))).scene);
+  expect(box0.min.y).toBeCloseTo(-0.2, 3);
+  expect(box1.min.y).toBeCloseTo(-0.4, 3); // the 400 mm slab
+  const p = await projects.getParameters(pid);
+  expect(p).toMatchObject({ ok: true, slab_thickness: { value: 400, source: "user_provided" } });
+}, 60_000);

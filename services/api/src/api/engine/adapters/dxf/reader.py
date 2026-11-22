@@ -249,7 +249,8 @@ def read_dxf(
     if window_sill is not None and window_sill < 0:
         raise ValueError(f"window sill must be >= 0 mm, got {window_sill}")
     given = {k: v for k, v in {"ceiling_height": ceiling_height, "window_sill": window_sill,
-                               **(params or {})}.items() if v is not None}
+                               "wall_height": wall_height, **(params or {})}.items()
+             if v is not None}
     if unknown := set(given) - set(PARAMS):
         raise ValueError(f"unknown parameters {sorted(unknown)}")
     if given.get("slab_thickness", 1) <= 0:
@@ -969,20 +970,25 @@ def read_dxf(
                 railings=p.railings if railing_h is not None else [],
                 sources=[p.ref]))
     slabs = []
-    if boundaries and (
+    if (boundaries or paired) and (
         slab_t := given.get("slab_thickness", preset.slab_thickness if preset else None)
     ):
         slab_src = "user_provided" if "slab_thickness" in given else "defaulted"
-        slabs = [
-            Slab(
-                id=b.id.replace("fb-", "slab-", 1),
-                boundary_id=b.id,
-                polygon=b.polygon,
+        # one slab per connected part of the building, under the walls too (so no wall floats
+        # above the ground): the exterior of the union of walls, junctions and floor boundaries
+        shapes = ([w.rect() for w in paired] + [Polygon(j.polygon) for j in pieces]
+                  + [Polygon(b.polygon) for b in boundaries])
+        for n, o in enumerate(wall_outlines(shapes, settings), 1):
+            inside = [b for b in boundaries
+                      if Polygon(o.polygon).buffer(settings.tolerance_mm).covers(Polygon(b.polygon))]
+            slabs.append(Slab(
+                id=f"slab-{n:03d}",
+                boundary_id=inside[0].id if len(inside) == 1 else None,
+                boundary_ids=[b.id for b in inside],
+                polygon=o.polygon,
                 thickness=Measured(value=slab_t, source=slab_src),
-                sources=b.sources,
-            )
-            for b in boundaries
-        ]
+                sources=[s for b in inside for s in b.sources],
+            ))
     # one report for the default, whichever of slabs, balconies, stairs or ramps use it
     slab_default = given.get("slab_thickness") is None and preset is not None
     if slab_default and (

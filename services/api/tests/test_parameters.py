@@ -21,9 +21,18 @@ def test_defaults_are_tagged_and_slab_sits_under_the_floor():
     assert p.parameters["roof_type"].value == "flat" and p.parameters["roof_pitch"].unit == "deg"
     assert "slab_thickness_defaulted" in {i.code for i in p.issues}
     f = p.buildings[0].floors[0]
-    assert len(f.slabs) == len(f.boundaries) and f.slabs[0].thickness.source == "defaulted"
-    z = build_meshes(f)[f.slabs[0].id].bounds[:, 2]
+    # one slab for the whole building part, under the walls too: no wall floats above the ground
+    (slab,) = f.slabs
+    assert slab.thickness.source == "defaulted" and slab.boundary_ids == [b.id for b in f.boundaries]
+    z = build_meshes(f)[slab.id].bounds[:, 2]
     assert z.tolist() == [f.elevation.value - 250, f.elevation.value]
+    from shapely.geometry import LineString, Polygon
+
+    outline = Polygon(slab.polygon).buffer(1e-6)
+    for w in f.walls:
+        assert outline.covers(LineString([w.centreline.start, w.centreline.end]))
+    # walls start on the slab top, which is the floor elevation
+    assert build_meshes(f)[f.walls[0].id].bounds[0, 2] == f.elevation.value
 
 
 def test_user_values_override_and_tag_user_provided():
@@ -136,3 +145,21 @@ def test_editor_can_change_parameters_on_an_owners_upload(client, tmp_path, monk
     assert job["status"] == "succeeded", job
     gid = owner.get(f"{P}/{pid}").json()["floors"][0]["generation_id"]
     assert _canon(owner, gid)["ceiling_height"]["source"] == "user_provided"
+
+
+def test_wall_height_is_a_project_parameter_and_changes_the_walls(client):
+    # the room height the user sees is the wall height; ceiling height alone moves only the (hidden
+    # outside walk mode) ceiling, which looked like "parameters change nothing"
+    c = client
+    pid = _project(c)
+    got = c.get(f"{P}/{pid}/parameters").json()
+    assert got["wall_height"] == {"value": 2700.0, "unit": "mm", "source": "defaulted"}
+    _change(c, pid, wall_height=3300)
+    m = c.get(f"{P}/{pid}").json()
+    canon = _canon(c, m["floors"][0]["generation_id"])
+    assert {w["height"]["value"] for w in canon["walls"]} == {3300.0}
+    assert canon["walls"][0]["height"]["source"] == "user_provided"
+    assert c.get(f"{P}/{pid}/parameters").json()["wall_height"] == {"value": 3300.0, "unit": "mm", "source": "user_provided"}
+    _change(c, pid, wall_height=None)  # back to the preset
+    canon = _canon(c, c.get(f"{P}/{pid}").json()["floors"][0]["generation_id"])
+    assert canon["walls"][0]["height"] == {"value": 2700.0, "unit": "mm", "source": "defaulted"}

@@ -52,7 +52,7 @@ def get_presets() -> dict:
 
 
 @router.post("/uploads", status_code=201)
-async def create_upload(request: Request, user: CurrentUser) -> dict:
+async def create_upload(request: Request, user: CurrentUser, filename: str | None = None) -> dict:
     upload_id = new_id()
     path = request.state.path = upload_path(upload_id)
     try:
@@ -68,7 +68,10 @@ async def create_upload(request: Request, user: CurrentUser) -> dict:
         raise
     try:
         with session() as db:
-            db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id), owner_id=user.id))
+            # display only: the base name of what the client says it uploaded, never used as a path
+            name = (filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:255] or None
+            db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id), owner_id=user.id,
+                             filename=name))
             db.commit()
     except BaseException:
         path.unlink(missing_ok=True)  # no blob without its metadata row

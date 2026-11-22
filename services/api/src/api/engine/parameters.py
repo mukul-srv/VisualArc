@@ -3,6 +3,7 @@ building-type preset (`defaulted`, same attribute name on `BuildingPreset`). One
 reader (canonical `Project.parameters`) and the API (GET/PATCH), so they cannot drift."""
 
 PARAMS: dict[str, str] = {
+    "wall_height": "mm",
     "ceiling_height": "mm",
     "slab_thickness": "mm",
     "roof_type": "none",  # "flat" | "gable" | "hip"

@@ -48,7 +48,7 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 public_router = APIRouter(prefix="/api/v1")
 
 # request fields recorded per floor with provenance (None = the preset fills it, `defaulted`)
-_PARAMS = ("building_type", "wall_height", "door_height", "window_height", "units", *PARAMS)
+_PARAMS = ("building_type", "door_height", "window_height", "units", *PARAMS)
 
 
 class ProjectRequest(BaseModel):

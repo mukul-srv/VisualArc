@@ -130,12 +130,13 @@ class Room(_Model):
 
 
 class Slab(_Model):
-    """Floor slab under a floor boundary: top at floor elevation, `thickness` below it."""
+    """Floor slab under a building part, walls included: top at floor elevation, `thickness` below it."""
 
     id: str
     type: Literal["slab"] = "slab"
-    boundary_id: str
-    polygon: list[Point2]  # same ring as its boundary
+    boundary_id: str | None = None  # the one floor boundary it lies under, if exactly one
+    boundary_ids: list[str] = []  # every floor boundary inside it (its top face is theirs)
+    polygon: list[Point2]  # outline of the building part: walls and floor boundaries
     thickness: Measured
     sources: list[SourceRef]  # the boundary's sources
 

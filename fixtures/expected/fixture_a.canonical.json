@@ -765,6 +765,11 @@
     }
   ],
   "parameters": {
+    "wall_height": {
+      "value": 3000.0,
+      "unit": "mm",
+      "source": "user_provided"
+    },
     "ceiling_height": {
       "value": 3000.0,
       "unit": "mm",

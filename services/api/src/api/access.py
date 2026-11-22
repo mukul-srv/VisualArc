@@ -53,6 +53,8 @@ def project_role(db: Session, p: ProjectRow, who: "str | Who") -> str | None:
 
 def can_access(db: Session, row, who: "str | Who", need: str = "owner") -> bool:
     who = _who(who)
+    if getattr(row, "deleted_at", None) is not None:  # soft-deleted: the same 404 as unknown
+        return False
     if isinstance(row, ProjectRow):
         r = project_role(db, row, who)
         return r is not None and RANK[r] >= RANK[need]
