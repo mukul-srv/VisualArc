@@ -225,6 +225,17 @@ def test_oauth_callback_creates_user_and_session(client, providers, monkeypatch)
     assert c2.get(f"{A}/me").json()["id"] == me["id"]
 
 
+def test_oauth_flow_keeps_auth_cookie(providers, monkeypatch):
+    # regression: the OAuth-state middleware cookie once shared the name "session" and overwrote the login cookie
+    _profile(monkeypatch)
+    c = TestClient(app)
+    c.get(f"{A}/oauth/google/login?next=/viewer", follow_redirects=False)  # puts "next" in the OAuth state
+    r = c.get(f"{A}/oauth/google/callback", follow_redirects=False)
+    names = [h.split("=")[0] for h in r.headers.get_list("set-cookie")]
+    assert names.count(auth.COOKIE) == 1
+    assert c.get(f"{A}/me").status_code == 200
+
+
 def test_oauth_links_existing_oauth_only_user_by_verified_email(client, providers, monkeypatch):
     with session() as db:
         db.add(UserRow(id="a" * 32, email="link@example.com", password_hash=None, display_name="l"))

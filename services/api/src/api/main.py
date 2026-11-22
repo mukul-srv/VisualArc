@@ -1,7 +1,9 @@
 import math
 import os
 import secrets
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -28,6 +30,19 @@ async def _lifespan(_app: FastAPI):
     yield
 
 
+def _load_dotenv() -> None:
+    """Fill os.environ from the repo-root .env without overriding real env vars.
+    Skipped under pytest so a dev's OAuth/DB values never leak into tests."""
+    path = Path(__file__).resolve().parents[4] / ".env"
+    if "pytest" in sys.modules or not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and not key.startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+
+
+_load_dotenv()
 app = FastAPI(title="Architectural Reconstruction API", lifespan=_lifespan)
 # Browser origins allowed to call the API (local web dev by default).
 _ORIGINS = os.environ.get(
@@ -44,6 +59,7 @@ app.add_middleware(
 # shortcut: random per-process secret; set SESSION_SECRET when running several workers
 app.add_middleware(
     SessionMiddleware,
+    session_cookie="oauth_state",  # must differ from the auth cookie ("session") or it overwrites it
     secret_key=os.environ.get("SESSION_SECRET") or secrets.token_hex(32),
     max_age=600,
     same_site="lax",
