@@ -202,3 +202,13 @@ test("describeOpening shows swing and nominal frame/leaf detail with provenance"
   const bare = describeOpening({ ...door, swing: null });
   expect(bare.rows.find((r) => r.label === "Swing")?.value).toContain("not set");
 });
+
+test("describeElement shows columns and balconies with their parameter provenance", () => {
+  const m = (value: number, source: "source_extracted" | "defaulted" | "user_provided") => ({ value, unit: "mm", source });
+  const col = describeElement({ id: "col-002", type: "column", shape: "circle", radius: m(200, "source_extracted"), height: m(3000, "user_provided"), sources: [{ layer: "A-COLS", entity_handle: "3D" }] });
+  expect(col.rows.find((r) => r.label === "Radius")).toMatchObject({ value: "200 mm", provenance: "source_extracted" });
+  expect(col.rows.find((r) => r.label.startsWith("Height"))).toMatchObject({ provenance: "user_provided" });
+  const bal = describeElement({ id: "balcony-001", type: "balcony", thickness: m(200, "defaulted"), railing_height: m(900, "defaulted"), railing_thickness: m(50, "defaulted"), sources: [{ layer: "A-BALC", entity_handle: "3E" }] });
+  expect(bal.rows.find((r) => r.label === "Railing height")).toMatchObject({ value: "900 mm", provenance: "defaulted" });
+  expect(bal.sources).toEqual(["A-BALC:3E"]);
+});

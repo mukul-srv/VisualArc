@@ -10,7 +10,11 @@ import numpy as np
 import trimesh
 
 from api.engine.canonical.model import Project
-from api.engine.geometry3d.extrude import build_meshes, build_opening_parts
+from api.engine.geometry3d.extrude import (
+    build_balcony_railings,
+    build_meshes,
+    build_opening_parts,
+)
 from api.engine.settings import DEFAULTS
 
 # rotation part has det +1, so triangle winding (and normals) survive the swap
@@ -20,7 +24,7 @@ PLAN_MM_TO_GLTF_M = np.diag([0.001, 0.001, 0.001, 1.0]) @ np.array(
 
 
 def _elements(floor):
-    return [*floor.walls, *floor.junctions, *floor.boundaries, *floor.slabs, *floor.ceilings]
+    return [*floor.walls, *floor.junctions, *floor.boundaries, *floor.slabs, *floor.columns, *floor.balconies, *floor.ceilings]
 
 
 def material_key(el) -> str:
@@ -58,6 +62,8 @@ def build_scene(project: Project) -> trimesh.Scene:
                     )  # span (plan mm) lets the viewer map a click to it
                 )
             for el in _elements(floor):
+                if el.id not in meshes:  # a column without a height (reported): nothing to extrude
+                    continue
                 mesh = meshes[el.id]
                 mesh.apply_transform(PLAN_MM_TO_GLTF_M)  # baked: viewer gets metres
                 mesh.visual = trimesh.visual.TextureVisuals(
@@ -70,6 +76,14 @@ def build_scene(project: Project) -> trimesh.Scene:
                 if el.id in hosted:  # key absent otherwise: pre-T12 GLBs unchanged
                     mesh.metadata["openings"] = hosted[el.id]
                 scene.add_geometry(mesh, node_name=el.id, geom_name=el.id)
+            for pid, (bal, mesh) in build_balcony_railings(floor).items():
+                mesh.apply_transform(PLAN_MM_TO_GLTF_M)
+                mesh.visual = trimesh.visual.TextureVisuals(material=materials["balcony_railing"])
+                mesh.metadata = {"floor_id": floor.id, "id": pid, "type": "balcony_railing",
+                                 "balcony_id": bal.id, "height": bal.railing_height.model_dump(mode="json"),
+                                 "thickness": bal.railing_thickness.model_dump(mode="json"),
+                                 "sources": [s.model_dump(mode="json") for s in bal.sources]}
+                scene.add_geometry(mesh, node_name=pid, geom_name=pid)
             for pid, (part, o, mesh) in build_opening_parts(floor).items():
                 mesh.apply_transform(PLAN_MM_TO_GLTF_M)
                 mesh.visual = trimesh.visual.TextureVisuals(material=materials[f"opening_{part}"])

@@ -9,6 +9,8 @@ const ROLE_LABEL: Record<string, string> = {
   floor: "floor boundary",
   door: "door",
   window: "window",
+  column: "column (rectangle or circle)",
+  balcony: "balcony / terrace outline",
   ignore: "ignore (reported, not read)",
 };
 

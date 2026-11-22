@@ -117,3 +117,30 @@ def test_editor_changes_lintel_and_openings_follow(client):
     doors = [o for o in ops if o["kind"] == "door"]
     assert all(o["height"] == {"value": 2300.0, "unit": "mm", "source": "user_provided"} for o in doors)
     assert all(o["swing"] is not None for o in doors)  # swing survives regeneration
+
+
+def test_lintel_below_sill_only_warns_when_windows_exist(tmp_path):
+    low = {"lintel_height": 800}  # below the 900 mm default sill
+    _door(tmp_path, ((1000, 0), 0, 90))  # a door only: nothing to derive from the lintel
+    p = read_dxf(tmp_path / "d.dxf", 2700, ceiling_height=2700, building_type="residential", params=low)
+    assert "lintel_below_sill" not in {i.code for i in p.issues}
+    _door(tmp_path, window=True)
+    p = read_dxf(tmp_path / "d.dxf", 2700, ceiling_height=2700, building_type="residential", params=low)
+    assert "lintel_below_sill" in {i.code for i in p.issues}
+
+
+def test_opening_too_small_for_frame_and_panel_is_reported(tmp_path):
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    for y in (0, 200):
+        for a, b in ((0, 1000), (1080, 3000)):
+            msp.add_line((a, y), (b, y), dxfattribs={"layer": "A-WALL"})
+    # 80 mm gap: no room for two 50 mm frames
+    msp.add_lwpolyline([(1000, 0), (1080, 0), (1080, 200), (1000, 200)], close=True,
+                       dxfattribs={"layer": "A-DOOR"})
+    doc.saveas(tmp_path / "s.dxf")
+    p = read_dxf(tmp_path / "s.dxf", 2700, ceiling_height=2700)
+    assert _open(p).detail is None
+    (i,) = [i for i in p.issues if i.code == "opening_detail_skipped"]
+    assert i.severity == "warning" and i.sources[0].layer == "A-DOOR"

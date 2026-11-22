@@ -46,6 +46,15 @@ class Settings:
     # Opening marker layers (ADR-002 §1): AIA names; the layer is the opening kind.
     door_layer: str = "A-DOOR"
     window_layer: str = "A-GLAZ"
+    # Structure layers (project extension, not AIA text; the iso13567 subset has no codes for
+    # them, so it keeps these names and further layers are mapped with Custom). Upper case.
+    column_layer: str = "A-COLS"
+    balcony_layer: str = "A-BALC"  # closed outline of a balcony or terrace slab
+    column_extra: tuple[str, ...] = ()
+    balcony_extra: tuple[str, ...] = ()
+    # Railing member thickness (balcony edges); nominal, never read from a drawing. PROVISIONAL.
+    railing_thickness_mm: float = 50.0
+
     # Per-project additions (conventions.py): more layers with the same meaning as the
     # primary ones above, and layers the user chose to ignore (still reported, never silent).
     # Upper case. Empty = the plain convention above.
@@ -150,6 +159,9 @@ class Settings:
         ("wall_neutral", ("#a8a8a8", 0.9)),
         ("floor_boundary", ("#8c7b6b", 0.8)),
         ("slab", ("#7d7266", 0.9)),
+        ("column", ("#9a9a94", 0.85)),
+        ("balcony", ("#8f8579", 0.85)),
+        ("balcony_railing", ("#4d5560", 0.6)),
         ("opening_frame", ("#5b4636", 0.7)),
         ("opening_leaf", ("#a9824f", 0.7)),
         ("opening_glass", ("#9fd0e6", 0.1)),
@@ -174,6 +186,14 @@ class Settings:
     @property
     def window_layers(self) -> frozenset[str]:
         return frozenset({self.window_layer, *self.window_extra})
+
+    @property
+    def column_layers(self) -> frozenset[str]:
+        return frozenset({self.column_layer, *self.column_extra})
+
+    @property
+    def balcony_layers(self) -> frozenset[str]:
+        return frozenset({self.balcony_layer, *self.balcony_extra})
 
     @property  # for messages: the primary layer, plus any user-mapped ones
     def wall_label(self) -> str:

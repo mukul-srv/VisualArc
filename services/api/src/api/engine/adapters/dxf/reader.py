@@ -14,12 +14,15 @@ from pathlib import Path
 
 import ezdxf
 from ezdxf import units
+from shapely.geometry import Polygon
 
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
     Area,
+    Balcony,
     Building,
     Ceiling,
+    Column,
     Floor,
     FloorBoundary,
     Issue,
@@ -34,6 +37,7 @@ from api.engine.canonical.model import (
     SourceRef,
     Wall,
 )
+from api.engine.geometry2d.balconies import find_balconies
 from api.engine.geometry2d.floor import floor_issue
 from api.engine.geometry2d.openings import (
     Marker,
@@ -337,6 +341,9 @@ def read_dxf(
     decorative: dict[str, list] = {}  # opening layer -> ignored symbol entities
     swings = []  # ARCs on the door layer (orphan check)
     labels: list[Label] = []  # TEXT/MTEXT: room-name candidates, placed later
+    column_layers, balcony_layers = settings.column_layers, settings.balcony_layers
+    cols: list[tuple] = []  # (ref, "rect", Rect) | (ref, "circle", centre, radius mm)
+    balc: list[tuple] = []  # (ref, ring)
     for e in doc.modelspace():
         if scope and e.dxf.handle not in scope.handles:
             continue
@@ -392,7 +399,7 @@ def read_dxf(
             if text:
                 at = e.ocs().to_wcs(e.dxf.insert) if kind == "TEXT" else e.dxf.insert
                 labels.append(Label(text, mm(at), _ref(e)))
-        if layer not in wall_layers and layer not in floor_layers:
+        if layer not in wall_layers | floor_layers | column_layers | balcony_layers:
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
         if layer in wall_layers and kind == "LINE":
@@ -434,7 +441,49 @@ def read_dxf(
                     id=f"fb-{len(boundaries) + 1:03d}", polygon=pts, sources=[_ref(e)]
                 )
             )
+        elif layer in balcony_layers and kind == "LWPOLYLINE":
+            pts = [mm(p) for p in _wcs_xy(e)]
+            if len(pts) > 3 and pts[0] == pts[-1]:
+                pts.pop()
+            elif not e.closed:
+                pts = []
+            # tolerance_mm doubles as the positive-area threshold in mm2 (see Settings)
+            if len(pts) < 3 or Polygon(pts).area <= settings.tolerance_mm or not Polygon(pts).is_valid:
+                issues.append(
+                    Issue(
+                        code="invalid_balcony",
+                        severity="warning",
+                        message=f"balcony polyline {e.dxf.handle} is not a closed, valid "
+                        "polygon with area; no balcony built from it",
+                        sources=[_ref(e)],
+                    )
+                )
+            else:
+                balc.append((_ref(e), pts))
+        elif layer in column_layers and kind == "CIRCLE" and not (bad := _extrusion_issue(e, settings)):
+            cols.append((_ref(e), "circle", mm(e.ocs().to_wcs(e.dxf.center)), e.dxf.radius * k))
+        elif layer in column_layers and kind == "LWPOLYLINE":
+            pts = [mm(p) for p in _wcs_xy(e)]
+            closed = _is_closed(e, settings.tolerance_mm)
+            if len(pts) > 1 and math.dist(pts[0], pts[-1]) <= settings.tolerance_mm:
+                pts.pop()
+            rect = marker_rect(pts, settings.tolerance_mm) if closed else None
+            if rect is None:
+                issues.append(
+                    Issue(
+                        code="invalid_column",
+                        severity="warning",
+                        message=f"column polyline {e.dxf.handle} is not a closed axis-aligned "
+                        "rectangle (4 vertices); no column built from it. Circles are also read",
+                        sources=[_ref(e)],
+                    )
+                )
+            else:
+                cols.append((_ref(e), "rect", rect))
         else:
+            if kind == "CIRCLE" and layer in column_layers:
+                issues.append(bad)  # tilted circle: reported, not placed
+                continue
             issues.append(
                 Issue(
                     code="unsupported_entity",
@@ -542,7 +591,7 @@ def read_dxf(
         sill = window_sill if window_sill is not None else settings.default_window_sill_mm
         if window_h is None and lintel > sill:
             window_h = lintel - sill
-        elif window_h is None:
+        elif window_h is None and any(f.kind == "window" for f in res.openings):
             issues.append(
                 Issue(
                     code="lintel_below_sill",
@@ -681,6 +730,54 @@ def read_dxf(
         )
         for p in found
     ]
+    columns = []
+    for n, c in enumerate(sorted(cols, key=lambda c: (c[2][1], c[2][0])), 1):  # y, then x
+        ref = c[0]
+        if c[1] == "rect":
+            x0, y0, x1, y1 = c[2]
+            columns.append(Column(
+                id=f"col-{n:03d}", shape="rect", polygon=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)],
+                height=ceil_h, sources=[ref]))
+        else:
+            columns.append(Column(
+                id=f"col-{n:03d}", shape="circle", centre=c[2],
+                radius=Measured(value=c[3], source="user_provided" if from_user else "source_extracted"),
+                height=ceil_h, sources=[ref]))
+    if columns and ceil_h is None:
+        issues.append(Issue(
+            code="column_height_missing", severity="warning",
+            message=f"{len(columns)} column(s) have no height (no ceiling height, e.g. no walls "
+            "to default it from); recorded without one and not extruded",
+            sources=[c.sources[0] for c in columns[: settings.unmapped_ref_cap]]))
+    balconies = []
+    if balc:
+        pieces_b, balc_issues = find_balconies(
+            balc, paired, pieces, [p.polygon for p in found], settings)
+        issues += balc_issues
+        railing_h = given.get("railing_height", preset.railing_height if preset else None)
+        rail_src = "user_provided" if "railing_height" in given else "defaulted"
+        slab_b = given.get("slab_thickness", preset.slab_thickness if preset else None)
+        slab_src = "user_provided" if "slab_thickness" in given else "defaulted"
+        for what, v, src in (("railing height", railing_h, rail_src), ("slab thickness", slab_b, slab_src)):
+            if v is not None and src == "defaulted" and not (boundaries and what == "slab thickness"):
+                issues.append(Issue(  # (the floor slab already reported its default)
+                    code=f"{what.replace(' ', '_')}_defaulted", severity="warning",
+                    message=f"Balcony {what} assumed {v:g} mm ({building_type} default); not in the DXF",
+                    sources=[p.ref for p in pieces_b]))
+        if railing_h is None:
+            issues.append(Issue(
+                code="railing_height_missing", severity="warning",
+                message="no railing height (choose a building type or set the parameter); "
+                "balcony railings not built", sources=[p.ref for p in pieces_b]))
+        for p in pieces_b:
+            balconies.append(Balcony(
+                id=p.id, polygon=p.polygon,
+                thickness=None if slab_b is None else Measured(value=slab_b, source=slab_src),
+                railing_height=None if railing_h is None else Measured(value=railing_h, source=rail_src),
+                railing_thickness=None if railing_h is None else Measured(
+                    value=settings.railing_thickness_mm, source="defaulted"),
+                railings=p.railings if railing_h is not None else [],
+                sources=[p.ref]))
     slabs = []
     if boundaries and (
         slab_t := given.get("slab_thickness", preset.slab_thickness if preset else None)
@@ -720,6 +817,8 @@ def read_dxf(
         ceilings=ceilings or [],
         slabs=slabs,
         rooms=rooms,
+        columns=columns,
+        balconies=balconies,
         walls=walls,
         junctions=junctions,
         boundaries=boundaries,

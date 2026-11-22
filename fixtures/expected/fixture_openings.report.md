@@ -68,6 +68,8 @@ Junctions (8) are always `inferred`: corner/T fill between paired-line walls, no
 - Floor boundaries: 3
 - Slabs: 0
 - Rooms: 3
+- Columns: 0
+- Balconies: 0
 - Openings: 7
 
 ## Expected versus generated
@@ -80,6 +82,8 @@ Junctions (8) are always `inferred`: corner/T fill between paired-line walls, no
 | floor boundaries | 3 | 3 | yes |
 | slabs | 0 | 0 | yes |
 | rooms | 3 | 3 | yes |
+| columns | 0 | 0 | yes |
+| balconies | 0 | 0 | yes |
 | openings | 7 | 7 | yes |
 | Wall heights (mm) | 3000 | 3000 | yes |
 

@@ -28,6 +28,15 @@ def _measured(project: Project) -> Iterator[tuple[str, str, Measured, list[Sourc
                 yield w.id, "thickness", w.thickness, w.sources
                 if w.height is not None:
                     yield w.id, "height", w.height, w.sources
+            for c in f.columns:
+                if c.radius is not None:
+                    yield c.id, "radius", c.radius, c.sources
+                if c.height is not None:
+                    yield c.id, "height", c.height, c.sources
+            for b in f.balconies:
+                for name in ("thickness", "railing_height", "railing_thickness"):
+                    if (m := getattr(b, name)) is not None:
+                        yield b.id, name, m, b.sources
             for sl in f.slabs:
                 yield sl.id, "thickness", sl.thickness, sl.sources
             for o in f.openings:
@@ -58,6 +67,8 @@ def _counts(project: Project) -> dict[str, int]:
         "floor boundaries": sum(len(f.boundaries) for f in floors),
         "slabs": sum(len(f.slabs) for f in floors),
         "rooms": sum(len(f.rooms) for f in floors),
+        "columns": sum(len(f.columns) for f in floors),
+        "balconies": sum(len(f.balconies) for f in floors),
         "openings": sum(len(f.openings) for f in floors),
     }
 
