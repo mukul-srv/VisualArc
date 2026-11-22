@@ -17,8 +17,10 @@ from api.engine.canonical.model import (
     LineGeometry,
     Measured,
     Opening,
+    OpeningDetail,
     Point2,
     SourceRef,
+    Swing,
 )
 from api.engine.geometry2d.walls import (
     JunctionPiece,
@@ -520,6 +522,74 @@ def build_openings(
             height=Measured(value=h, source=h_src),
             sill_height=Measured(value=sill, source=sill_src),
             sources=[o.marker.ref] + [j.ref for j in o.jambs],
+            detail=_detail(o, h, sill, s),
         )
         for n, (o, ends, h, h_src, sill, sill_src) in enumerate(openings, 1)
     ], issues
+
+
+def _detail(o: FoundOpening, height: float, sill: float, s: Settings) -> OpeningDetail | None:
+    """Frame + panel sizes; None when the frame leaves no room for the panel (no guessing)."""
+    fw = s.opening_frame_width_mm
+    if o.hi - o.lo <= 2 * fw or height <= (fw if o.kind == "door" else 2 * fw):
+        return None
+    door = o.kind == "door"
+    return OpeningDetail(
+        frame_width=Measured(value=fw, source="defaulted"),
+        panel="leaf" if door else "glass",
+        panel_thickness=Measured(
+            value=s.door_leaf_thickness_mm if door else s.window_glass_thickness_mm,
+            source="defaulted",
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class SwingArc:
+    centre: Point2
+    mid: Point2  # a point on the arc halfway along its sweep
+    ref: SourceRef
+
+
+def door_swings(
+    found: list[FoundOpening], arcs: list[SwingArc], settings: Settings = DEFAULTS
+) -> tuple[dict[str, Swing], list[Issue]]:
+    """Swing per door marker handle from the door-layer arc centred on one of its corners
+    (the hinge). A door with no such arc, or with several, gets no swing and an issue."""
+    tol, cap = settings.tolerance_mm, settings.unmapped_ref_cap
+    out: dict[str, Swing] = {}
+    missing, clashes = [], []
+    for o in (f for f in found if f.kind == "door"):
+        x0, y0, x1, y1 = o.marker.rect
+        corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        mine = [a for a in arcs if any(math.dist(a.centre, c) <= tol for c in corners)]
+        if len(mine) != 1:
+            (clashes if mine else missing).append(o)
+            continue
+        a, i = mine[0], 0 if o.axis == "h" else 1
+        hinge_at = a.centre[i]
+        if abs(hinge_at - o.lo) > tol and abs(hinge_at - o.hi) > tol:
+            missing.append(o)  # centred on a corner but not at a span end: not read
+            continue
+        n = 1 - i  # axis across the wall
+        side = "+" if a.mid[n] > o.c else "-"
+        out[o.marker.ref.entity_handle] = Swing(
+            hinge="start" if abs(hinge_at - o.lo) <= tol else "end",
+            opens_toward=f"{side}{'xy'[n]}",
+            source=a.ref,
+        )
+    issues = []
+    for code, severity, group, why in (
+        ("door_swing_not_found", "warning", missing,
+         "no swing arc on the door layer centred on a marker corner; swing and hinge left unset"),
+        ("door_swing_ambiguous", "warning", clashes,
+         "several swing arcs centred on its corners; swing and hinge left unset"),
+    ):
+        if group:
+            more = f"; first {cap} of {len(group)} listed" if len(group) > cap else ""
+            issues.append(Issue(
+                code=code, severity=severity,
+                message=f"{len(group)} door(s): {why}{more}",
+                sources=[g.marker.ref for g in group[:cap]],
+            ))
+    return out, issues

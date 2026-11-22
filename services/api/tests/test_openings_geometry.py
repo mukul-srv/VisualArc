@@ -21,7 +21,7 @@ from api.engine.canonical.model import (
     Wall,
 )
 from api.engine.exporters.glb import build_scene
-from api.engine.geometry3d.extrude import _prism, build_meshes
+from api.engine.geometry3d.extrude import _prism, build_meshes, build_opening_parts
 
 FIX = Path(__file__).resolve().parents[3] / "fixtures" / "input"
 REF = [SourceRef(layer="A-WALL", entity_handle="1")]
@@ -226,6 +226,7 @@ def test_fixture_openings_wall_volumes(fo_project):
 def test_fixture_openings_glb_roundtrip_and_meta(fo_project, tmp_path):
     floor = fo_project.buildings[0].floors[0]
     ids = {e.id for e in [*floor.walls, *floor.junctions, *floor.boundaries, *floor.ceilings]}
+    ids |= set(build_opening_parts(floor))  # frame + leaf/glass nodes
     loaded = trimesh.load(
         io.BytesIO(build_scene(fo_project).export(file_type="glb")), file_type="glb"
     )
@@ -255,6 +256,7 @@ def test_fixture_openings_glb_roundtrip_and_meta(fo_project, tmp_path):
     assert sum(len(h) for h in hosted) == 7
     solids = [v for v in meta["elements"].values() if v["type"] not in ("floor_boundary", "ceiling")]
     assert all(v["watertight"] for v in solids)  # boundaries are flat polygons
+    assert sum(v["type"] == "opening_part" for v in solids) == 14  # 7 openings x (frame + panel)
     # 9.6 x 3.0 x 4.0 m, glTF Y-up: plan y 0..4 m -> z -4..0
     np.testing.assert_allclose(
         meta["scene_bounds_m"], [[0, 0, -4], [9.6, 3, 0]], atol=1e-9

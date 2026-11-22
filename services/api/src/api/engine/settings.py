@@ -64,6 +64,13 @@ class Settings:
     default_window_height_mm: float = 1200.0
     default_window_sill_mm: float = 900.0
 
+    # Opening detail (medium): frame width, door leaf and window glass thickness. Nominal round
+    # values (leaf 40 mm solid-core door, 24 mm double glazing unit), never read from a drawing,
+    # recorded `defaulted`. PROVISIONAL: unverified against any standard.
+    opening_frame_width_mm: float = 50.0
+    door_leaf_thickness_mm: float = 40.0
+    window_glass_thickness_mm: float = 24.0
+
     # Nominal presets per building type, the single source of truth (the web reads them
     # from GET /api/v1/presets). A missing height is filled from here, provenance
     # `defaulted` plus a warning naming the value. Round trade values, not a standard.
@@ -143,6 +150,9 @@ class Settings:
         ("wall_neutral", ("#a8a8a8", 0.9)),
         ("floor_boundary", ("#8c7b6b", 0.8)),
         ("slab", ("#7d7266", 0.9)),
+        ("opening_frame", ("#5b4636", 0.7)),
+        ("opening_leaf", ("#a9824f", 0.7)),
+        ("opening_glass", ("#9fd0e6", 0.1)),
         ("ceiling", ("#f4f4f0", 0.95)),
     )
 

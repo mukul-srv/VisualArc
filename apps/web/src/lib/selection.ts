@@ -18,6 +18,8 @@ export type OpeningData = {
   height: Measured;
   sill_height: Measured;
   sources: SourceRef[];
+  swing?: { hinge: "start" | "end"; opens_toward: "+x" | "-x" | "+y" | "-y"; source: SourceRef } | null; // doors
+  detail?: { frame_width: Measured; panel: "leaf" | "glass"; panel_thickness: Measured } | null;
 };
 
 export type Area = { value: number; unit: "mm2"; source: Provenance };
@@ -25,7 +27,7 @@ export type RoomData = { id: string; name: string; name_source: Provenance; area
 
 export type ElementData = {
   id: string;
-  type: "wall" | "junction" | "floor_boundary" | "slab" | "ceiling";
+  type: "wall" | "junction" | "floor_boundary" | "slab" | "ceiling" | "opening_part";
   floor_id?: string;
   thickness?: Measured;
   height?: Measured | null; // wall height; for a ceiling, the ceiling-height parameter
@@ -37,6 +39,8 @@ export type ElementData = {
   boundary_id?: string; // slab: the floor boundary it sits under
   sources?: SourceRef[];
   openings?: OpeningData[];
+  opening?: OpeningData; // opening_part: the opening this frame/leaf/glass belongs to
+  part?: "frame" | "leaf" | "glass";
 };
 
 export const PROVENANCE_LABEL: Record<Provenance, string> = {
@@ -88,9 +92,22 @@ export function describeOpening(o: OpeningData): Panel {
       measured("Width", o.width),
       measured("Height", o.height),
       measured("Sill height", o.sill_height),
+      ...(o.kind === "door"
+        ? [
+            o.swing
+              ? { label: "Swing", value: `hinge at span ${o.swing.hinge}, opens toward ${o.swing.opens_toward} (leaf drawn closed)`, provenance: "source_extracted" as const }
+              : { label: "Swing", value: "not set (no swing arc found in the drawing)" },
+          ]
+        : []),
+      ...(o.detail
+        ? [
+            measured("Frame width", o.detail.frame_width),
+            measured(o.detail.panel === "leaf" ? "Leaf thickness" : "Glass thickness", o.detail.panel_thickness),
+          ]
+        : [{ label: "Frame and panel", value: "not modelled (opening too small)" }]),
     ],
-    sourcesLabel: "Source entities (marker first, then jamb lines)",
-    sources: refs(o.sources),
+    sourcesLabel: "Source entities (marker first, then jamb lines, then swing arc)",
+    sources: [...refs(o.sources), ...(o.swing ? refs([o.swing.source]) : [])],
   };
 }
 
@@ -112,6 +129,7 @@ export function describeRoom(r: RoomData, floorId?: string): Panel {
 }
 
 export function describeElement(ud: ElementData): Panel {
+  if (ud.type === "opening_part" && ud.opening) return describeOpening(ud.opening);
   const floor: Row[] = ud.floor_id ? [{ label: "Floor", value: ud.floor_id }] : [];
   if (ud.type === "wall") {
     const n = ud.openings?.length ?? 0;

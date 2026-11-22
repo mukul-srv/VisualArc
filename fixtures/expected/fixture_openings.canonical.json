@@ -846,7 +846,21 @@
                   "layer": "A-WALL",
                   "entity_handle": "53"
                 }
-              ]
+              ],
+              "swing": null,
+              "detail": {
+                "frame_width": {
+                  "value": 50.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                },
+                "panel": "glass",
+                "panel_thickness": {
+                  "value": 24.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                }
+              }
             },
             {
               "id": "opening-002",
@@ -890,7 +904,21 @@
                   "layer": "A-GLAZ",
                   "entity_handle": "54"
                 }
-              ]
+              ],
+              "swing": null,
+              "detail": {
+                "frame_width": {
+                  "value": 50.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                },
+                "panel": "glass",
+                "panel_thickness": {
+                  "value": 24.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                }
+              }
             },
             {
               "id": "opening-003",
@@ -934,7 +962,29 @@
                   "layer": "A-DOOR",
                   "entity_handle": "55"
                 }
-              ]
+              ],
+              "swing": {
+                "hinge": "start",
+                "opens_toward": "+y",
+                "source": {
+                  "format": "dxf",
+                  "layer": "A-DOOR",
+                  "entity_handle": "62"
+                }
+              },
+              "detail": {
+                "frame_width": {
+                  "value": 50.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                },
+                "panel": "leaf",
+                "panel_thickness": {
+                  "value": 40.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                }
+              }
             },
             {
               "id": "opening-004",
@@ -988,7 +1038,29 @@
                   "layer": "A-WALL",
                   "entity_handle": "58"
                 }
-              ]
+              ],
+              "swing": {
+                "hinge": "start",
+                "opens_toward": "+x",
+                "source": {
+                  "format": "dxf",
+                  "layer": "A-DOOR",
+                  "entity_handle": "5E"
+                }
+              },
+              "detail": {
+                "frame_width": {
+                  "value": 50.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                },
+                "panel": "leaf",
+                "panel_thickness": {
+                  "value": 40.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                }
+              }
             },
             {
               "id": "opening-005",
@@ -1032,7 +1104,21 @@
                   "layer": "A-GLAZ",
                   "entity_handle": "59"
                 }
-              ]
+              ],
+              "swing": null,
+              "detail": {
+                "frame_width": {
+                  "value": 50.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                },
+                "panel": "glass",
+                "panel_thickness": {
+                  "value": 24.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                }
+              }
             },
             {
               "id": "opening-006",
@@ -1086,7 +1172,21 @@
                   "layer": "A-WALL",
                   "entity_handle": "5C"
                 }
-              ]
+              ],
+              "swing": null,
+              "detail": {
+                "frame_width": {
+                  "value": 50.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                },
+                "panel": "glass",
+                "panel_thickness": {
+                  "value": 24.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                }
+              }
             },
             {
               "id": "opening-007",
@@ -1130,7 +1230,29 @@
                   "layer": "A-DOOR",
                   "entity_handle": "5D"
                 }
-              ]
+              ],
+              "swing": {
+                "hinge": "start",
+                "opens_toward": "-x",
+                "source": {
+                  "format": "dxf",
+                  "layer": "A-DOOR",
+                  "entity_handle": "60"
+                }
+              },
+              "detail": {
+                "frame_width": {
+                  "value": 50.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                },
+                "panel": "leaf",
+                "panel_thickness": {
+                  "value": 40.0,
+                  "unit": "mm",
+                  "source": "defaulted"
+                }
+              }
             }
           ],
           "ceilings": [

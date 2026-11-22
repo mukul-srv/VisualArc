@@ -10,7 +10,7 @@ import numpy as np
 import trimesh
 
 from api.engine.canonical.model import Project
-from api.engine.geometry3d.extrude import build_meshes
+from api.engine.geometry3d.extrude import build_meshes, build_opening_parts
 from api.engine.settings import DEFAULTS
 
 # rotation part has det +1, so triangle winding (and normals) survive the swap
@@ -40,9 +40,10 @@ def build_scene(project: Project) -> trimesh.Scene:
     materials = {
         k: trimesh.visual.material.PBRMaterial(
             name=k,
-            baseColorFactor=[*(int(h[i : i + 2], 16) for i in (1, 3, 5)), 255],
+            baseColorFactor=[*(int(h[i : i + 2], 16) for i in (1, 3, 5)), 110 if k == "opening_glass" else 255],
             roughnessFactor=r,
             metallicFactor=0.0,
+            **({"alphaMode": "BLEND"} if k == "opening_glass" else {}),
         )
         for k, (h, r) in DEFAULTS.material_palette
     }
@@ -69,6 +70,13 @@ def build_scene(project: Project) -> trimesh.Scene:
                 if el.id in hosted:  # key absent otherwise: pre-T12 GLBs unchanged
                     mesh.metadata["openings"] = hosted[el.id]
                 scene.add_geometry(mesh, node_name=el.id, geom_name=el.id)
+            for pid, (part, o, mesh) in build_opening_parts(floor).items():
+                mesh.apply_transform(PLAN_MM_TO_GLTF_M)
+                mesh.visual = trimesh.visual.TextureVisuals(material=materials[f"opening_{part}"])
+                # `opening` (the whole record, swing and detail included) is what the inspector shows
+                mesh.metadata = {"floor_id": floor.id, "id": pid, "type": "opening_part",
+                                 "part": part, "opening": o.model_dump(mode="json")}
+                scene.add_geometry(mesh, node_name=pid, geom_name=pid)
     return scene
 
 

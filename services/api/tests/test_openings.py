@@ -386,9 +386,12 @@ def test_10_orphan_swing_and_symbols_never_geometry(tmp_path):
     assert "1 LINE" in msgs["A-GLAZ"]
     for got, want in zip(_floor(p).walls + _floor(p).openings,
                          _floor(ref).walls + _floor(ref).openings, strict=True):  # fmt: skip
-        assert got.model_dump(exclude={"sources"}) == want.model_dump(
-            exclude={"sources"}
+        # the swing arc only adds the swing record; no geometry changes
+        assert got.model_dump(exclude={"sources", "swing"}) == want.model_dump(
+            exclude={"sources", "swing"}
         )
+    assert _floor(p).openings[0].swing.source.entity_handle == ok_arc.dxf.handle
+    assert _floor(ref).openings[0].swing is None
 
 
 def test_10_symbol_refs_capped(tmp_path):
