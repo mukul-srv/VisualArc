@@ -1253,6 +1253,101 @@
             }
           ],
           "slabs": [],
+          "rooms": [
+            {
+              "id": "room-001",
+              "type": "room",
+              "name": "Room 1",
+              "name_source": "defaulted",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  3200.0,
+                  200.0
+                ],
+                [
+                  3200.0,
+                  3800.0
+                ],
+                [
+                  200.0,
+                  3800.0
+                ]
+              ],
+              "holes": [],
+              "area": {
+                "value": 10800000.0,
+                "unit": "mm2",
+                "source": "inferred"
+              },
+              "label_sources": []
+            },
+            {
+              "id": "room-002",
+              "type": "room",
+              "name": "Room 2",
+              "name_source": "defaulted",
+              "polygon": [
+                [
+                  3300.0,
+                  200.0
+                ],
+                [
+                  6300.0,
+                  200.0
+                ],
+                [
+                  6300.0,
+                  3800.0
+                ],
+                [
+                  3300.0,
+                  3800.0
+                ]
+              ],
+              "holes": [],
+              "area": {
+                "value": 10800000.0,
+                "unit": "mm2",
+                "source": "inferred"
+              },
+              "label_sources": []
+            },
+            {
+              "id": "room-003",
+              "type": "room",
+              "name": "Room 3",
+              "name_source": "defaulted",
+              "polygon": [
+                [
+                  6400.0,
+                  200.0
+                ],
+                [
+                  9400.0,
+                  200.0
+                ],
+                [
+                  9400.0,
+                  3800.0
+                ],
+                [
+                  6400.0,
+                  3800.0
+                ]
+              ],
+              "holes": [],
+              "area": {
+                "value": 10800000.0,
+                "unit": "mm2",
+                "source": "inferred"
+              },
+              "label_sources": []
+            }
+          ],
           "plan_offset": null
         }
       ]
@@ -1507,6 +1602,12 @@
           "entity_handle": "3F"
         }
       ]
+    },
+    {
+      "code": "room_name_defaulted",
+      "severity": "warning",
+      "message": "no label inside Room 1, Room 2, Room 3; numbered names assumed",
+      "sources": []
     }
   ],
   "parameters": {

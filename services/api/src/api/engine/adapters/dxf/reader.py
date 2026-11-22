@@ -8,6 +8,7 @@ $INSUNITS.
 import math
 from collections import Counter
 from dataclasses import replace
+from fnmatch import fnmatchcase
 from itertools import pairwise
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from ezdxf import units
 
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
+    Area,
     Building,
     Ceiling,
     Floor,
@@ -27,6 +29,7 @@ from api.engine.canonical.model import (
     Param,
     PlanOffset,
     Project,
+    Room,
     Slab,
     SourceRef,
     Wall,
@@ -40,6 +43,7 @@ from api.engine.geometry2d.openings import (
     resolve_openings,
 )
 from api.engine.geometry2d.role import resolve_roles
+from api.engine.geometry2d.rooms import Label, find_rooms
 from api.engine.geometry2d.walls import Segment
 from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS, Settings
@@ -330,6 +334,7 @@ def read_dxf(
     markers: list[Marker] = []
     decorative: dict[str, list] = {}  # opening layer -> ignored symbol entities
     swings = []  # ARCs on the door layer (orphan check)
+    labels: list[Label] = []  # TEXT/MTEXT: room-name candidates, placed later
     for e in doc.modelspace():
         if scope and e.dxf.handle not in scope.handles:
             continue
@@ -378,6 +383,13 @@ def read_dxf(
         if layer in ignored:  # the user's explicit choice; still reported below
             user_ignored.setdefault(e.dxf.layer, []).append(e)
             continue
+        if kind in ("TEXT", "MTEXT") and not any(
+            fnmatchcase(layer, p) for p in settings.non_floor_layer_patterns
+        ):
+            text = (e.dxf.text if kind == "TEXT" else e.plain_text()).strip()
+            if text:
+                at = e.ocs().to_wcs(e.dxf.insert) if kind == "TEXT" else e.dxf.insert
+                labels.append(Label(text, mm(at), _ref(e)))
         if layer not in wall_layers and layer not in floor_layers:
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
@@ -434,6 +446,8 @@ def read_dxf(
     for name, ents in unmapped.items():
         counts = Counter(e.dxftype() for e in ents)
         listed = ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
+        if counts.keys() & {"TEXT", "MTEXT"}:
+            listed += " (TEXT/MTEXT inside a closed room still name it)"
         more = f"; first {ref_cap} of {len(ents)} listed" if len(ents) > ref_cap else ""
         issues.append(
             Issue(
@@ -617,6 +631,22 @@ def read_dxf(
                 message="DXF has no ceiling height; supply --ceiling-height (mm)",
             )
         )
+    found, room_issues = find_rooms(paired, pieces, labels, settings) if paired else ([], [])
+    issues += room_issues
+    if not paired and labels:
+        issues.append(Issue(
+            code="rooms_not_built", severity="warning",
+            message=f"no walls, so no rooms were built; {len(labels)} text label(s) not used",
+            sources=[x.ref for x in labels[: settings.unmapped_ref_cap]],
+        ))
+    rooms = [
+        Room(
+            id=p.id, name=p.name, name_source="source_extracted" if p.name_from_label else "defaulted",
+            polygon=p.polygon, holes=p.holes, area=Area(value=p.area, source="inferred"),
+            label_sources=[x.ref for x in p.labels],
+        )
+        for p in found
+    ]
     slabs = []
     if boundaries and (
         slab_t := given.get("slab_thickness", preset.slab_thickness if preset else None)
@@ -655,6 +685,7 @@ def read_dxf(
         ceiling_height=ceil_h,
         ceilings=ceilings or [],
         slabs=slabs,
+        rooms=rooms,
         walls=walls,
         junctions=junctions,
         boundaries=boundaries,

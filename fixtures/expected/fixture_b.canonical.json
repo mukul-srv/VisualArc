@@ -510,6 +510,47 @@
             }
           ],
           "slabs": [],
+          "rooms": [
+            {
+              "id": "room-001",
+              "type": "room",
+              "name": "Room 1",
+              "name_source": "defaulted",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  5800.0,
+                  200.0
+                ],
+                [
+                  5800.0,
+                  2800.0
+                ],
+                [
+                  2800.0,
+                  2800.0
+                ],
+                [
+                  2800.0,
+                  4800.0
+                ],
+                [
+                  200.0,
+                  4800.0
+                ]
+              ],
+              "holes": [],
+              "area": {
+                "value": 19760000.0,
+                "unit": "mm2",
+                "source": "inferred"
+              },
+              "label_sources": []
+            }
+          ],
           "plan_offset": null
         }
       ]
@@ -588,6 +629,12 @@
           "entity_handle": "35"
         }
       ]
+    },
+    {
+      "code": "room_name_defaulted",
+      "severity": "warning",
+      "message": "no label inside Room 1; numbered names assumed",
+      "sources": []
     }
   ],
   "parameters": {

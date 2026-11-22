@@ -3,7 +3,7 @@
 - Source file: `fixture_openings.dxf`
 - Schema version: 0.7.0
 - Units: mm
-- Result: **OK** (0 blocking, 5 warnings)
+- Result: **OK** (0 blocking, 6 warnings)
 
 ## Blocking issues
 
@@ -16,6 +16,7 @@ None.
 - `opening_dimension_defaulted`: 4 window opening(s): height 1200 mm, sill 900 mm from provisional Settings defaults (not in the DXF) (sources: A-GLAZ:51, A-GLAZ:54, A-GLAZ:59, A-GLAZ:5A)
 - `elevation_defaulted`: floor elevation assumed 0 mm; DXF plan carries no elevation (sources: -)
 - `wall_role_inferred`: 10 wall(s) have no role layer (A-WALL-EXTR, A-WALL-INTR); role inferred from geometry (a face on the outer boundary of all walls = exterior). Walls around an interior courtyard read as interior. (sources: A-WALL:33, A-WALL:37, A-WALL:34, A-WALL:38, A-WALL:39, A-WALL:35, A-WALL:3A, A-WALL:3B, A-WALL:36, A-WALL:3C, A-WALL:41, A-WALL:43, A-WALL:42, A-WALL:44, A-WALL:49, A-WALL:4B, A-WALL:4A, A-WALL:4C, A-WALL:4D, A-WALL:4F, A-WALL:4E, A-WALL:50, A-WALL:45, A-WALL:47, A-WALL:46, A-WALL:48, A-WALL:3D, A-WALL:40, A-WALL:3E, A-WALL:3F)
+- `room_name_defaulted`: no label inside Room 1, Room 2, Room 3; numbered names assumed (sources: -)
 
 ## Values by provenance
 
@@ -66,6 +67,7 @@ Junctions (8) are always `inferred`: corner/T fill between paired-line walls, no
 - Junctions: 8
 - Floor boundaries: 3
 - Slabs: 0
+- Rooms: 3
 - Openings: 7
 
 ## Expected versus generated
@@ -77,6 +79,7 @@ Junctions (8) are always `inferred`: corner/T fill between paired-line walls, no
 | junctions | 8 | 8 | yes |
 | floor boundaries | 3 | 3 | yes |
 | slabs | 0 | 0 | yes |
+| rooms | 3 | 3 | yes |
 | openings | 7 | 7 | yes |
 | Wall heights (mm) | 3000 | 3000 | yes |
 

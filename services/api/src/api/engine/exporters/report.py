@@ -57,6 +57,7 @@ def _counts(project: Project) -> dict[str, int]:
         "junctions": sum(len(f.junctions) for f in floors),
         "floor boundaries": sum(len(f.boundaries) for f in floors),
         "slabs": sum(len(f.slabs) for f in floors),
+        "rooms": sum(len(f.rooms) for f in floors),
         "openings": sum(len(f.openings) for f in floors),
     }
 

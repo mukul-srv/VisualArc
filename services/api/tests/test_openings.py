@@ -123,6 +123,8 @@ def test_1_worked_example_exact_values(tmp_path):
         assert o.sources[0].layer == ("A-DOOR" if kind == "door" else "A-GLAZ")
 
     assert _codes(p) == {
+        "no_closed_rooms": 1,  # one wall only
+        "room_outline_open": 1,
         "opening_dimension_defaulted": 2,
         "opening_symbol_ignored": 2,
         "unpaired_segment": 2,

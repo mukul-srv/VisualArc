@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MetadataPanel } from "../components/MetadataPanel";
 import { pickElement } from "./pick";
-import { describeElement, describeOpening, pickOpening, type ElementData, type OpeningData } from "./selection";
+import { describeElement, describeOpening, describeRoom, pickOpening, type ElementData, type OpeningData } from "./selection";
 
 const root = path.resolve(__dirname, "../../../..");
 type Canon = {
@@ -171,4 +171,17 @@ test("describeElement handles a ceiling with inferred elevation provenance", () 
   expect(p.title).toBe("Ceiling");
   expect(p.rows).toContainEqual({ label: "Elevation", value: "3000 mm", provenance: "inferred" });
   expect(p.sources).toEqual(["A-FLOR:3D"]);
+});
+
+test("describeRoom shows the name with its provenance and the area in m2 with inferred provenance", () => {
+  const p = describeRoom({
+    id: "room-001",
+    name: "Kitchen",
+    name_source: "source_extracted",
+    area: { value: 12_000_000, unit: "mm2", source: "inferred" },
+    label_sources: [{ layer: "A-ANNO-TEXT", entity_handle: "5A" }],
+  }, "floor-0");
+  expect(p.rows.find((r) => r.label === "Name")).toMatchObject({ value: "Kitchen", provenance: "source_extracted" });
+  expect(p.rows.find((r) => r.label.startsWith("Area"))).toMatchObject({ value: "12.00 m²", provenance: "inferred" });
+  expect(p.sources).toEqual(["A-ANNO-TEXT:5A"]);
 });

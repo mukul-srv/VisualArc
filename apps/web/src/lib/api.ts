@@ -153,4 +153,6 @@ export const getProject = (projectId: string, f: Fetch = fetch, version?: number
 
 export const glbUrl = (generationId: string, share?: string | null) =>
   `${API_BASE}/api/v1/generations/${generationId}/artifacts/glb${share ? `?share=${encodeURIComponent(share)}` : ""}`;
+/** The canonical JSON of a generation, from its GLB url (same id, other artifact). */
+export const canonicalUrl = (glb: string) => glb.replace("/artifacts/glb", "/artifacts/canonical");
 export const isGenerationId = (s: string) => /^[0-9a-f]{32}$/.test(s);
