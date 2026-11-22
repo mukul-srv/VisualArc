@@ -37,6 +37,14 @@ class Settings:
     # Opening marker layers (ADR-002 §1): AIA names; the layer is the opening kind.
     door_layer: str = "A-DOOR"
     window_layer: str = "A-GLAZ"
+    # Per-project additions (conventions.py): more layers with the same meaning as the
+    # primary ones above, and layers the user chose to ignore (still reported, never silent).
+    # Upper case. Empty = the plain convention above.
+    wall_extra: tuple[str, ...] = ()
+    floor_extra: tuple[str, ...] = ()
+    door_extra: tuple[str, ...] = ()
+    window_extra: tuple[str, ...] = ()
+    ignore_layers: tuple[str, ...] = ()
 
     # Opening height/sill used when no CLI flag supplies them; result is
     # provenance `defaulted` plus an opening_dimension_defaulted warning
@@ -133,7 +141,27 @@ class Settings:
 
     @property
     def wall_layers(self) -> frozenset[str]:
-        return frozenset({self.wall_layer, *(l for l, _ in self.wall_role_layers)})
+        return frozenset({self.wall_layer, *(l for l, _ in self.wall_role_layers), *self.wall_extra})
+
+    @property
+    def floor_layers(self) -> frozenset[str]:
+        return frozenset({self.floor_layer, *self.floor_extra})
+
+    @property
+    def door_layers(self) -> frozenset[str]:
+        return frozenset({self.door_layer, *self.door_extra})
+
+    @property
+    def window_layers(self) -> frozenset[str]:
+        return frozenset({self.window_layer, *self.window_extra})
+
+    @property  # for messages: the primary layer, plus any user-mapped ones
+    def wall_label(self) -> str:
+        return ", ".join([self.wall_layer, *self.wall_extra])
+
+    @property
+    def floor_label(self) -> str:
+        return ", ".join([self.floor_layer, *self.floor_extra])
 
     def __post_init__(self) -> None:
         if re.compile(self.floor_prefix_pattern).groups < 1:

@@ -19,15 +19,14 @@ from api.engine.adapters.dxf.inspect import build_inventory
 from api.engine.adapters.dxf.reader import InputError, load_doc, read_dxf, resolve_scale
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, excluded_issue
 from api.engine.settings import DEFAULTS
-from api.generations import GenerationRequest, read_project
+from api.generations import GenerationRequest, read_project, request_settings
+from api.layer_conventions import preflight, save_conventions
 from api.pipeline import has_blocking
 from api.projects import FloorRequest, add_floor, create_project, record_version
 from api.storage import new_id, upload_key, upload_path
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
-# preflight issues that mean "the user must supply this parameter"
-_NEEDS = {"units_missing": "units"}  # heights are never asked: presets fill them, tagged
 
 
 async def _save(request: Request, limit: int) -> int:
@@ -74,18 +73,7 @@ async def create_upload(request: Request, user: CurrentUser) -> dict:
     except BaseException:
         path.unlink(missing_ok=True)  # no blob without its metadata row
         raise
-    codes = {i.code for i in project.issues}
-    candidates = []
-    if "floor_split_unconfirmed" in codes:  # read_dxf already checked the units
-        doc = load_doc(path)
-        candidates = [c.to_dict() for c in detect_floors(doc, resolve_scale(doc)).candidates]
-    return {
-        "upload_id": upload_id,
-        "inventory": inventory,
-        "issues": [i.model_dump(mode="json") for i in project.issues],
-        "needs": sorted(v for k, v in _NEEDS.items() if k in codes),
-        "floor_candidates": candidates,
-    }
+    return {"upload_id": upload_id, "inventory": inventory, **preflight(path, project, DEFAULTS)}
 
 
 class FloorConfirm(BaseModel):
@@ -124,10 +112,11 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
         doc = load_doc(path)
     except InputError as e:
         raise HTTPException(422, str(e).replace(str(path), "the uploaded file")) from e
+    settings = request_settings(req)
     k = resolve_scale(doc, req.units)
     if k is None:
         raise HTTPException(422, "units missing, conflicting or unsupported; supply units")
-    split = detect_floors(doc, k)
+    split = detect_floors(doc, k, settings)
     cands = {c.key: c for c in split.candidates}
     if len(cands) < 2:
         raise HTTPException(422, "this upload has no floor split to confirm")
@@ -187,6 +176,8 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
     # one transaction: project, floors, generation rows and its single version commit together
     with session() as db, db.begin():
         pid = create_project(req.project_name, user.id, version=False, db=db)
+        if req.conventions is not None:
+            save_conventions(db, pid, req.conventions)
         for key, freq, scope, why in jobs:
             out = add_floor(pid, freq, scope, user.id, why, version=False, db=db)
             if isinstance(out, JSONResponse):  # cannot happen after the check above

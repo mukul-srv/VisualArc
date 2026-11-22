@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { getProject } from "../lib/api";
 import { parseManifest, sortFloors, viewerUrl, type Manifest } from "../lib/project";
 import { deleteProject, listVersions, renameProject, restoreVersion, type VersionInfo } from "../lib/projects";
+import { ConventionsPanel } from "./ConventionsPanel";
+import { getProjectConventions, listConventions, putProjectConventions, type ConventionsSpec, type PresetInfo } from "../lib/conventions";
 import { AccessPanel } from "./AccessPanel";
 import { VersionList } from "./lists";
 import styles from "./dashboard.module.css";
@@ -20,6 +22,8 @@ export function ProjectView({ id }: { id: string }) {
   const [name, setName] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [conv, setConv] = useState<ConventionsSpec | null>(null);
+  const [convInfo, setConvInfo] = useState<{ presets: PresetInfo[]; roles: string[] } | null>(null);
 
   const load = useCallback(async () => {
     const [p, v] = await Promise.all([getProject(id), listVersions(id)]);
@@ -28,6 +32,9 @@ export function ProjectView({ id }: { id: string }) {
     setManifest(m);
     setName(m.name);
     if (v.ok) setVersions(v.items);
+    const [c, info] = await Promise.all([getProjectConventions(id), listConventions()]);
+    if (c.ok) setConv({ preset: c.preset, mapping: c.mapping });
+    if (info.ok) setConvInfo({ presets: info.presets, roles: info.roles });
   }, [id]);
   useEffect(() => {
     queueMicrotask(load);
@@ -68,6 +75,14 @@ export function ProjectView({ id }: { id: string }) {
             <li key={f.id}>{f.name} at {f.elevation.value} mm <a href={viewerUrl(id, f.id)}>Open in viewer</a></li>
           ))}
         </ul>
+      )}
+      {conv && convInfo && (
+        <>
+          <h2>Layer conventions</h2>
+          <ConventionsPanel spec={conv} setSpec={setConv} presets={convInfo.presets} roles={convInfo.roles} layers={[]} disabled={busy} readOnly={!canEdit} />
+          {canEdit && <button type="button" disabled={busy} onClick={() => run(() => putProjectConventions(id, conv), load)}>Save conventions</button>}
+          <p><small>Applies to floors added from now on; existing floors are not regenerated.</small></p>
+        </>
       )}
       <h2>Version history</h2>
       <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} readOnly={!canEdit} />

@@ -85,7 +85,7 @@ def check_complexity(doc, settings: Settings = DEFAULTS) -> None:
             f"drawing has {len(msp)} entities, limit is {settings.max_entities} "
             "(provisional; see the T21 benchmark report)"
         )
-    opening_layers = {settings.door_layer, settings.window_layer}
+    opening_layers = settings.door_layers | settings.window_layers
     segments = markers = 0
     for e in msp:
         layer, kind = strip_floor_prefix(e.dxf.layer, settings).upper(), e.dxftype()
@@ -100,7 +100,7 @@ def check_complexity(doc, settings: Settings = DEFAULTS) -> None:
         (
             segments,
             settings.max_wall_segments,
-            f"wall segments on {settings.wall_layer}",
+            f"wall segments on {settings.wall_label}",
         ),
         (markers, settings.max_opening_markers, "opening markers"),
     ):
@@ -229,8 +229,8 @@ def read_dxf(
         raise ValueError(f"window sill must be >= 0 mm, got {window_sill}")
     doc = load_doc(path, settings.max_dxf_bytes if max_bytes is None else max_bytes)
     check_complexity(doc, settings)
-    wall_layer, floor_layer = settings.wall_layer, settings.floor_layer
-    wall_layers = settings.wall_layers
+    wall_layers, floor_layers = settings.wall_layers, settings.floor_layers
+    ignored = set(settings.ignore_layers)
     ref_cap = settings.unmapped_ref_cap
     project = {"id": path.stem, "source_file": path.name}
 
@@ -312,7 +312,11 @@ def read_dxf(
     segments: list[Segment] = []
     boundaries: list[FloorBoundary] = []
     unmapped: dict[str, list] = {}  # layer -> entities, in drawing order
-    opening_kind = {settings.door_layer: "door", settings.window_layer: "window"}
+    opening_kind = {
+        **dict.fromkeys(settings.window_layers, "window"),
+        **dict.fromkeys(settings.door_layers, "door"),
+    }
+    user_ignored: dict[str, list] = {}  # layer -> entities the user mapped to "ignore"
     markers: list[Marker] = []
     decorative: dict[str, list] = {}  # opening layer -> ignored symbol entities
     swings = []  # ARCs on the door layer (orphan check)
@@ -358,10 +362,13 @@ def read_dxf(
                     markers.append(Marker(opening_kind[layer], _ref(e), rect))
             else:
                 decorative.setdefault(e.dxf.layer, []).append(e)
-                if kind == "ARC" and layer == settings.door_layer:
+                if kind == "ARC" and layer in settings.door_layers:
                     swings.append(e)
             continue
-        if layer not in wall_layers and layer != floor_layer:
+        if layer in ignored:  # the user's explicit choice; still reported below
+            user_ignored.setdefault(e.dxf.layer, []).append(e)
+            continue
+        if layer not in wall_layers and layer not in floor_layers:
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
         if layer in wall_layers and kind == "LINE":
@@ -378,7 +385,7 @@ def read_dxf(
             segments += [
                 Segment(e.dxf.handle, e.dxf.layer, a, b) for a, b in pairwise(ring)
             ]
-        elif layer == floor_layer and kind == "LWPOLYLINE":
+        elif layer in floor_layers and kind == "LWPOLYLINE":
             pts = [mm(p) for p in _wcs_xy(e)]
             if len(pts) > 3 and pts[0] == pts[-1]:
                 pts.pop()  # closed by repeating the first point
@@ -423,7 +430,17 @@ def read_dxf(
                 code="unmapped_layer",
                 severity="warning",
                 message=f"layer {name} is not a mapped layer ("
-                f"{', '.join(sorted(wall_layers))}, {floor_layer}); ignored {listed}{more}",
+                f"{', '.join(sorted(wall_layers))}, {settings.floor_label}); ignored {listed}{more}",
+                sources=[_ref(e) for e in ents[:ref_cap]],
+            )
+        )
+    for name, ents in user_ignored.items():
+        issues.append(
+            Issue(
+                code="layer_ignored_by_user",
+                severity="warning",
+                message=f"layer {name} was mapped to ignore in the project conventions; "
+                f"{len(ents)} entities not read",
                 sources=[_ref(e) for e in ents[:ref_cap]],
             )
         )
@@ -463,7 +480,7 @@ def read_dxf(
             Issue(
                 code="no_walls",
                 severity="blocking",
-                message=f"no paired wall lines found on {wall_layer}",
+                message=f"no paired wall lines found on {settings.wall_label}",
                 # every usable segment is unpaired here; polyline pieces share a ref
                 sources=list(dict.fromkeys(s.ref for s in res.segments)),
             )
@@ -569,7 +586,7 @@ def read_dxf(
                     code="ceiling_not_built",
                     severity="warning",
                     message="ceiling height given but no floor boundary on "
-                    f"{floor_layer}; no ceiling built",
+                    f"{settings.floor_label}; no ceiling built",
                 )
             )
         if wall_height is not None and ceiling_height > wall_height:

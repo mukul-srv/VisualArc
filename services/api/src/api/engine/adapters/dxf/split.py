@@ -142,7 +142,7 @@ def excluded_issue(c: Candidate) -> Issue:
 
 def detect_floors(doc, k: float, settings: Settings = DEFAULTS) -> Split:
     """`k` = drawing units -> mm. Candidates are sorted (natural key / left to right)."""
-    wall_layers, floor_layer = settings.wall_layers, settings.floor_layer
+    wall_layers, floor_layers = settings.wall_layers, settings.floor_layers
     pattern = re.compile(settings.floor_prefix_pattern)
     ents = list(doc.modelspace())
     prefixed = any(pattern.match(e.dxf.layer) for e in ents)
@@ -154,7 +154,7 @@ def detect_floors(doc, k: float, settings: Settings = DEFAULTS) -> Split:
 
     def is_anchor(e) -> bool:
         return e.dxftype() in _ANCHOR_KINDS and (
-            mapped(e) in wall_layers or mapped(e) == floor_layer
+            mapped(e) in wall_layers or mapped(e) in floor_layers
         )
 
     members: dict[str, list] = {}  # key -> entities

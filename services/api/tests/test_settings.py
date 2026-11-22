@@ -32,6 +32,11 @@ def test_defaults_match_document_08():
         "floor_layer": "A-FLOR",
         "door_layer": "A-DOOR",
         "window_layer": "A-GLAZ",
+        "wall_extra": (),  # per-project conventions: empty by default
+        "floor_extra": (),  # per-project conventions: empty by default
+        "door_extra": (),  # per-project conventions: empty by default
+        "window_extra": (),  # per-project conventions: empty by default
+        "ignore_layers": (),  # per-project conventions: empty by default
         "default_door_height_mm": 2100.0,
         "default_door_sill_mm": 0.0,
         "default_window_height_mm": 1200.0,
