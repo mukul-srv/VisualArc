@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteGeneration, deleteProject, listProjects, recentGenerations, renameGeneration, saveAsProject, type ProjectSummary, type RecentGeneration } from "../lib/projects";
@@ -32,10 +31,7 @@ export function Dashboard() {
   return (
     <main className={styles.page}>
       <AppNav />
-      <div className={styles.head}>
-        <h1>My projects</h1>
-        <Link href="/new">New project</Link>
-      </div>
+      <h1>My projects</h1>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {projects === null && !error && <p role="status">Loading…</p>}
       {projects && <ProjectList projects={projects} busy={busy} onDelete={(p) => act(() => deleteProject(p.id), reload)} />}

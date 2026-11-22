@@ -10,6 +10,7 @@ import { resolveStem } from "@/lib/model-stem";
 import { ViewerNav } from "@/components/ViewerNav";
 import { MetadataPanel } from "@/components/MetadataPanel";
 import { RoomList } from "@/components/RoomList";
+import { ViewerToolbar } from "@/components/ViewerToolbar";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distanceToOpening, doorFor, nearestDoor, toggle as toggleDoor, whyNoToggle, type Door } from "@/lib/doors";
@@ -501,32 +502,23 @@ export default function ViewerPage() {
     <div style={{ position: "fixed", inset: 0 }}>
       <div ref={mount} style={{ width: "100%", height: "100%" }} />
       <div style={{ position: "absolute", top: 12, left: 12, color: "#eee", font: "14px monospace" }}>
-        <button
-          disabled={walking}
-          onClick={() => {
+        <ViewerToolbar
+          walking={walking}
+          top={top}
+          measuring={measuring}
+          roofPresent={roofPresent}
+          roofOn={roofOn}
+          onWalk={() => toggleWalk.current()}
+          onRoof={() => {
+            setRoofOn(!roofOn);
+            setRoof.current(!roofOn);
+          }}
+          onTop={() => {
             setTopState(!top);
             setTop.current(!top);
           }}
-        >
-          {top ? "Perspective" : "Top-down"}
-        </button>{" "}
-        <button onClick={() => toggleWalk.current()}>{walking ? "Exit walk (Esc)" : "Walk"}</button>{" "}
-        <button disabled={walking} onClick={() => toggleMeasure.current()}>
-          {measuring ? "Measure: on (Esc)" : "Measure"}
-        </button>{" "}
-        {roofPresent && (
-          <>
-            <button
-              aria-pressed={roofOn}
-              onClick={() => {
-                setRoofOn(!roofOn);
-                setRoof.current(!roofOn);
-              }}
-            >
-              {roofOn ? "Roof: on" : "Roof: off"}
-            </button>{" "}
-          </>
-        )}
+          onMeasure={() => toggleMeasure.current()}
+        />
         {walking ? "WASD/arrows move, drag to look, E opens a door" : status}
         {hint && <div role="status" style={{ color: "#ffcc66" }}>{hint}</div>}
         <ViewerNav shared={shared} manifest={manifest} viewing={viewing} />

@@ -40,7 +40,8 @@ test("tabs: Sharing is one click for the owner only", () => {
   for (const r of ["editor", "viewer"] as Role[]) {
     const html = tabs(r);
     expect(html).not.toContain("Sharing");
-    for (const t of ["Floors", "Conventions", "Versions"]) expect(html).toContain(t);
+    for (const t of ["Floors", "Parameters", "Versions"]) expect(html).toContain(t);
+    expect(html).not.toContain("Conventions"); // a fold under Floors, not a tab of its own
   }
 });
 

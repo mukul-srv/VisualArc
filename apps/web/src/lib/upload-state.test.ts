@@ -44,3 +44,14 @@ test("the upload page is keyed by its query string, and a bfcache restore starts
   expect(restoredFromCache({ persisted: false })).toBe(false);
   expect(restoredFromCache({})).toBe(false);
 });
+
+
+import { uploadStep } from "./upload-state";
+
+test("the step line says reading while the upload is checked, building only while generating", () => {
+  expect(uploadStep(false, false, false)).toMatch(/^Step 1 of 3: choose/);
+  expect(uploadStep(false, true, false)).toMatch(/^Step 1 of 3: reading/); // uploading and preflight
+  expect(uploadStep(true, false, false)).toMatch(/^Step 2 of 3/);
+  expect(uploadStep(true, true, false)).toMatch(/^Step 3 of 3: building/);
+  expect(uploadStep(false, false, true)).toContain("for the new floor");
+});

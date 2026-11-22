@@ -7,7 +7,8 @@ import { createProject, getPresets, getProject, isGenerationId, splitUpload, upl
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
-import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache } from "@/lib/upload-state";
+import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache, uploadStep } from "@/lib/upload-state";
+import { HELP } from "@/lib/help";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
@@ -191,7 +192,8 @@ export function UploadFlow() {
         ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
       <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "DXF floor plan to 3D"}</h1>
-      <p>Upload a DXF drawn to the supported convention. Values the drawing lacks use nominal defaults, and every one is reported as assumed.</p>
+      <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null)}</strong></p>
+      <p><small>Values your drawing lacks use defaults, and every one is reported as assumed.</small></p>
       <input type="file" accept=".dxf" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
         <p role="status">
@@ -207,12 +209,15 @@ export function UploadFlow() {
       )}
       {pre && (
         <>
-          <h2>Preflight</h2>
-          <p>Layers: {pre.inventory.layers.join(", ")}</p>
-          {convInfo && (
-            <ConventionsPanel spec={conv} setSpec={applyConventions} presets={convInfo.presets} roles={convInfo.roles} layers={layers} disabled={busy} />
-          )}
+          <h2>What we found</h2>
           <IssueList issues={shown} />
+          {convInfo && (
+            <details>
+              <summary title={HELP.conventions}>Layer conventions (advanced): {pre.inventory.layers.length} layers in this drawing</summary>
+              <p><small>Layers: {pre.inventory.layers.join(", ")}</small></p>
+              <ConventionsPanel spec={conv} setSpec={applyConventions} presets={convInfo.presets} roles={convInfo.roles} layers={layers} disabled={busy} />
+            </details>
+          )}
           <UploadForm
             pre={pre}
             form={form}

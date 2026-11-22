@@ -8,6 +8,7 @@ import { deleteProject, listVersions, removeFloor, renameFloor, renameProject, r
 import { ConventionsPanel } from "./ConventionsPanel";
 import { getProjectConventions, listConventions, putProjectConventions, type ConventionsSpec, type PresetInfo } from "../lib/conventions";
 import { AccessPanel } from "./AccessPanel";
+import { HELP } from "../lib/help";
 import { ParametersPanel } from "./ParametersPanel";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
@@ -27,6 +28,7 @@ export function ProjectView({ id }: { id: string }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<TabId>("floors");
+  const [convOpen, setConvOpen] = useState(false); // layer conventions fold, under Floors
   const [conv, setConv] = useState<ConventionsSpec | null>(null);
   const [convInfo, setConvInfo] = useState<{ presets: PresetInfo[]; roles: string[] } | null>(null);
 
@@ -47,7 +49,8 @@ export function ProjectView({ id }: { id: string }) {
   // /projects/<id>#sharing (the dashboard's Share button) opens that section directly
   useEffect(() => {
     const t = window.location.hash.slice(1);
-    if (["floors", "parameters", "conventions", "versions", "sharing"].includes(t)) queueMicrotask(() => setTab(t as TabId));
+    if (t === "conventions") queueMicrotask(() => { setTab("floors"); setConvOpen(true); }); // old links: now a fold under Floors
+    else if (["floors", "parameters", "versions", "sharing"].includes(t)) queueMicrotask(() => setTab(t as TabId));
   }, []);
   const select = (t: TabId) => {
     setTab(t);
@@ -105,21 +108,22 @@ export function ProjectView({ id }: { id: string }) {
             <FloorList projectId={id} floors={manifest.floors} role={role} busy={busy}
               onRename={(fid, n) => run(() => renameFloor(id, fid, n), load)}
               onRemove={(fid) => run(() => removeFloor(id, fid), load)} />
-            <p><small>Renaming and removing floors is available here. Editing walls, openings and other model elements is not supported yet (planned); to change the geometry, fix the DXF and add it as a new floor.</small></p>
+            <p><small>To change the geometry, fix the DXF and add it as a new floor. Editing walls and openings in the app is planned.</small></p>
+            {conv && convInfo && (
+              <details open={convOpen} onToggle={(e) => setConvOpen((e.target as HTMLDetailsElement).open)}>
+                <summary title={HELP.conventions}>Layer conventions (advanced)</summary>
+                <ConventionsPanel spec={conv} setSpec={setConv} presets={convInfo.presets} roles={convInfo.roles} layers={[]} disabled={busy} readOnly={!edit} />
+                {edit ? (
+                  <button type="button" disabled={busy} onClick={() => run(() => putProjectConventions(id, conv), load)}>Save conventions</button>
+                ) : (
+                  <p>Only editors and the owner can change conventions.</p>
+                )}
+                <p><small>New layers are mapped when you upload a drawing (Add floor). Changes apply to floors added from now on; existing floors are not regenerated.</small></p>
+              </details>
+            )}
           </>
         )}
         {shown === "parameters" && <ParametersPanel projectId={id} readOnly={!edit} onChanged={load} />}
-        {shown === "conventions" && conv && convInfo && (
-          <>
-            <ConventionsPanel spec={conv} setSpec={setConv} presets={convInfo.presets} roles={convInfo.roles} layers={[]} disabled={busy} readOnly={!edit} />
-            {edit ? (
-              <button type="button" disabled={busy} onClick={() => run(() => putProjectConventions(id, conv), load)}>Save conventions</button>
-            ) : (
-              <p>Only editors and the owner can change conventions.</p>
-            )}
-            <p><small>New layers are mapped when you upload a drawing (Add floor). Changes apply to floors added from now on; existing floors are not regenerated.</small></p>
-          </>
-        )}
         {shown === "versions" && (
           <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} readOnly={!edit} />
         )}

@@ -25,14 +25,16 @@ export function MetadataPanel({ panel }: { panel: Panel | null }) {
           ))}
         </tbody>
       </table>
-      <p style={{ margin: "6px 0 0" }}>{panel.sourcesLabel}:</p>
-      <ul style={{ margin: 0, paddingLeft: 18 }}>
-        {panel.sources.length ? (
-          panel.sources.map((s) => <li key={s}>{s}</li>)
-        ) : (
-          <li>none (derived by the engine)</li>
-        )}
-      </ul>
+      <details style={{ marginTop: 6 }}>
+        <summary>{panel.sourcesLabel} ({panel.sources.length})</summary>
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {panel.sources.length ? (
+            panel.sources.map((s) => <li key={s}>{s}</li>)
+          ) : (
+            <li>none (derived by the engine)</li>
+          )}
+        </ul>
+      </details>
     </aside>
   );
 }

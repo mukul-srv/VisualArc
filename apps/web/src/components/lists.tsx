@@ -5,6 +5,8 @@ import { useState } from "react";
 import { shortDate, type ProjectSummary, type RecentGeneration, type VersionInfo } from "../lib/projects";
 import { viewerUrl, type Role } from "../lib/project";
 import { can } from "./ProjectParts";
+import { MoreMenu } from "./MoreMenu";
+import { HELP } from "../lib/help";
 import styles from "./dashboard.module.css";
 
 /** My projects (and those shared with me), newest first, each row with its actions by role:
@@ -42,17 +44,21 @@ export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSum
               <td>
                 <span className={styles.actions}>
                   {p.floor_count > 0 ? <a href={viewerUrl(p.id)}>Open</a> : <span title="Add a floor first" aria-disabled="true">Open (no floors)</span>}
-                  {edit && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
-                  {manage && <Link href={`/projects/${p.id}#sharing`}>Share</Link>}
-                  {manage && onDelete && confirming !== p.id && (
-                    <button type="button" disabled={busy} aria-label={`Delete ${p.name}`} onClick={() => setConfirming(p.id)}>Delete</button>
-                  )}
-                  {manage && onDelete && confirming === p.id && (
-                    <span role="alertdialog" aria-label={`Confirm delete ${p.name}`}>
-                      Delete &quot;{p.name}&quot;?{" "}
-                      <button type="button" disabled={busy} onClick={() => { onDelete(p); setConfirming(null); }}>Confirm delete</button>{" "}
-                      <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
-                    </span>
+                  {(edit || manage) && (
+                    <MoreMenu title={HELP.more}>
+                      {edit && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
+                      {manage && <Link href={`/projects/${p.id}#sharing`}>Share</Link>}
+                      {manage && onDelete && confirming !== p.id && (
+                        <button type="button" disabled={busy} aria-label={`Delete ${p.name}`} onClick={() => setConfirming(p.id)}>Delete</button>
+                      )}
+                      {manage && onDelete && confirming === p.id && (
+                        <span role="alertdialog" aria-label={`Confirm delete ${p.name}`}>
+                          Delete &quot;{p.name}&quot;?{" "}
+                          <button type="button" disabled={busy} onClick={() => { onDelete(p); setConfirming(null); }}>Confirm delete</button>{" "}
+                          <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
+                        </span>
+                      )}
+                    </MoreMenu>
                   )}
                 </span>
               </td>
@@ -82,7 +88,7 @@ export function RecentList({ items, onSave, onRename, onDelete, busy }: {
   const [saving, setSaving] = useState<{ id: string; name: string } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
-  if (items.length === 0) return <p>No buildings generated yet.</p>;
+  if (items.length === 0) return <p>No buildings generated yet. Choose New project, upload a DXF floor plan and generate it; it will appear here.</p>;
   return (
     <ul aria-label="Recent buildings">
       {items.map((g) => (
@@ -94,6 +100,18 @@ export function RecentList({ items, onSave, onRename, onDelete, busy }: {
           {!g.project_id && (
             <>
               {" "}<small title={STANDALONE_HELP} style={{ cursor: "help", textDecoration: "underline dotted" }}>Standalone model</small>{" "}
+              {onSave && saving?.id !== g.generation_id && (
+                <button type="button" disabled={busy} onClick={() => setSaving({ id: g.generation_id, name: "" })}>Save as project</button>
+              )}
+              {onSave && saving?.id === g.generation_id && (
+                <form style={{ display: "inline" }} onSubmit={(e) => { e.preventDefault(); onSave(g.generation_id, saving.name.trim()); setSaving(null); }}>
+                  <input aria-label="Project name" placeholder="Project name" value={saving.name} maxLength={100} onChange={(e) => setSaving({ id: g.generation_id, name: e.target.value })} />{" "}
+                  <button disabled={busy || !saving.name.trim()} title={saving.name.trim() ? undefined : "Enter a project name"}>Create project</button>{" "}
+                  <button type="button" onClick={() => setSaving(null)}>Cancel</button>
+                </form>
+              )}
+              {(onRename || onDelete) && (
+                <MoreMenu title={HELP.more}>
               {onRename && renaming?.id !== g.generation_id && (
                 <button type="button" disabled={busy} aria-label={`Rename ${recentLabel(g)}`} onClick={() => setRenaming({ id: g.generation_id, name: recentLabel(g) })}>Rename</button>
               )}
@@ -114,15 +132,7 @@ export function RecentList({ items, onSave, onRename, onDelete, busy }: {
                   <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
                 </span>
               )}
-              {onSave && saving?.id !== g.generation_id && (
-                <button type="button" disabled={busy} onClick={() => setSaving({ id: g.generation_id, name: "" })}>Save as project</button>
-              )}
-              {onSave && saving?.id === g.generation_id && (
-                <form style={{ display: "inline" }} onSubmit={(e) => { e.preventDefault(); onSave(g.generation_id, saving.name.trim()); setSaving(null); }}>
-                  <input aria-label="Project name" placeholder="Project name" value={saving.name} maxLength={100} onChange={(e) => setSaving({ id: g.generation_id, name: e.target.value })} />{" "}
-                  <button disabled={busy || !saving.name.trim()} title={saving.name.trim() ? undefined : "Enter a project name"}>Create project</button>{" "}
-                  <button type="button" onClick={() => setSaving(null)}>Cancel</button>
-                </form>
+                </MoreMenu>
               )}
             </>
           )}
