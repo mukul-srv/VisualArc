@@ -85,12 +85,32 @@ def test_non_finite_bounded_height_rejected_on_generations(client):
 
 def test_blocking_issue_is_409_and_nothing_appended(client):
     pid = _pid(client)
-    r = client.post(
+    r = client.post(  # a user value that cannot fit: door taller than the preset wall
         f"{P}/{pid}/floors",
-        json={"upload_id": _upload(client, "fixture_a.dxf"), "floor_name": "G", "elevation": 0},
+        json={"upload_id": _upload(client, "fixture_openings.dxf"), "floor_name": "G",
+              "elevation": 0, "door_height": 9000},
     )
     assert r.status_code == 409 and r.json()["issues"]
     assert client.get(f"{P}/{pid}").json()["floors"] == []
+
+
+def test_empty_elevation_is_highest_floor_plus_preset_step_tagged_defaulted(client):
+    pid = _pid(client)
+    first = client.post(f"{P}/{pid}/floors", json={"upload_id": _upload(client, "fixture_a.dxf"), "floor_name": "G"})
+    assert first.status_code == 201
+    assert first.json()["floor"]["elevation"] == {"value": 0.0, "unit": "mm", "source": "defaulted"}
+    _add(client, pid, "fixture_openings.dxf", "Top", 7000)  # user floor above
+    r = client.post(
+        f"{P}/{pid}/floors",
+        json={"upload_id": _upload(client, "fixture_a.dxf"), "floor_name": "Next", "building_type": "commercial"},
+    )
+    assert r.status_code == 201
+    assert r.json()["floor"]["elevation"] == {"value": 10600.0, "unit": "mm", "source": "defaulted"}
+    warn = [i["message"] for i in r.json()["issues"] if i["code"] == "elevation_defaulted"]
+    assert warn and "10600" in warn[0] and "3600" in warn[0]
+    canon = client.get(r.json()["artifacts"]["canonical"]).json()["buildings"][0]["floors"][0]
+    assert canon["elevation"] == {"value": 10600.0, "unit": "mm", "source": "defaulted"}
+    assert client.get(f"{P}/{pid}").json()["floors"][2]["elevation"]["value"] == 10600.0
 
 
 def test_invalid_and_unknown_ids(client):

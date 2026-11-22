@@ -5,9 +5,9 @@ LWPOLYLINE on A-FLOR; openings = closed rectangular LWPOLYLINE markers on
 A-DOOR/A-GLAZ filling wall gaps (ADR-002). Everything is converted to mm via
 $INSUNITS.
 """
-
 import math
 from collections import Counter
+from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
 
@@ -204,7 +204,19 @@ def read_dxf(
     floor_name: str = "Level 0",
     floor_elevation: float | None = None,  # mm; None = defaulted 0 + warning
     scope: FloorScope | None = None,  # one confirmed floor of a consolidated DXF
+    building_type: str | None = None,  # None: no presets, missing heights block (CLI)
+    elevation_assumed: str | None = None,  # why floor_elevation is an assumption, if it is
 ) -> Project:
+    if building_type is not None and building_type not in dict(settings.building_presets):
+        raise ValueError(f"unknown building type {building_type!r}")
+    preset = settings.preset(building_type) if building_type else None
+    if preset:  # opening defaults follow the building type; still tagged `defaulted`
+        settings = replace(
+            settings,
+            default_door_height_mm=preset.door_height,
+            default_window_height_mm=preset.window_height,
+            default_window_sill_mm=preset.window_sill,
+        )
     for name, v in (
         ("wall height", wall_height),
         ("door height", door_height),
@@ -460,6 +472,17 @@ def read_dxf(
     height = None
     if wall_height is not None:
         height = Measured(value=wall_height, source="user_provided")
+    elif paired and preset:
+        wall_height = preset.wall_height
+        height = Measured(value=wall_height, source="defaulted")
+        issues.append(
+            Issue(
+                code="wall_height_defaulted",
+                severity="warning",
+                message=f"Wall height assumed {wall_height:g} mm ({building_type} default); "
+                "not in the DXF",
+            )
+        )
     elif paired:
         issues.append(
             Issue(
@@ -495,7 +518,12 @@ def read_dxf(
     junctions = [
         Junction(id=j.id, polygon=j.polygon, wall_ids=j.wall_ids) for j in pieces
     ]
-    if floor_elevation is None:
+    if floor_elevation is not None and elevation_assumed:
+        issues.append(
+            Issue(code="elevation_defaulted", severity="warning", message=elevation_assumed)
+        )
+        elevation = Measured(value=floor_elevation, source="defaulted")
+    elif floor_elevation is None:
         issues.append(
             Issue(
                 code="elevation_defaulted",
@@ -510,8 +538,19 @@ def read_dxf(
     if scope:
         issues += scope.notes
     ceil_h = ceilings = None
+    ceil_src = "user_provided"
+    if ceiling_height is None and paired and preset:
+        ceiling_height, ceil_src = preset.ceiling_height, "defaulted"
+        issues.append(
+            Issue(
+                code="ceiling_height_defaulted",
+                severity="warning",
+                message=f"Ceiling height assumed {ceiling_height:g} mm ({building_type} "
+                "default); not in the DXF",
+            )
+        )
     if ceiling_height is not None:
-        ceil_h = Measured(value=ceiling_height, source="user_provided")
+        ceil_h = Measured(value=ceiling_height, source=ceil_src)
         # derived sum, so "inferred" (not the user's own number); the floor
         # elevation it builds on is still reported by elevation_defaulted
         top = Measured(value=elevation.value + ceiling_height, source="inferred")

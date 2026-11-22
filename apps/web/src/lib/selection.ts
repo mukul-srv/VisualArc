@@ -38,7 +38,7 @@ export type ElementData = {
 export const PROVENANCE_LABEL: Record<Provenance, string> = {
   source_extracted: "extracted from DXF",
   user_provided: "user-provided",
-  defaulted: "DEFAULTED (assumed)",
+  defaulted: "ASSUMED DEFAULT (not in the drawing)",
   inferred: "INFERRED (not drawn)",
 };
 

@@ -87,12 +87,17 @@ afterAll(() => {
 test("success path: openings fixture -> viewer-loadable GLB with metadata", async () => {
   const up = await api.uploadDxf(fixture("fixture_openings.dxf"));
   if (!up.ok) throw new Error(up.message);
-  expect(up.needs).toEqual(["ceiling_height", "wall_height"]); // preflight asks; nothing is guessed
+  expect(up.needs).toEqual([]); // heights are defaulted (tagged), never asked
 
-  // blocked first: structured issues reach the web client intact
-  const blocked = await api.generate({ upload_id: up.upload_id });
+  // blocked first: structured issues reach the web client intact (units still cannot be defaulted)
+  const blocked = await api.generate({ upload_id: up.upload_id, units: "cm" });
   expect(blocked).toMatchObject({ ok: false, kind: "blocked" });
-  expect(!blocked.ok && blocked.issues.map((i) => i.code)).toContain("wall_height_missing");
+  expect(!blocked.ok && blocked.issues.map((i) => i.code)).toContain("units_conflict");
+
+  const presets = await api.getPresets();
+  expect(presets.ok && presets.presets.commercial.wall_height).toBe(3000);
+  const assumed = await api.generate({ upload_id: up.upload_id, building_type: "commercial" });
+  expect(assumed.ok && assumed.issues.map((i) => i.code)).toEqual(expect.arrayContaining(["wall_height_defaulted", "ceiling_height_defaulted"]));
 
   const gen = await api.generate({ upload_id: up.upload_id, wall_height: 3000, ceiling_height: 3000 });
   if (!gen.ok) throw new Error(gen.message);
@@ -155,7 +160,7 @@ test("consolidated DXF: preflight lists floors, generation blocks, confirm creat
   expect(up.issues.map((i) => i.code)).toEqual(expect.arrayContaining(["floor_split_unconfirmed", "content_not_reconstructed"]));
   expect(await api.generate({ upload_id: up.upload_id, wall_height: 3000, ceiling_height: 3000 })).toMatchObject({ ok: false, kind: "blocked" });
 
-  const form = { wallHeight: "3000", ceilingHeight: "3000", ceilingConfirmed: true, units: "", doorHeight: "", windowHeight: "", windowSill: "" };
+  const form = { buildingType: "residential" as const, wallHeight: "3000", ceilingHeight: "3000", units: "", doorHeight: "", windowHeight: "", windowSill: "" };
   const rows = initialRows(cands).map((r, i) => ({ ...r, name: ["Ground", "First"][i], elevation: ["0", "3200"][i] }));
   const req = buildSplitRequest(up, form, rows, "Consolidated");
   if (!req.ok) throw new Error(req.errors.join());

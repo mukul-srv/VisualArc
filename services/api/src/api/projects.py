@@ -11,6 +11,7 @@ from api.auth import CurrentUser, current_user
 from api.db import ProjectRow, session
 from api.engine.adapters.dxf.split import FloorScope
 from api.engine.canonical.model import Measured
+from api.engine.settings import DEFAULTS
 from api.generations import GenerationRequest, blocked_response, result, run_generation
 from api.storage import new_id, valid_id
 
@@ -24,7 +25,8 @@ class ProjectRequest(BaseModel):
 
 class FloorRequest(GenerationRequest):
     floor_name: str = Field(min_length=1, max_length=100)
-    elevation: float = Field(allow_inf_nan=False, description="mm")
+    # None: next elevation = highest existing floor + the preset floor-to-floor, tagged `defaulted`
+    elevation: float | None = Field(None, allow_inf_nan=False, description="mm")
 
 
 def load_project(pid: str) -> dict:
@@ -46,7 +48,11 @@ def create_project(name: str, owner_id: str | None = None) -> str:
 
 
 def add_floor(
-    pid: str, req: FloorRequest, scope: FloorScope | None = None, owner_id: str | None = None
+    pid: str,
+    req: FloorRequest,
+    scope: FloorScope | None = None,
+    owner_id: str | None = None,
+    assumed: str | None = None,  # set by the split flow when it filled the elevation
 ):
     """Generate and append a floor. HTTPException 404 (unknown ids) / 422 (duplicate
     name or elevation); returns the 409 response when blocking issues stop it."""
@@ -63,22 +69,35 @@ def add_floor(
         name = req.floor_name.strip()
         if any(f["name"].casefold() == name.casefold() for f in manifest["floors"]):
             raise HTTPException(422, f"floor name {name!r} already exists in this project")
-        if any(f["elevation"]["value"] == req.elevation for f in manifest["floors"]):
+        elevation = req.elevation
+        if elevation is None:
+            step = DEFAULTS.preset(req.building_type).floor_to_floor
+            top = max((f["elevation"]["value"] for f in manifest["floors"]), default=None)
+            elevation = 0.0 if top is None else top + step
+            assumed = f"Floor elevation assumed {elevation:g} mm " + (
+                "(first floor of the project)"
+                if top is None
+                else f"(highest floor {top:g} mm + {step:g} mm {req.building_type} floor-to-floor)"
+            )
+        if any(f["elevation"]["value"] == elevation for f in manifest["floors"]):
             raise HTTPException(
-                422, f"a floor at elevation {req.elevation:g} mm already exists in this project"
+                422, f"a floor at elevation {elevation:g} mm already exists in this project"
             )
         # id = creation index: deterministic, stable when the viewer sorts by elevation,
         # unique because floors are append-only (never deleted)
         fid = f"floor-{len(manifest['floors'])}"
         gid, issues = run_generation(
-            req, owner_id, floor_id=fid, floor_name=name, floor_elevation=req.elevation, scope=scope
+            req, owner_id, floor_id=fid, floor_name=name, floor_elevation=elevation,
+            elevation_assumed=assumed, scope=scope,
         )
         if gid is None:
             return blocked_response(issues)
         floor = {
             "id": fid,
             "name": name,
-            "elevation": Measured(value=req.elevation, source="user_provided").model_dump(mode="json"),
+            "elevation": Measured(
+                value=elevation, source="defaulted" if assumed else "user_provided"
+            ).model_dump(mode="json"),
             "generation_id": gid,
         }
         row.data = {**manifest, "floors": [*manifest["floors"], floor]}

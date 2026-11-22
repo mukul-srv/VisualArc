@@ -111,7 +111,7 @@ test("panel text spells out provenance, incl. defaulted opening dimensions", () 
   const o = canon.openings[0] as unknown as { id: string; wall_id: string };
   const open = ud(o.wall_id).openings!.find((x) => x.id === o.id)!;
   const html = renderToStaticMarkup(<MetadataPanel panel={describeOpening(open)} />);
-  expect(html).toContain("[DEFAULTED (assumed)]"); // fixture gives no height/sill
+  expect(html).toContain("[ASSUMED DEFAULT (not in the drawing)]"); // fixture gives no height/sill
   expect(html).toContain("[extracted from DXF]"); // offset and width come from the drawing
   expect(html).toContain(o.wall_id);
 });
