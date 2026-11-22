@@ -212,3 +212,20 @@ test("describeElement shows columns and balconies with their parameter provenanc
   expect(bal.rows.find((r) => r.label === "Railing height")).toMatchObject({ value: "900 mm", provenance: "defaulted" });
   expect(bal.sources).toEqual(["A-BALC:3E"]);
 });
+
+test("describeElement shows a stair's steps, a flight without steps, and a ramp's slope", () => {
+  const m = (value: number, source: "inferred" | "user_provided" | "defaulted") => ({ value, unit: "mm", source });
+  const stair = describeElement({
+    id: "stair-001", type: "stair", direction: "+x", total_rise: m(3200, "inferred"), rise_param: m(160, "user_provided"),
+    run_param: m(250, "user_provided"), riser_count: 20, riser_height: m(160, "inferred"), tread_depth: m(250, "inferred"),
+    sources: [{ layer: "A-FLOR-STRS", entity_handle: "3C" }, { layer: "A-FLOR-STRS", entity_handle: "3D" }],
+  });
+  expect(stair.rows.find((r) => r.label === "Risers")?.value).toBe("20 (19 treads)");
+  expect(stair.rows.find((r) => r.label === "Riser height")).toMatchObject({ value: "160 mm", provenance: "inferred" });
+  expect(stair.rows.find((r) => r.label.startsWith("Target riser"))).toMatchObject({ provenance: "user_provided" });
+  const bare = describeElement({ id: "stair-002", type: "stair", direction: null, sources: [{ layer: "A-FLOR-STRS", entity_handle: "1" }] });
+  expect(bare.rows.find((r) => r.label === "Steps")?.value).toContain("not built");
+  expect(bare.rows.find((r) => r.label.startsWith("Direction"))?.value).toContain("not set");
+  const ramp = describeElement({ id: "ramp-001", type: "ramp", direction: "+x", rise: m(3200, "inferred"), thickness: m(200, "defaulted"), slope: 0.6736842105, sources: [] });
+  expect(ramp.rows.find((r) => r.label === "Slope")?.value).toBe("67.4 % (1:1.5)");
+});

@@ -52,6 +52,20 @@ class Settings:
     balcony_layer: str = "A-BALC"  # closed outline of a balcony or terrace slab
     column_extra: tuple[str, ...] = ()
     balcony_extra: tuple[str, ...] = ()
+    # Stair/ramp layers: AIA A-FLOR-STRS for stairs; the ramp layer is a project extension.
+    # Each holds closed axis-aligned rectangles (the flight outline) and one axis-aligned LINE per
+    # flight drawn from the bottom towards the top (the direction). Upper case.
+    stair_layer: str = "A-FLOR-STRS"
+    ramp_layer: str = "A-FLOR-RAMP"
+    stair_extra: tuple[str, ...] = ()
+    ramp_extra: tuple[str, ...] = ()
+    # A drawn stair whose tread depth (footprint / treads) is off the stair_run parameter by more
+    # than this fraction is reported. PROVISIONAL: a round tolerance, not from a standard.
+    stair_run_tolerance: float = 0.10
+    # Steeper ramps (rise / length) are reported. 1:12 is the commonly cited accessible-ramp
+    # maximum; PROVISIONAL, unverified against any code.
+    ramp_max_slope: float = 1 / 12
+
     # Railing member thickness (balcony edges); nominal, never read from a drawing. PROVISIONAL.
     railing_thickness_mm: float = 50.0
 
@@ -159,6 +173,8 @@ class Settings:
         ("wall_neutral", ("#a8a8a8", 0.9)),
         ("floor_boundary", ("#8c7b6b", 0.8)),
         ("slab", ("#7d7266", 0.9)),
+        ("stair", ("#b8ad9e", 0.85)),
+        ("ramp", ("#a39b8f", 0.85)),
         ("column", ("#9a9a94", 0.85)),
         ("balcony", ("#8f8579", 0.85)),
         ("balcony_railing", ("#4d5560", 0.6)),
@@ -190,6 +206,14 @@ class Settings:
     @property
     def column_layers(self) -> frozenset[str]:
         return frozenset({self.column_layer, *self.column_extra})
+
+    @property
+    def stair_layers(self) -> frozenset[str]:
+        return frozenset({self.stair_layer, *self.stair_extra})
+
+    @property
+    def ramp_layers(self) -> frozenset[str]:
+        return frozenset({self.ramp_layer, *self.ramp_extra})
 
     @property
     def balcony_layers(self) -> frozenset[str]:

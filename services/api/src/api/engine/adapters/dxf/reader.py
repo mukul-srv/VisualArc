@@ -32,9 +32,11 @@ from api.engine.canonical.model import (
     Param,
     PlanOffset,
     Project,
+    Ramp,
     Room,
     Slab,
     SourceRef,
+    Stair,
     Wall,
 )
 from api.engine.geometry2d.balconies import find_balconies
@@ -50,6 +52,7 @@ from api.engine.geometry2d.openings import (
 )
 from api.engine.geometry2d.role import resolve_roles
 from api.engine.geometry2d.rooms import Label, find_rooms
+from api.engine.geometry2d.stairs import Arrow, Outline, find_flights
 from api.engine.geometry2d.walls import Segment
 from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS, Settings
@@ -344,6 +347,9 @@ def read_dxf(
     column_layers, balcony_layers = settings.column_layers, settings.balcony_layers
     cols: list[tuple] = []  # (ref, "rect", Rect) | (ref, "circle", centre, radius mm)
     balc: list[tuple] = []  # (ref, ring)
+    stair_layers, ramp_layers = settings.stair_layers, settings.ramp_layers
+    outlines: list[Outline] = []
+    arrows: list[Arrow] = []
     for e in doc.modelspace():
         if scope and e.dxf.handle not in scope.handles:
             continue
@@ -399,7 +405,7 @@ def read_dxf(
             if text:
                 at = e.ocs().to_wcs(e.dxf.insert) if kind == "TEXT" else e.dxf.insert
                 labels.append(Label(text, mm(at), _ref(e)))
-        if layer not in wall_layers | floor_layers | column_layers | balcony_layers:
+        if layer not in wall_layers | floor_layers | column_layers | balcony_layers | stair_layers | ramp_layers:
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
         if layer in wall_layers and kind == "LINE":
@@ -441,6 +447,28 @@ def read_dxf(
                     id=f"fb-{len(boundaries) + 1:03d}", polygon=pts, sources=[_ref(e)]
                 )
             )
+        elif layer in stair_layers | ramp_layers and kind == "LINE":
+            arrows.append(Arrow("stair" if layer in stair_layers else "ramp", _ref(e),
+                                mm(e.dxf.start), mm(e.dxf.end)))
+        elif layer in stair_layers | ramp_layers and kind == "LWPOLYLINE":
+            pts = [mm(p) for p in _wcs_xy(e)]
+            closed = _is_closed(e, settings.tolerance_mm)
+            if len(pts) > 1 and math.dist(pts[0], pts[-1]) <= settings.tolerance_mm:
+                pts.pop()
+            rect = marker_rect(pts, settings.tolerance_mm) if closed else None
+            what = "stair" if layer in stair_layers else "ramp"
+            if rect is None:
+                issues.append(
+                    Issue(
+                        code=f"invalid_{what}",
+                        severity="warning",
+                        message=f"{what} polyline {e.dxf.handle} is not a closed axis-aligned "
+                        f"rectangle (4 vertices); no {what} built from it",
+                        sources=[_ref(e)],
+                    )
+                )
+            else:
+                outlines.append(Outline(what, _ref(e), rect))
         elif layer in balcony_layers and kind == "LWPOLYLINE":
             pts = [mm(p) for p in _wcs_xy(e)]
             if len(pts) > 3 and pts[0] == pts[-1]:
@@ -749,6 +777,74 @@ def read_dxf(
             message=f"{len(columns)} column(s) have no height (no ceiling height, e.g. no walls "
             "to default it from); recorded without one and not extruded",
             sources=[c.sources[0] for c in columns[: settings.unmapped_ref_cap]]))
+    stairs, ramps = [], []
+    if outlines or arrows:
+        flights, flight_issues = find_flights(outlines, arrows, settings)
+        issues += flight_issues
+        slab_t = given.get("slab_thickness", preset.slab_thickness if preset else None)
+        slab_p = "user_provided" if "slab_thickness" in given else "defaulted"
+        rise_p = given.get("stair_rise", preset.stair_rise if preset else None)
+        run_p = given.get("stair_run", preset.stair_run if preset else None)
+        total = None
+        if ceil_h is not None and slab_t is not None:  # derived sum, so inferred
+            total = Measured(value=ceil_h.value + slab_t, source="inferred")
+        elif flights:
+            issues.append(Issue(
+                code="stair_rise_unknown", severity="warning",
+                message="total rise (ceiling height + slab thickness) is unknown "
+                f"({'no ceiling height' if ceil_h is None else 'no slab thickness'}); no steps or "
+                "ramp slope built", sources=[f.ref for f in flights[: settings.unmapped_ref_cap]]))
+        if slab_t is not None and slab_p == "defaulted" and flights and not boundaries and not balc:
+            issues.append(Issue(
+                code="slab_thickness_defaulted", severity="warning",
+                message=f"Slab thickness assumed {slab_t:g} mm ({building_type} default); "
+                "not in the DXF"))
+        for f in flights:
+            poly = [(f.rect[0], f.rect[1]), (f.rect[2], f.rect[1]), (f.rect[2], f.rect[3]),
+                    (f.rect[0], f.rect[3])]
+            srcs = [f.ref, *([f.arrow] if f.arrow else [])]
+            if f.kind == "ramp":
+                ok = total is not None and f.direction is not None
+                slope = total.value / f.length if ok else None
+                if ok and slope > settings.ramp_max_slope:
+                    issues.append(Issue(
+                        code="ramp_slope_steep", severity="warning",
+                        message=f"{f.id}: rises {total.value:g} mm (ceiling + slab, a full floor) "
+                        f"over {f.length:g} mm = 1:{1 / slope:.1f}, steeper than the 1:"
+                        f"{1 / settings.ramp_max_slope:g} limit; built as drawn",
+                        sources=srcs))
+                ramps.append(Ramp(
+                    id=f.id, polygon=poly, direction=f.direction,
+                    rise=total if ok else None,
+                    thickness=Measured(value=slab_t, source=slab_p) if ok and slab_t else None,
+                    slope=slope, sources=srcs))
+                continue
+            kw = {}
+            if total is not None and f.direction is not None and rise_p:
+                n = round(total.value / rise_p)
+                if n < 2:
+                    issues.append(Issue(
+                        code="stair_too_low", severity="warning",
+                        message=f"{f.id}: total rise {total.value:g} mm is under 1.5 risers of "
+                        f"{rise_p:g} mm; no steps built", sources=srcs))
+                else:
+                    going = f.length / (n - 1)
+                    kw = {"riser_count": n,
+                          "riser_height": Measured(value=total.value / n, source="inferred"),
+                          "tread_depth": Measured(value=going, source="inferred")}
+                    if run_p and abs(going - run_p) > settings.stair_run_tolerance * run_p:
+                        issues.append(Issue(
+                            code="stair_run_mismatch", severity="warning",
+                            message=f"{f.id}: the drawn length {f.length:g} mm over {n - 1} treads "
+                            f"gives {going:g} mm treads, not the {run_p:g} mm stair run parameter "
+                            "(more than the tolerance); built as drawn", sources=srcs))
+            stairs.append(Stair(
+                id=f.id, polygon=poly, direction=f.direction, total_rise=total,
+                rise_param=None if rise_p is None else Measured(
+                    value=rise_p, source="user_provided" if "stair_rise" in given else "defaulted"),
+                run_param=None if run_p is None else Measured(
+                    value=run_p, source="user_provided" if "stair_run" in given else "defaulted"),
+                sources=srcs, **kw))
     balconies = []
     if balc:
         pieces_b, balc_issues = find_balconies(
@@ -819,6 +915,8 @@ def read_dxf(
         rooms=rooms,
         columns=columns,
         balconies=balconies,
+        stairs=stairs,
+        ramps=ramps,
         walls=walls,
         junctions=junctions,
         boundaries=boundaries,

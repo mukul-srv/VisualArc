@@ -24,7 +24,7 @@ PLAN_MM_TO_GLTF_M = np.diag([0.001, 0.001, 0.001, 1.0]) @ np.array(
 
 
 def _elements(floor):
-    return [*floor.walls, *floor.junctions, *floor.boundaries, *floor.slabs, *floor.columns, *floor.balconies, *floor.ceilings]
+    return [*floor.walls, *floor.junctions, *floor.boundaries, *floor.slabs, *floor.columns, *floor.balconies, *floor.stairs, *floor.ramps, *floor.ceilings]
 
 
 def material_key(el) -> str:

@@ -1472,6 +1472,8 @@
           ],
           "columns": [],
           "balconies": [],
+          "stairs": [],
+          "ramps": [],
           "plan_offset": null
         }
       ]
