@@ -27,7 +27,7 @@ export type RoomData = { id: string; name: string; name_source: Provenance; area
 
 export type ElementData = {
   id: string;
-  type: "wall" | "junction" | "floor_boundary" | "slab" | "ceiling" | "opening_part";
+  type: "wall" | "junction" | "floor_boundary" | "slab" | "column" | "balcony" | "balcony_railing" | "ceiling" | "opening_part";
   floor_id?: string;
   thickness?: Measured;
   height?: Measured | null; // wall height; for a ceiling, the ceiling-height parameter
@@ -37,6 +37,12 @@ export type ElementData = {
   source?: Provenance; // junction: always "inferred"
   elevation?: Measured; // ceiling: floor elevation + ceiling height
   boundary_id?: string; // slab: the floor boundary it sits under
+  shape?: "rect" | "circle"; // column
+  centre?: Pt;
+  radius?: Measured | null;
+  railing_height?: Measured | null; // balcony
+  railing_thickness?: Measured | null;
+  balcony_id?: string; // balcony_railing
   sources?: SourceRef[];
   openings?: OpeningData[];
   opening?: OpeningData; // opening_part: the opening this frame/leaf/glass belongs to
@@ -129,6 +135,44 @@ export function describeRoom(r: RoomData, floorId?: string): Panel {
 }
 
 export function describeElement(ud: ElementData): Panel {
+  const where: Row[] = ud.floor_id ? [{ label: "Floor", value: ud.floor_id }] : [];
+  if (ud.type === "column") {
+    return {
+      title: "Column",
+      id: ud.id,
+      rows: [
+        ...where,
+        { label: "Shape", value: ud.shape === "circle" ? "circle" : "rectangle" },
+        ...(ud.shape === "circle" ? [measured("Radius", ud.radius)] : []),
+        measured("Height (ceiling-height parameter)", ud.height),
+      ],
+      sourcesLabel: "Source entity (column layer)",
+      sources: refs(ud.sources),
+    };
+  }
+  if (ud.type === "balcony") {
+    return {
+      title: "Balcony / terrace",
+      id: ud.id,
+      rows: [
+        ...where,
+        measured("Slab thickness", ud.thickness),
+        measured("Railing height", ud.railing_height),
+        measured("Railing thickness", ud.railing_thickness),
+      ],
+      sourcesLabel: "Source entity (balcony layer)",
+      sources: refs(ud.sources),
+    };
+  }
+  if (ud.type === "balcony_railing") {
+    return {
+      title: "Balcony railing",
+      id: ud.id,
+      rows: [...where, { label: "Balcony", value: ud.balcony_id ?? "" }, measured("Height", ud.height), measured("Thickness", ud.thickness)],
+      sourcesLabel: "Source entity (balcony outline)",
+      sources: refs(ud.sources),
+    };
+  }
   if (ud.type === "opening_part" && ud.opening) return describeOpening(ud.opening);
   const floor: Row[] = ud.floor_id ? [{ label: "Floor", value: ud.floor_id }] : [];
   if (ud.type === "wall") {

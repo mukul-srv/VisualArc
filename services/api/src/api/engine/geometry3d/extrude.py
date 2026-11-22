@@ -6,11 +6,11 @@ The swap to glTF Y-up (ADR-001) belongs to the exporter, not here.
 
 import numpy as np
 import trimesh
-from shapely.geometry import LineString, Polygon, box
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
-from api.engine.canonical.model import Floor, Opening, Wall, _axis
+from api.engine.canonical.model import Balcony, Floor, Opening, Wall, _axis
 
 
 def _height(w: Wall) -> float:
@@ -100,6 +100,24 @@ def build_opening_parts(floor: Floor) -> dict[str, tuple[str, Opening, trimesh.T
     return out
 
 
+def build_balcony_railings(floor: Floor) -> dict[str, tuple[Balcony, trimesh.Trimesh]]:
+    """`<balcony id>-railing`: one box per free edge, `railing_height` tall from the floor
+    elevation, `railing_thickness` wide centred on the edge (flat caps, like walls)."""
+    out = {}
+    for b in floor.balconies:
+        if not b.railings or b.railing_height is None or b.railing_thickness is None:
+            continue
+        parts = [
+            _prism(
+                LineString([r.start, r.end]).buffer(b.railing_thickness.value / 2, cap_style="flat"),
+                floor.elevation.value, b.railing_height.value,
+            )
+            for r in b.railings
+        ]
+        out[f"{b.id}-railing"] = (b, trimesh.util.concatenate(parts))
+    return out
+
+
 def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
     """Element id -> mesh for every wall, junction, floor boundary, slab and ceiling."""
     z0 = floor.elevation.value
@@ -123,6 +141,16 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
         )
     for b in floor.boundaries:
         meshes[b.id] = _flat(Polygon(b.polygon), z0)
+    for col in floor.columns:
+        if col.height is None:  # ceiling height missing: blocking, nothing is exported
+            continue
+        foot = (Polygon(col.polygon) if col.shape == "rect"
+                else Point(col.centre).buffer(col.radius.value, quad_segs=16))
+        meshes[col.id] = _prism(foot, z0, col.height.value)
+    for bal in floor.balconies:
+        t = bal.thickness.value if bal.thickness else 0.0
+        meshes[bal.id] = (_prism(Polygon(bal.polygon), z0 - t, t) if t
+                          else _flat(Polygon(bal.polygon), z0))
     for sl in floor.slabs:
         t = sl.thickness.value
         m = _prism(Polygon(sl.polygon), z0 - t, t)

@@ -511,6 +511,19 @@ def build_openings(
             )
             openings.append((o, ends, h, h_src, sill, sill_src))
     openings.sort(key=lambda t: (t[1][0][1], t[1][0][0]))
+    details = [_detail(o, h, sill, s) for o, _, h, _, sill, _ in openings]
+    bare = [t[0] for t, d in zip(openings, details, strict=True) if d is None]
+    if bare:
+        issues.append(
+            Issue(
+                code="opening_detail_skipped",
+                severity="warning",
+                message=f"{len(bare)} opening(s) too small for a {s.opening_frame_width_mm:g} mm "
+                f"frame around a panel; modelled as a plain hole, no frame or leaf/glass: "
+                + ", ".join(o.marker.ref.entity_handle for o in bare[:cap]),
+                sources=[o.marker.ref for o in bare[:cap]],
+            )
+        )
     return [
         Opening(
             id=f"opening-{n:03d}",
@@ -522,9 +535,9 @@ def build_openings(
             height=Measured(value=h, source=h_src),
             sill_height=Measured(value=sill, source=sill_src),
             sources=[o.marker.ref] + [j.ref for j in o.jambs],
-            detail=_detail(o, h, sill, s),
+            detail=d,
         )
-        for n, (o, ends, h, h_src, sill, sill_src) in enumerate(openings, 1)
+        for n, ((o, ends, h, h_src, sill, sill_src), d) in enumerate(zip(openings, details, strict=True), 1)
     ], issues
 
 

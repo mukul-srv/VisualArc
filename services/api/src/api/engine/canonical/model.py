@@ -146,6 +146,45 @@ class Slab(_Model):
         return self
 
 
+class Column(_Model):
+    """Column from a closed axis-aligned rectangle or a circle on the column layer, extruded
+    from the floor elevation to the ceiling-height parameter."""
+
+    id: str
+    type: Literal["column"] = "column"
+    shape: Literal["rect", "circle"]
+    polygon: list[Point2] | None = None  # rect: the 4 corners
+    centre: Point2 | None = None  # circle
+    radius: Measured | None = None  # circle
+    height: Measured | None  # ceiling height (None only when that is missing: blocking)
+    sources: list[SourceRef] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check(self) -> "Column":
+        rect = self.shape == "rect"
+        own = (self.polygon,) if rect else (self.centre, self.radius)
+        other = (self.centre, self.radius) if rect else (self.polygon,)
+        if any(v is None for v in own) or any(v is not None for v in other):
+            raise ValueError(f"{self.id}: {self.shape} column needs exactly its own footprint fields")
+        if self.radius is not None and self.radius.value <= 0:
+            raise ValueError(f"{self.id}: radius must be > 0 mm")
+        return self
+
+
+class Balcony(_Model):
+    """Balcony or terrace: a slab outside the walls with a railing on its free edges.
+    The drawing does not say which of the two it is, so no distinction is made."""
+
+    id: str
+    type: Literal["balcony"] = "balcony"
+    polygon: list[Point2]
+    thickness: Measured | None = None  # slab thickness; None = drawn as a flat surface
+    railing_height: Measured | None = None  # None: no railing built (value missing)
+    railing_thickness: Measured | None = None
+    railings: list[LineGeometry] = []  # outline edges not shared with the building walls
+    sources: list[SourceRef] = Field(min_length=1)
+
+
 class Ceiling(_Model):
     """Slab at floor elevation + user ceiling height, one per floor boundary."""
 
@@ -241,6 +280,8 @@ class Floor(_Model):
     ceilings: list[Ceiling] = []
     slabs: list[Slab] = []
     rooms: list[Room] = []
+    columns: list[Column] = []
+    balconies: list[Balcony] = []
     plan_offset: PlanOffset | None = None  # None = plan coordinates are the source's
 
     @model_validator(mode="after")
