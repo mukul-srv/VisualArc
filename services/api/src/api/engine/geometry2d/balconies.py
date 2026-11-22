@@ -52,7 +52,7 @@ def find_balconies(
     rooms: list[list[Point2]],
     settings: Settings = DEFAULTS,
 ) -> tuple[list[BalconyPiece], list[Issue]]:
-    tol = settings.tolerance_mm
+    tol = settings.tolerance_mm  # also the positive-area threshold in mm2 (see Settings)
     building = unary_union(
         [w.rect() for w in walls] + [Polygon(j.polygon) for j in pieces]
     )

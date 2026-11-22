@@ -62,6 +62,8 @@ def build_scene(project: Project) -> trimesh.Scene:
                     )  # span (plan mm) lets the viewer map a click to it
                 )
             for el in _elements(floor):
+                if el.id not in meshes:  # a column without a height (reported): nothing to extrude
+                    continue
                 mesh = meshes[el.id]
                 mesh.apply_transform(PLAN_MM_TO_GLTF_M)  # baked: viewer gets metres
                 mesh.visual = trimesh.visual.TextureVisuals(

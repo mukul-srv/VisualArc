@@ -151,3 +151,19 @@ def test_editor_changes_railing_height_and_the_balcony_follows(client):
     f = owner.get(f"/api/v1/generations/{gid}/artifacts/canonical").json()["buildings"][0]["floors"][0]
     assert f["balconies"][0]["railing_height"] == {"value": 1200.0, "unit": "mm", "source": "user_provided"}
     assert all(c["height"]["value"] == 2600.0 for c in f["columns"])
+
+
+def test_columns_only_drawing_exports_without_crashing(tmp_path):
+    # no walls: the ceiling height is not defaulted, so columns have no height
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    doc.modelspace().add_lwpolyline([(0, 0), (300, 0), (300, 300), (0, 300)], close=True,
+                                    dxfattribs={"layer": "A-COLS"})
+    doc.modelspace().add_circle((2000, 2000), 200, dxfattribs={"layer": "A-COLS"})
+    doc.saveas(tmp_path / "c.dxf")
+    p = read_dxf(tmp_path / "c.dxf", building_type="residential")
+    f = _floor(p)
+    assert len(f.columns) == 2 and all(c.height is None for c in f.columns)
+    assert {"no_walls", "column_height_missing"} <= set(_codes(p))
+    scene = build_scene(p)  # used to raise KeyError
+    assert not scene.geometry  # nothing extruded, nothing silently invented

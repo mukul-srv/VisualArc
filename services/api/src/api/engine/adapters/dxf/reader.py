@@ -447,6 +447,7 @@ def read_dxf(
                 pts.pop()
             elif not e.closed:
                 pts = []
+            # tolerance_mm doubles as the positive-area threshold in mm2 (see Settings)
             if len(pts) < 3 or Polygon(pts).area <= settings.tolerance_mm or not Polygon(pts).is_valid:
                 issues.append(
                     Issue(
@@ -742,6 +743,12 @@ def read_dxf(
                 id=f"col-{n:03d}", shape="circle", centre=c[2],
                 radius=Measured(value=c[3], source="user_provided" if from_user else "source_extracted"),
                 height=ceil_h, sources=[ref]))
+    if columns and ceil_h is None:
+        issues.append(Issue(
+            code="column_height_missing", severity="warning",
+            message=f"{len(columns)} column(s) have no height (no ceiling height, e.g. no walls "
+            "to default it from); recorded without one and not extruded",
+            sources=[c.sources[0] for c in columns[: settings.unmapped_ref_cap]]))
     balconies = []
     if balc:
         pieces_b, balc_issues = find_balconies(
