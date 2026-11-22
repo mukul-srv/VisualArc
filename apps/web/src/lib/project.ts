@@ -2,7 +2,8 @@ import type { Measured } from "./selection";
 
 // Pure project helpers (no DOM/three.js). The manifest comes from GET /api/v1/projects/{id}.
 export type Floor = { id: string; name: string; elevation: Measured; generation_id: string };
-export type Manifest = { id: string; name: string; floors: Floor[] };
+export type Role = "owner" | "editor" | "viewer";
+export type Manifest = { id: string; name: string; floors: Floor[]; role?: Role };
 
 const HEX32 = /^[0-9a-f]{32}$/;
 const PROVENANCES = ["source_extracted", "user_provided", "defaulted", "inferred"];
@@ -22,17 +23,19 @@ export function parseManifest(x: unknown): Manifest | null {
     )
       return null;
   }
-  return { id: m.id, name: m.name, floors: m.floors };
+  const role = ["owner", "editor", "viewer"].includes(m.role as string) ? { role: m.role } : {};
+  return { id: m.id, name: m.name, floors: m.floors, ...role };
 }
 
 /** Lowest floor first; does not mutate the input. */
 export const sortFloors = (floors: Floor[]): Floor[] =>
   [...floors].sort((a, b) => a.elevation.value - b.elevation.value);
 
-export const viewerUrl = (projectId: string, floorId?: string, version?: number) =>
+export const viewerUrl = (projectId: string, floorId?: string, version?: number, share?: string | null) =>
   `/viewer?project=${encodeURIComponent(projectId)}` +
   (floorId ? `&floor=${encodeURIComponent(floorId)}` : "") +
-  (version ? `&version=${version}` : "");
+  (version ? `&version=${version}` : "") +
+  (share ? `&share=${encodeURIComponent(share)}` : "");
 
 /** The floor to show: the requested one if present, else the lowest. */
 export const pickFloor = (m: Manifest, floorId: string | null): Floor | null =>

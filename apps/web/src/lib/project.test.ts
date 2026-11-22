@@ -36,3 +36,10 @@ test("viewerUrl encodes both ids", () => {
   expect(viewerUrl(g("b"), "floor-1")).toBe(`/viewer?project=${g("b")}&floor=floor-1`);
   expect(viewerUrl("a&b", "c d")).toBe("/viewer?project=a%26b&floor=c%20d");
 });
+
+test("viewerUrl appends the share token; parseManifest keeps a valid role", () => {
+  expect(viewerUrl(g("b"), undefined, undefined, "t k")).toBe(`/viewer?project=${g("b")}&share=t%20k`);
+  const m = { id: "p", name: "n", floors: [], role: "viewer" };
+  expect(parseManifest(m)?.role).toBe("viewer");
+  expect(parseManifest({ ...m, role: "root" })?.role).toBeUndefined();
+});

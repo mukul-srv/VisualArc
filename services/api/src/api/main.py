@@ -10,8 +10,11 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from api.auth import router as auth_router
+from api.generations import public_router as generations_public
 from api.generations import router as generations_router
+from api.projects import public_router as projects_public
 from api.projects import router as projects_router
+from api.sharing import router as sharing_router
 from api.uploads import router as uploads_router
 
 app = FastAPI(title="Architectural Reconstruction API")
@@ -39,6 +42,9 @@ app.include_router(auth_router)
 app.include_router(uploads_router)
 app.include_router(generations_router)
 app.include_router(projects_router)
+app.include_router(projects_public)
+app.include_router(generations_public)
+app.include_router(sharing_router)
 
 
 @app.exception_handler(RequestValidationError)

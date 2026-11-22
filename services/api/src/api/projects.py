@@ -12,19 +12,22 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from api.access import owned
+from api.access import owned, project_role
 from api.auth import CurrentUser, current_user
-from api.db import ProjectRow, ProjectVersionRow, session
+from api.db import ProjectGrantRow, ProjectRow, ProjectVersionRow, session
 from api.engine.adapters.dxf.split import FloorScope
 from api.engine.canonical.model import Measured
 from api.engine.settings import DEFAULTS
 from api.generations import GenerationRequest, blocked_response, result, run_generation
+from api.sharing import Principal
 from api.storage import new_id
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
+# read-only endpoints a share link may open (no session required)
+public_router = APIRouter(prefix="/api/v1")
 
 # request fields recorded per floor with provenance (None = the preset fills it, `defaulted`)
 _PARAMS = ("building_type", "wall_height", "ceiling_height", "door_height", "window_height",
@@ -98,7 +101,8 @@ def create_project(name: str, owner_id: str | None = None, version: bool = True,
 
 def record_version(db: Session, pid: str, user_id: str, message: str) -> None:
     """In the caller's transaction, which it commits."""
-    _version(db, owned(db, ProjectRow, pid, user_id, "unknown project", lock=True), user_id, message)
+    _version(db, owned(db, ProjectRow, pid, user_id, "unknown project", lock=True, need="editor"),
+             user_id, message)
 
 
 def add_floor(
@@ -116,7 +120,7 @@ def add_floor(
     # stay unique); generation runs inside it. shortcut: a long generation blocks
     # other adds to the same project, fine at this scale.
     with _tx(db) as db:  # noqa: PLR1704
-        row = owned(db, ProjectRow, pid, owner_id or "", "unknown project", lock=True)
+        row = owned(db, ProjectRow, pid, owner_id or "", "unknown project", lock=True, need="editor")
         manifest = row.data
         name = req.floor_name.strip()
         if any(f["name"].casefold() == name.casefold() for f in manifest["floors"]):
@@ -162,8 +166,8 @@ def add_floor(
     return {"floor": floor, **result(gid, issues)}
 
 
-def _manifest(row: ProjectRow, v: ProjectVersionRow) -> dict:
-    return {
+def _manifest(row: ProjectRow, v: ProjectVersionRow, role: str) -> dict:
+    return {"role": role,
         "id": row.id, "name": row.data["name"], "floors": v.snapshot["floors"],
         "params": v.snapshot.get("params", {}), "version": v.number,
         "updated_at": v.created_at.isoformat(),
@@ -191,13 +195,15 @@ def post_project(req: ProjectRequest, user: CurrentUser):
 @router.get("/projects")
 def list_projects(user: CurrentUser):
     with session() as db:
-        rows = db.scalars(select(ProjectRow).where(
-            ProjectRow.owner_id == user.id, ProjectRow.deleted_at.is_(None))).all()
+        rows = db.scalars(select(ProjectRow).where(ProjectRow.deleted_at.is_(None), or_(
+            ProjectRow.owner_id == user.id,
+            ProjectRow.id.in_(select(ProjectGrantRow.project_id).where(
+                ProjectGrantRow.user_id == user.id))))).all()
         out = []
         for r in rows:
             v = _latest(db, r.id)
             out.append({
-                "id": r.id, "name": r.data["name"], "floor_count": len(r.data["floors"]),
+                "id": r.id, "role": project_role(db, r, user.id), "name": r.data["name"], "floor_count": len(r.data["floors"]),
                 "version": v.number if v else 0,
                 "updated_at": (v.created_at if v else r.created_at).isoformat(),
                 "thumbnail": None,
@@ -210,20 +216,20 @@ def post_floor(pid: str, req: FloorRequest, user: CurrentUser):
     return add_floor(pid, req, None, user.id)
 
 
-@router.get("/projects/{pid}")
-def get_project(pid: str, user: CurrentUser, version: int | None = None):
+@public_router.get("/projects/{pid}")
+def get_project(pid: str, who: Principal, version: int | None = None):
     """Current manifest, or the snapshot of `?version=N` (read-only history)."""
     with session() as db:
-        row = owned(db, ProjectRow, pid, user.id, "unknown project")
+        row = owned(db, ProjectRow, pid, who, "unknown project", need="viewer")
         v = _latest(db, pid) if version is None else _version_row(db, pid, version)
-        return _manifest(row, v)
+        return _manifest(row, v, project_role(db, row, who))
 
 
 @router.patch("/projects/{pid}")
 def rename_project(pid: str, req: ProjectRequest, user: CurrentUser):
     """Names are metadata, not versioned: every version shows the current name."""
     with session() as db, db.begin():
-        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True)
+        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
         row.data = {**row.data, "name": req.name.strip()}
     return {"id": pid, "name": req.name.strip()}
 
@@ -239,7 +245,7 @@ def delete_project(pid: str, user: CurrentUser):
 @router.get("/projects/{pid}/versions")
 def list_versions(pid: str, user: CurrentUser):
     with session() as db:
-        owned(db, ProjectRow, pid, user.id, "unknown project")
+        owned(db, ProjectRow, pid, user.id, "unknown project", need="viewer")
         vs = db.scalars(select(ProjectVersionRow).where(ProjectVersionRow.project_id == pid)
                         .order_by(ProjectVersionRow.number.desc())).all()
         return [_info(v) for v in vs]
@@ -248,7 +254,7 @@ def list_versions(pid: str, user: CurrentUser):
 @router.get("/projects/{pid}/versions/{number}")
 def get_version(pid: str, number: int, user: CurrentUser):
     with session() as db:
-        owned(db, ProjectRow, pid, user.id, "unknown project")
+        owned(db, ProjectRow, pid, user.id, "unknown project", need="viewer")
         v = _version_row(db, pid, number)
         return {**_info(v), "snapshot": v.snapshot}
 
@@ -257,7 +263,7 @@ def get_version(pid: str, number: int, user: CurrentUser):
 def restore_version(pid: str, number: int, user: CurrentUser):
     """New version copying an old snapshot; history is never rewritten."""
     with session() as db, db.begin():
-        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True)
+        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
         old = _version_row(db, pid, number)
         row.data = {**row.data, "floors": old.snapshot["floors"],
                     "params": old.snapshot.get("params", {})}

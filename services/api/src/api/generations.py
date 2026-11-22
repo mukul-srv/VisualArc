@@ -18,9 +18,11 @@ from api.db import GenerationRow, ProjectRow, UploadRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.canonical.model import Project
 from api.pipeline import has_blocking, write_artifacts
+from api.sharing import Principal
 from api.storage import blob_path, new_id, upload_path
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
+public_router = APIRouter(prefix="/api/v1")  # readable via a share link too
 
 # artifact name -> (file suffix written by write_artifacts, media type)
 ARTIFACTS = {
@@ -143,12 +145,12 @@ def recent_generations(user: CurrentUser):
     return out
 
 
-@router.get("/generations/{generation_id}/artifacts/{name}")
-def get_artifact(generation_id: str, name: str, user: CurrentUser):
+@public_router.get("/generations/{generation_id}/artifacts/{name}")
+def get_artifact(generation_id: str, name: str, who: Principal):
     if name not in ARTIFACTS:
         raise HTTPException(404, "not found")
     with session() as db:
-        owned(db, GenerationRow, generation_id, user.id, "not found")
+        owned(db, GenerationRow, generation_id, who, "not found", need="viewer")
     suffix, media = ARTIFACTS[name]
     path = blob_path(f"{_prefix(generation_id)}/{_STEM}.{suffix}")
     if not path.is_file():

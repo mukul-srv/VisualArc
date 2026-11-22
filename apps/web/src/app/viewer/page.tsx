@@ -32,11 +32,13 @@ export default function ViewerPage() {
   const [viewing, setViewing] = useState<number | null>(null); // past version number, read-only
   const [floorId, setFloorId] = useState<string | null>(null);
   const [target, setTarget] = useState<{ url: string; stem: string } | null>(null);
-  const floorTarget = (m: Manifest, f: Floor) => ({ url: glbUrl(f.generation_id), stem: `${m.name} / ${f.name}` });
+  const share = useRef<string | null>(null); // read-only link token
+  const floorTarget = (m: Manifest, f: Floor) => ({ url: glbUrl(f.generation_id, share.current), stem: `${m.name} / ${f.name}` });
 
   // Resolve what to load from the query string. The scene effect below reloads on `target`.
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
+    share.current = query.get("share");
     // ?project=<id>[&floor=<id>] loads a project floor; ?generation=<id> one API model;
     // ?model=<stem> a local /models file
     const project = query.get("project");
@@ -46,7 +48,7 @@ export default function ViewerPage() {
       const vq = query.get("version"); // read-only history view of an older version
       const version = vq === null ? undefined : Number(vq);
       if (version !== undefined && !(Number.isInteger(version) && version >= 1)) return queueMicrotask(() => setStatus("error: invalid version"));
-      getProject(project, fetch, version).then((r) => {
+      getProject(project, fetch, version, share.current).then((r) => {
         const m = r.ok ? parseManifest(r.manifest) : null;
         if (!r.ok || !m) return setStatus(r.ok ? "error: malformed project manifest" : `error: ${r.message}`);
         setViewing(version ?? null);
@@ -382,7 +384,7 @@ export default function ViewerPage() {
     setTopState(false);
     setFloorId(f.id);
     setTarget(floorTarget(manifest, f));
-    window.history.replaceState(null, "", viewerUrl(manifest.id, f.id, viewing ?? undefined));
+    window.history.replaceState(null, "", viewerUrl(manifest.id, f.id, viewing ?? undefined, share.current));
   };
 
   return (

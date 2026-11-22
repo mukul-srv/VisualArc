@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getProject } from "../lib/api";
 import { parseManifest, sortFloors, viewerUrl, type Manifest } from "../lib/project";
 import { deleteProject, listVersions, renameProject, restoreVersion, type VersionInfo } from "../lib/projects";
+import { AccessPanel } from "./AccessPanel";
 import { VersionList } from "./lists";
 import styles from "./dashboard.module.css";
 
@@ -48,15 +49,18 @@ export function ProjectView({ id }: { id: string }) {
         <Link href="/">All projects</Link>
       </main>
     );
+  const role = manifest.role ?? "owner";
+  const canEdit = role !== "viewer";
   return (
     <main className={styles.page}>
       <p><Link href="/">All projects</Link></p>
       <h1>{manifest.name}</h1>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
-      <form className={styles.row} onSubmit={(e) => { e.preventDefault(); run(() => renameProject(id, name.trim()), load); }}>
+      {!canEdit && <p>You have view-only access to this project.</p>}
+      {canEdit && <form className={styles.row} onSubmit={(e) => { e.preventDefault(); run(() => renameProject(id, name.trim()), load); }}>
         <label>Project name <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} /></label>
         <button disabled={busy || !name.trim() || name.trim() === manifest.name}>Rename</button>
-      </form>
+      </form>}
       <h2>Floors</h2>
       {manifest.floors.length === 0 ? <p>No floors yet.</p> : (
         <ul>
@@ -66,7 +70,9 @@ export function ProjectView({ id }: { id: string }) {
         </ul>
       )}
       <h2>Version history</h2>
-      <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} />
+      <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} readOnly={!canEdit} />
+      {role === "owner" && <AccessPanel projectId={id} />}
+      {role === "owner" && <>
       <h2>Delete</h2>
       {confirming ? (
         <div role="alertdialog" aria-label="Confirm delete" className={styles.row}>
@@ -77,6 +83,7 @@ export function ProjectView({ id }: { id: string }) {
       ) : (
         <button type="button" onClick={() => setConfirming(true)}>Delete project</button>
       )}
+      </>}
     </main>
   );
 }

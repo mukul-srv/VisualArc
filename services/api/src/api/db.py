@@ -80,6 +80,35 @@ class ProjectVersionRow(Base):
     snapshot: Mapped[dict] = mapped_column(JSONB)
 
 
+class ProjectGrantRow(Base):
+    """A collaborator's role on a project ('viewer' | 'editor'); the owner is projects.owner_id."""
+
+    __tablename__ = "project_grants"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProjectInviteRow(Base):
+    """Role waiting for an unregistered email; becomes a grant when that email registers."""
+
+    __tablename__ = "project_invites"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)  # lowercased
+    role: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShareLinkRow(Base):
+    """The project's one read-only link; revoking deletes the row."""
+
+    __tablename__ = "share_links"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class UploadRow(Base):
     __tablename__ = "uploads"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
