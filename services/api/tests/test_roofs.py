@@ -223,3 +223,43 @@ def test_only_the_top_floor_has_a_roof_through_add_remove_and_regenerate(client)
     fid = next(f["id"] for f in c.get(f"{P}/{pid}").json()["floors"] if f["name"] == "First")
     assert c.delete(f"{P}/{pid}/floors/{fid}").status_code == 204
     assert _roofs(c, pid) == {"Ground": 1, "Cellar": 0}
+
+
+@pytest.mark.parametrize("kind", ["gable", "hip"])
+def test_ridge_along_y_on_a_tall_building(tmp_path, kind):
+    # 4400 x 6400 outer: the long side is y, so the ridge runs along y; eaves 5000 x 7000
+    p = _read(_walls_only(tmp_path, outer=(4400, 6400)), params={"roof_type": kind})
+    (r,) = _floor(p).roofs
+    assert r.kind == kind and r.ridge_axis == "y"
+    mesh = build_meshes(_floor(p))[r.id]
+    h, W, L = H_GABLE, 5000, 7000
+    expected = 0.5 * W * h * L if kind == "gable" else W * h / 6 * (3 * L - W)
+    assert mesh.is_watertight and mesh.volume == pytest.approx(expected)
+    top = mesh.vertices[mesh.vertices[:, 2] > 3000 + h - 1e-6]
+    assert set(top[:, 0].round(6)) == {2200.0}  # the ridge sits on x = 2200
+    inset = 0 if kind == "gable" else W / 2
+    assert sorted(set(top[:, 1].round(6))) == [-300.0 + inset, 6700.0 - inset]
+
+
+def test_removing_the_top_floor_reports_a_roof_that_cannot_move(client):
+    from api.db import ProjectRow, session
+
+    c = client
+    pid = c.post(P, json={"name": "H"}).json()["project_id"]
+    _add(c, pid, "Ground", 0)
+    _add(c, pid, "First", 3200)
+    with session() as db, db.begin():  # make the lower floor a legacy one (no stored request)
+        row = db.get(ProjectRow, pid)
+        row.data = {**row.data, "floors": [
+            {k: v for k, v in f.items() if k != "request"} if f["name"] == "Ground" else f
+            for f in row.data["floors"]]}
+    fid = next(f["id"] for f in c.get(f"{P}/{pid}").json()["floors"] if f["name"] == "First")
+    r = c.delete(f"{P}/{pid}/floors/{fid}")
+    assert r.status_code == 200 and r.json()["issues"][0]["code"] == "roof_on_lower_floor"
+    assert [f["name"] for f in c.get(f"{P}/{pid}").json()["floors"]] == ["Ground"]  # removed regardless
+    # a normal removal stays a plain 204
+    pid2 = c.post(P, json={"name": "H2"}).json()["project_id"]
+    _add(c, pid2, "Ground", 0)
+    _add(c, pid2, "First", 3200)
+    fid2 = next(f["id"] for f in c.get(f"{P}/{pid2}").json()["floors"] if f["name"] == "First")
+    assert c.delete(f"{P}/{pid2}/floors/{fid2}").status_code == 204

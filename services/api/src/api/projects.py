@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -359,14 +360,23 @@ def remove_floor(pid: str, floor_id: str, user: CurrentUser):
         gone = _floor(row, floor_id)
         params = {k: v for k, v in row.data.get("params", {}).items() if k != floor_id}
         left = [f for f in row.data["floors"] if f["id"] != floor_id]
+        issues = []
         if left and gone.get("roof"):  # the roof moves down to the new highest floor
             new_top = max(left, key=lambda f: f["elevation"]["value"])
+            moved = None
             if "request" in new_top and not new_top.get("roof"):
                 moved = _replay(db, pid, new_top, {}, True, user.id)[0]
-                if moved is not None:
-                    left = [moved if f["id"] == new_top["id"] else f for f in left]
+            if moved is not None:
+                left = [moved if f["id"] == new_top["id"] else f for f in left]
+            elif not new_top.get("roof"):  # legacy floor without a stored request, or blocked
+                issues.append({
+                    "code": "roof_on_lower_floor", "severity": "warning", "sources": [],
+                    "message": f"the roof of the removed floor could not move to {new_top['name']!r} "
+                    "(it cannot be regenerated); that floor has no roof"})
         row.data = {**row.data, "params": params, "floors": left}
         _version(db, row, user.id, f"Removed floor {gone['name']}")
+    if issues:  # nothing is lost silently: the removal went through, the roof did not move
+        return JSONResponse({"issues": issues})
     return Response(status_code=204)
 
 
