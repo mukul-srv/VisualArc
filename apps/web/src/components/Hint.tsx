@@ -1,9 +1,14 @@
+import { useId } from "react";
 import styles from "./dashboard.module.css";
 
-/** A small "?" that explains itself on hover or keyboard focus (the title pattern used for the
- *  standalone-model label). Decorative for screen readers: the text is also the aria-label. */
+/** A small "?" that explains itself: the text appears on hover AND when it has keyboard focus
+ *  (visible, not only a tooltip) and is announced as the description of the "?". */
 export function Hint({ text }: { text: string }) {
+  const id = useId();
   return (
-    <span className={styles.hint} title={text} aria-label={text} role="note" tabIndex={0}>?</span>
+    <span className={styles.hintWrap}>
+      <span className={styles.hint} tabIndex={0} role="note" aria-label="Help" aria-describedby={id}>?</span>
+      <span id={id} role="tooltip" className={styles.hintText}>{text}</span>
+    </span>
   );
 }

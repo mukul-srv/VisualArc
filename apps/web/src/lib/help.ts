@@ -13,8 +13,6 @@ export const HELP = {
   provenance: "Where a value comes from: read from your drawing, given by you, or assumed as a default.",
   walk: "Walk through the building with W A S D or the arrow keys; drag to look; E opens a nearby door.",
   roof: "Show or hide the roof to see inside.",
-  reset: "Frame the whole building again.",
-  fullscreen: "Use the whole screen for the model.",
   topdown: "Look straight down at the plan.",
   measure: "Click two points to measure the distance between them.",
 } as const;

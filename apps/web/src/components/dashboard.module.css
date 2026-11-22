@@ -5,13 +5,6 @@
   font: 15px system-ui;
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -116,4 +109,36 @@
   font-size: 0.75em;
   color: #555;
   cursor: help;
+}
+
+.hintWrap {
+  position: relative;
+  display: inline-block;
+}
+
+.hintText {
+  position: absolute;
+  left: 0;
+  top: 1.6em;
+  z-index: 10;
+  width: max-content;
+  max-width: 22em;
+  padding: 4px 8px;
+  background: #222;
+  color: #fff;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  /* hidden visually until hover or focus, but kept for screen readers (aria-describedby) */
+  clip-path: inset(50%);
+  white-space: nowrap;
+  overflow: hidden;
+  height: 1px;
+}
+
+.hintWrap:hover .hintText,
+.hintWrap:focus-within .hintText {
+  clip-path: none;
+  white-space: normal;
+  overflow: visible;
+  height: auto;
 }

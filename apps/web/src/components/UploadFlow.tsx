@@ -192,7 +192,7 @@ export function UploadFlow() {
         ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
       <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "DXF floor plan to 3D"}</h1>
-      <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null).text}</strong></p>
+      <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null)}</strong></p>
       <p><small>Values your drawing lacks use defaults, and every one is reported as assumed.</small></p>
       <input type="file" accept=".dxf" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (

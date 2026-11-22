@@ -5,6 +5,7 @@ import { useState } from "react";
 import { sortFloors, viewerUrl, type Floor, type Role } from "../lib/project";
 import { HELP } from "../lib/help";
 import { MoreMenu } from "./MoreMenu";
+import { HelpLine, useHelp } from "./HelpLine";
 import styles from "./dashboard.module.css";
 
 export type TabId = "floors" | "parameters" | "versions" | "sharing";
@@ -54,15 +55,19 @@ export function ProjectToolbar(p: {
 }
 
 export function ProjectTabs({ role, tab, onSelect }: { role: Role; tab: TabId; onSelect: (t: TabId) => void }) {
+  const { help, about } = useHelp();
   return (
-    <div role="tablist" aria-label="Project sections" className={styles.row}>
-      {tabsFor(role).map((t) => (
-        <button key={t.id} role="tab" type="button" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`panel-${t.id}`}
-          title={t.help} style={{ fontWeight: tab === t.id ? 700 : 400 }} onClick={() => onSelect(t.id)}>
-          {t.label}
-        </button>
-      ))}
-    </div>
+    <>
+      <div role="tablist" aria-label="Project sections" className={styles.row}>
+        {tabsFor(role).map((t) => (
+          <button key={t.id} role="tab" type="button" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`panel-${t.id}`}
+            style={{ fontWeight: tab === t.id ? 700 : 400 }} onClick={() => onSelect(t.id)} {...about(t.help)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <HelpLine text={help} />
+    </>
   );
 }
 

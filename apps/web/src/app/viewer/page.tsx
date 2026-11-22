@@ -35,13 +35,6 @@ export default function ViewerPage() {
   const [roofPresent, setRoofPresent] = useState(false);
   const [roofOn, setRoofOn] = useState(true);
   const setRoof = useRef<(on: boolean) => void>(() => {});
-  const resetView = useRef<() => void>(() => {});
-  const [fullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    const onChange = () => setFullscreen(document.fullscreenElement !== null);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
   const [hint, setHint] = useState<string | null>(null); // a short message, e.g. why a door does not open
   const lowestMm = useRef<number | null>(null); // lowest floor of the project: the grid sits there
   const toggleMeasure = useRef<() => void>(() => {});
@@ -402,18 +395,6 @@ export default function ViewerPage() {
       controls.update();
     };
     setTop.current = place;
-    // back to the first framing of the whole building (also leaves the top-down plan)
-    resetView.current = () => {
-      if (walk) return;
-      if (camera === ortho) {
-        place(false);
-        setTopState(false);
-      }
-      const d = size * 1.5;
-      controls.target.copy(center);
-      persp.position.set(center.x + d, center.y + d * 0.7, center.z + d);
-      controls.update();
-    };
 
     new GLTFLoader().load(
       url,
@@ -527,14 +508,11 @@ export default function ViewerPage() {
           measuring={measuring}
           roofPresent={roofPresent}
           roofOn={roofOn}
-          fullscreen={fullscreen}
           onWalk={() => toggleWalk.current()}
           onRoof={() => {
             setRoofOn(!roofOn);
             setRoof.current(!roofOn);
           }}
-          onReset={() => resetView.current()}
-          onFullscreen={() => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen())}
           onTop={() => {
             setTopState(!top);
             setTop.current(!top);
@@ -548,9 +526,9 @@ export default function ViewerPage() {
           <div role="group" aria-label="Floors" style={{ marginTop: 6 }}>
             {floors.map((f) => (
               <div key={f.id}>
-                <button disabled={walking} aria-pressed={f.id === floorId} title={`Elevation ${Number(f.elevation.value.toFixed(3))} mm [${PROVENANCE_LABEL[f.elevation.source]}]`} onClick={() => selectFloor(f)}>
+                <button disabled={walking} aria-pressed={f.id === floorId} onClick={() => selectFloor(f)}>
                   {f.id === floorId ? "▶ " : ""}
-                  {f.name}
+                  {f.name}: {Number(f.elevation.value.toFixed(3))} mm [{PROVENANCE_LABEL[f.elevation.source]}]
                 </button>
               </div>
             ))}
@@ -571,8 +549,8 @@ export default function ViewerPage() {
       >
         {current && (
           <div style={{ marginBottom: 8 }}>
-            <b title={`${current.id}, elevation ${Number(current.elevation.value.toFixed(3))} mm [${PROVENANCE_LABEL[current.elevation.source]}]`}>{current.name}</b>
-            {" "}<small>Click a wall, door or room for its details.</small>
+            <b>{current.name}</b> <code>{current.id}</code>: elevation {Number(current.elevation.value.toFixed(3))} mm [
+            {PROVENANCE_LABEL[current.elevation.source]}]
           </div>
         )}
         <RoomList rooms={rooms} onSelect={(r) => setPanel(describeRoom(r, current?.id))} />
