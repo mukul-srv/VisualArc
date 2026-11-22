@@ -10,10 +10,12 @@ test("errors are visible and open; warnings sit in a collapsed accordion", () =>
   const html = renderToStaticMarkup(<IssueList issues={[mk("unmapped_layer", "warning"), mk("no_walls", "blocking")]} />);
   expect(html).toContain('aria-label="Blocking issues"');
   expect(html).toMatch(/<details open=""[^>]*>[^]*No walls found/); // the error group is open
-  const acc = html.slice(html.indexOf('aria-label="Warnings and notes"'));
-  expect(acc.startsWith('aria-label="Warnings and notes">')).toBe(true); // accordion itself has no `open`
+  const acc = html.slice(html.indexOf("<details><summary"));
+  expect(acc.startsWith("<details><summary")).toBe(true); // the accordion itself has no `open`
   expect(acc).toContain("Layers not mapped");
   expect(html.indexOf("Blocking issues")).toBeLessThan(html.indexOf("Warnings and notes"));
+  expect(html).toContain('role="region" aria-label="Issues"'); // labelled landmark, no aria-label on plain elements
+  expect(html).not.toMatch(/<details[^>]*aria-label/);
 });
 
 test("only warnings: no blocking section, still collapsed", () => {
@@ -80,4 +82,14 @@ test("issue without sources shows a fallback", () => {
 
 test("empty list says so", () => {
   expect(renderToStaticMarkup(<IssueList issues={[]} />)).toContain("No issues found");
+});
+
+test("assumed-default groups are labelled as engine warnings and listed, never hidden", () => {
+  const html = renderToStaticMarkup(<IssueList issues={[mk("wall_height_defaulted", "warning", "wall height assumed 2700")]} />);
+  expect(html).toContain("Info (engine warning):");
+  expect(html).toContain("[assumed default]");
+  expect(html).toContain("none are hidden");
+  expect(html).toContain("wall height assumed 2700");
+  expect(groupIssues([mk("wall_height_defaulted", "warning")])[0].issues[0].severity).toBe("warning"); // data untouched
+  expect(renderToStaticMarkup(<IssueList issues={[mk("unmapped_layer", "warning")]} />)).not.toContain("none are hidden");
 });

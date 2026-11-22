@@ -65,7 +65,8 @@ const humanize = (code: string) => {
 export const levelOf = (i: Issue): Level =>
   i.severity === "blocking" ? "error" : CATALOG[i.code]?.info || i.code.endsWith("_defaulted") ? "info" : "warning";
 
-export type IssueGroup = { code: string; title: string; help: string; level: Level; issues: Issue[] };
+/** `info` groups are still engine *warnings* (severity is never changed); `tag` says why they are quieter. */
+export type IssueGroup = { code: string; title: string; help: string; level: Level; issues: Issue[]; tag?: string };
 
 const ORDER: Record<Level, number> = { error: 0, warning: 1, info: 2 };
 
@@ -84,6 +85,7 @@ export function groupIssues(issues: Issue[]): IssueGroup[] {
         help: e?.help ?? "See the details below.",
         level,
         issues: [],
+        ...(i.code.endsWith("_defaulted") ? { tag: "assumed default" } : {}),
       };
       by.set(key, g);
     }

@@ -32,7 +32,8 @@ function Group({ g, open }: { g: IssueGroup; open?: boolean }) {
   return (
     <details open={open} style={{ margin: "6px 0" }}>
       <summary style={{ cursor: "pointer", color: COLOR[g.level] }}>
-        <strong>{LEVEL_LABEL[g.level]}:</strong> {g.title} ({g.issues.length})
+        <strong>{LEVEL_LABEL[g.level]}{g.level === "info" ? " (engine warning)" : ""}:</strong> {g.title} ({g.issues.length})
+        {g.tag && <> <em>[{g.tag}]</em></>}
       </summary>
       <p style={{ margin: "4px 0" }}>{g.help}</p>
       <Items issues={g.issues} />
@@ -51,7 +52,7 @@ export function IssueList({ issues }: { issues: Issue[] }) {
   const rest = groups.filter((g) => g.level !== "error");
   const restLine = summaryLine({ ...s, error: 0 });
   return (
-    <div aria-label="Issues">
+    <div role="region" aria-label="Issues">
       <p role="status"><strong>{summaryLine(s)}</strong></p>
       {errors.length > 0 && (
         <section aria-label="Blocking issues">
@@ -60,8 +61,9 @@ export function IssueList({ issues }: { issues: Issue[] }) {
         </section>
       )}
       {rest.length > 0 && (
-        <details aria-label="Warnings and notes">
+        <details>
           <summary style={{ cursor: "pointer" }}>Warnings and notes ({restLine})</summary>
+          {s.info > 0 && <p style={{ margin: "4px 0" }}><small>Info items are engine warnings about values the engine assumed or noted (for example assumed defaults). They are listed here, none are hidden.</small></p>}
           {rest.map((g) => <Group key={`${g.level}:${g.code}`} g={g} />)}
         </details>
       )}

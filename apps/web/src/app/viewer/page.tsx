@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -8,6 +7,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { getProject, glbUrl, isGenerationId } from "@/lib/api";
 import { parseManifest, pickFloor, sortFloors, viewerUrl, type Floor, type Manifest } from "@/lib/project";
 import { resolveStem } from "@/lib/model-stem";
+import { ViewerNav } from "@/components/ViewerNav";
 import { MetadataPanel } from "@/components/MetadataPanel";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
@@ -34,7 +34,7 @@ export default function ViewerPage() {
   const [floorId, setFloorId] = useState<string | null>(null);
   const [target, setTarget] = useState<{ url: string; stem: string } | null>(null);
   const share = useRef<string | null>(null); // read-only link token
-  const [shared, setShared] = useState(false); // opened through a share link: no account pages
+  const [shared, setShared] = useState<boolean | null>(null); // null until the URL is read; true: opened through a share link (no account pages)
   const floorTarget = (m: Manifest, f: Floor) => ({ url: glbUrl(f.generation_id, share.current), stem: `${m.name} / ${f.name}` });
 
   // Resolve what to load from the query string. The scene effect below reloads on `target`.
@@ -408,29 +408,7 @@ export default function ViewerPage() {
           {measuring ? "Measure: on (Esc)" : "Measure"}
         </button>{" "}
         {walking ? "WASD/arrows move, drag to look" : status}
-        {!manifest && !shared && (
-          <div>
-            <Link href="/" style={{ color: "#8cf" }}>&larr; Back to dashboard</Link>
-            <nav aria-label="Breadcrumb"><Link href="/" style={{ color: "#8cf" }}>Dashboard</Link> / Model</nav>
-          </div>
-        )}
-        {manifest && (
-          <div>
-            {shared ? <span>Shared view (read-only): {manifest.name}</span> : (
-              <>
-                <Link href={viewing !== null ? `/projects/${manifest.id}#versions` : `/projects/${manifest.id}`} style={{ color: "#8cf" }}>
-                  &larr; Back to {viewing !== null ? "versions" : "project"}
-                </Link>
-                <nav aria-label="Breadcrumb">
-                  <Link href="/" style={{ color: "#8cf" }}>Dashboard</Link> /{" "}
-                  <Link href={`/projects/${manifest.id}`} style={{ color: "#8cf" }}>{manifest.name}</Link> /{" "}
-                  {viewing !== null ? <><Link href={`/projects/${manifest.id}#versions`} style={{ color: "#8cf" }}>Versions</Link> / Version {viewing}</> : "Viewer"}
-                </nav>
-              </>
-            )}
-            {viewing !== null && <b role="status"> Viewing version {viewing} (read-only)</b>}
-          </div>
-        )}
+        <ViewerNav shared={shared} manifest={manifest} viewing={viewing} />
         {floors.length > 0 && (
           <div role="group" aria-label="Floors" style={{ marginTop: 6 }}>
             {floors.map((f) => (
