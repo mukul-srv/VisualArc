@@ -4,16 +4,17 @@ Rows in the `projects` table (manifest in a JSONB column). `create_project` and 
 Python so other code (B8 floor split) can build projects without HTTP.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.auth import CurrentUser, current_user
 from api.db import ProjectRow, session
 from api.engine.adapters.dxf.split import FloorScope
 from api.engine.canonical.model import Measured
 from api.generations import GenerationRequest, blocked_response, result, run_generation
 from api.storage import new_id, valid_id
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
 
 class ProjectRequest(BaseModel):
@@ -36,15 +37,17 @@ def load_project(pid: str) -> dict:
     return row.data
 
 
-def create_project(name: str) -> str:
+def create_project(name: str, owner_id: str | None = None) -> str:
     pid = new_id()
     with session() as db:
-        db.add(ProjectRow(id=pid, data={"id": pid, "name": name.strip(), "floors": []}))
+        db.add(ProjectRow(id=pid, data={"id": pid, "name": name.strip(), "floors": []}, owner_id=owner_id))
         db.commit()
     return pid
 
 
-def add_floor(pid: str, req: FloorRequest, scope: FloorScope | None = None):
+def add_floor(
+    pid: str, req: FloorRequest, scope: FloorScope | None = None, owner_id: str | None = None
+):
     """Generate and append a floor. HTTPException 404 (unknown ids) / 422 (duplicate
     name or elevation); returns the 409 response when blocking issues stop it."""
     if not valid_id(pid):
@@ -68,7 +71,7 @@ def add_floor(pid: str, req: FloorRequest, scope: FloorScope | None = None):
         # unique because floors are append-only (never deleted)
         fid = f"floor-{len(manifest['floors'])}"
         gid, issues = run_generation(
-            req, floor_id=fid, floor_name=name, floor_elevation=req.elevation, scope=scope
+            req, owner_id, floor_id=fid, floor_name=name, floor_elevation=req.elevation, scope=scope
         )
         if gid is None:
             return blocked_response(issues)
@@ -83,13 +86,13 @@ def add_floor(pid: str, req: FloorRequest, scope: FloorScope | None = None):
 
 
 @router.post("/projects", status_code=201)
-def post_project(req: ProjectRequest):
-    return {"project_id": create_project(req.name)}
+def post_project(req: ProjectRequest, user: CurrentUser):
+    return {"project_id": create_project(req.name, user.id)}
 
 
 @router.post("/projects/{pid}/floors", status_code=201)
-def post_floor(pid: str, req: FloorRequest):
-    return add_floor(pid, req)
+def post_floor(pid: str, req: FloorRequest, user: CurrentUser):
+    return add_floor(pid, req, None, user.id)
 
 
 @router.get("/projects/{pid}")

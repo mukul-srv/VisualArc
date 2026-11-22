@@ -7,6 +7,11 @@ Turns restricted DXF floor plans into a canonical building model with provenance
 - Tests: `uv run pytest -q` (API tests need compose Postgres; they use a throwaway DB)
 - Dev server: `uv run uvicorn api.main:app --reload`
 
+## Accounts (`src/api/auth.py`)
+- Every `/api/v1` router except `/api/v1/auth/*` depends on `current_user` (401 without a session). `/health` is public. Ownership checks are not enforced yet (`owner_id` is only recorded).
+- Env: `GITHUB_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET` (provider off = 503), `WEB_BASE_URL`, `AUTH_COOKIE_SECURE`, `SESSION_SECRET`, `AUTH_RATE_LIMIT_PER_MIN`.
+- Tests: `conftest.py` logs in every `TestClient` automatically; mark auth tests `@pytest.mark.anon`.
+
 ## Rules
 - All parsing and geometry rules live here; the viewer never duplicates them.
 - Geometry rules: `.claude/rules/geometry.md` (auto-loads for engine code).

@@ -6,10 +6,11 @@ used; the file is stored under a server-generated id.
 """
 
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from api.auth import CurrentUser, current_user
 from api.db import UploadRow, session
 from api.engine.adapters.dxf.inspect import build_inventory
 from api.engine.adapters.dxf.reader import InputError, load_doc, read_dxf, resolve_scale
@@ -20,7 +21,7 @@ from api.pipeline import has_blocking
 from api.projects import FloorRequest, add_floor, create_project
 from api.storage import new_id, upload_key, upload_path, valid_id
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
 # preflight issues that mean "the user must supply this parameter"
 _NEEDS = {
@@ -47,7 +48,7 @@ async def _save(request: Request, limit: int) -> int:
 
 
 @router.post("/uploads", status_code=201)
-async def create_upload(request: Request) -> dict:
+async def create_upload(request: Request, user: CurrentUser) -> dict:
     upload_id = new_id()
     path = request.state.path = upload_path(upload_id)
     try:
@@ -63,7 +64,7 @@ async def create_upload(request: Request) -> dict:
         raise
     try:
         with session() as db:
-            db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id)))
+            db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id), owner_id=user.id))
             db.commit()
     except BaseException:
         path.unlink(missing_ok=True)  # no blob without its metadata row
@@ -107,7 +108,7 @@ class SplitRequest(GenerationRequest):
 
 
 @router.post("/uploads/{upload_id}/split", status_code=201)
-def split_upload(upload_id: str, req: SplitRequest):
+def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
     """Confirm the floors of a consolidated DXF: one project, one generation per floor."""
     path = upload_path(upload_id) if valid_id(upload_id) else None
     if not path or not path.is_file():
@@ -162,10 +163,10 @@ def split_upload(upload_id: str, req: SplitRequest):
                 "floors": blocked,
             },
         )
-    pid = create_project(req.project_name)
+    pid = create_project(req.project_name, user.id)
     floors = []
     for key, freq, scope in jobs:
-        out = add_floor(pid, freq, scope)
+        out = add_floor(pid, freq, scope, user.id)
         if isinstance(out, JSONResponse):  # cannot happen after the check above
             raise HTTPException(500, "floor blocked after the pre-check")
         floors.append({"key": key, **out})
