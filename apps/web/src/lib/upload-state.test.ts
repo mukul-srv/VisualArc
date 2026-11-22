@@ -33,3 +33,14 @@ test("editing other fields changes nothing else", () => {
   expect(r.proj.elevation).toBe("6000");
   expect(r.resetConventions).toBe(false);
 });
+
+import { restoredFromCache, uploadKey } from "./upload-state";
+
+test("the upload page is keyed by its query string, and a bfcache restore starts it over", () => {
+  expect(uploadKey("")).not.toBe(uploadKey("project=abc"));
+  expect(uploadKey("project=abc")).not.toBe(uploadKey("project=def"));
+  expect(uploadKey("project=abc")).toBe(uploadKey("project=abc"));
+  expect(restoredFromCache({ persisted: true })).toBe(true);
+  expect(restoredFromCache({ persisted: false })).toBe(false);
+  expect(restoredFromCache({})).toBe(false);
+});

@@ -12,6 +12,10 @@ import { MetadataPanel } from "@/components/MetadataPanel";
 import { RoomList } from "@/components/RoomList";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
+import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distanceToOpening, doorFor, nearestDoor, toggle as toggleDoor, whyNoToggle, type Door } from "@/lib/doors";
+import { collectSupports, groundLevel, resolveHeight, stepUpLimit } from "@/lib/ground";
+import { ceilingMeetsRoof, hasRoof, separateCoplanar, setRoofVisible } from "@/lib/roof";
+import { isDoubleTap, type Tap } from "@/lib/tap";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, describeRoom, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel, type RoomData } from "@/lib/selection";
@@ -27,6 +31,11 @@ export default function ViewerPage() {
   const [status, setStatus] = useState("loading…");
   const [panel, setPanel] = useState<Panel | null>(null);
   const [rooms, setRooms] = useState<RoomData[]>([]);
+  const [roofPresent, setRoofPresent] = useState(false);
+  const [roofOn, setRoofOn] = useState(true);
+  const setRoof = useRef<(on: boolean) => void>(() => {});
+  const [hint, setHint] = useState<string | null>(null); // a short message, e.g. why a door does not open
+  const lowestMm = useRef<number | null>(null); // lowest floor of the project: the grid sits there
   const toggleMeasure = useRef<() => void>(() => {});
   const [measuring, setMeasuring] = useState(false);
   const [result, setResult] = useState<{ m: Measurement; a: SnapKind; b: SnapKind } | null>(null);
@@ -59,6 +68,7 @@ export default function ViewerPage() {
         setViewing(version ?? null);
         const f = pickFloor(m, query.get("floor"));
         if (!f) return setStatus("error: project has no floors yet");
+        lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
         setManifest(m);
         setFloorId(f.id);
         setTarget(floorTarget(m, f));
@@ -113,6 +123,13 @@ export default function ViewerPage() {
 
     // --- selection: click (not drag) picks a mesh; a hit inside a wall's aperture picks the opening
     let model: THREE.Object3D | null = null;
+    let doors: Door[] = [];
+    let hintTimer: ReturnType<typeof setTimeout> | undefined;
+    const notify = (msg: string) => {
+      setHint(msg);
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(() => setHint(null), 4000);
+    };
     let selected: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] } | null = null;
     let overlay: THREE.Mesh | null = null;
     const clearSelection = () => {
@@ -182,13 +199,31 @@ export default function ViewerPage() {
       setResult({ m: measure(pts[0].p, pts[1].p), a: pts[0].snap, b: pts[1].snap });
     };
     const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
+    // a door or window under a double click/tap: toggle a door (orbit and walk); say why when it cannot
+    const toggleOpening = (o: OpeningData) => {
+      const why = whyNoToggle(o, doors);
+      if (why) return notify(why);
+      const d = doorFor(doors, o.id)!;
+      if (walk && distanceToOpening(d, walk.pos) > DOOR.reach) return notify("Too far from the door: walk closer.");
+      if (walk && d.open && !canClose(d, walk.pos)) return notify("Step out of the doorway first.");
+      toggleDoor(d);
+    };
+    let lastTap: Tap | null = null;
     const onUp = (e: PointerEvent) => {
-      if (walk || !down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+      if (!down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
       const r = canvas.getBoundingClientRect();
       raycaster.setFromCamera(
         new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
         camera,
       );
+      const tap = { t: performance.now(), x: e.clientX, y: e.clientY };
+      const double = isDoubleTap(lastTap, tap);
+      lastTap = double ? null : tap;
+      if (double && !measureOn) {
+        const hit = pickElement(model, raycaster.ray);
+        if (hit?.opening) return toggleOpening(hit.opening);
+      }
+      if (walk) return;
       const pick = pickElement(model, raycaster.ray);
       if (measureOn) return pick && measureClick(pick.mesh, pick.point);
       clearSelection();
@@ -217,6 +252,9 @@ export default function ViewerPage() {
       yaw: number;
       pitch: number;
       colliders: THREE.Mesh[];
+      supports: THREE.Mesh[]; // surfaces that can be stood on: floors, stair steps, ramps, balconies
+      baseY: number; // the floor level the walk started at; where the walker lands off any surface
+      stepUp: number; // m: the highest step taken without a ramp (the stairs' own riser)
       restore: () => void;
       saved: { position: THREE.Vector3; target: THREE.Vector3 };
     } | null = null;
@@ -257,7 +295,10 @@ export default function ViewerPage() {
         yaw: 0,
         pitch: 0,
         colliders,
-        restore: makeDoubleSided(colliders),
+        supports: collectSupports(model),
+        baseY: spawn.floorY,
+        stepUp: stepUpLimit(model),
+        restore: makeDoubleSided([...colliders, ...doors.map((d) => d.leaf)]),
         saved: { position: camera.position.clone(), target: controls.target.clone() },
       };
       persp.layers.enable(CEILING_LAYER); // ceilings are drawn only while walking
@@ -268,6 +309,11 @@ export default function ViewerPage() {
     toggleWalk.current = () => (walk ? exitWalk() : enterWalk());
     const onKey = (e: KeyboardEvent, down: boolean) => {
       if (e.key === "Escape" && down) return measureOn ? setMeasure(false) : exitWalk();
+      if (down && walk && e.key.toLowerCase() === "e" && !e.repeat) {
+        const d = nearestDoor(doors, walk.pos);
+        if (!d) return notify("No door within reach.");
+        return toggleOpening(d.opening);
+      }
       if (down && walk) keys.add(e.key.toLowerCase());
       if (!down) keys.delete(e.key.toLowerCase()); // always, or a key released after Esc sticks
     };
@@ -289,6 +335,7 @@ export default function ViewerPage() {
     canvas.addEventListener("pointerdown", onLookDown);
     canvas.addEventListener("pointermove", onLookMove);
     window.addEventListener("pointerup", onLookUp);
+    let lastFrame = performance.now();
     let last = performance.now();
     const stepWalk = () => {
       const now = performance.now();
@@ -301,7 +348,12 @@ export default function ViewerPage() {
       const fx = -Math.sin(walk.yaw);
       const fz = -Math.cos(walk.yaw);
       const d = new THREE.Vector2(fx * f - fz * r, fz * f + fx * r).normalize().multiplyScalar(WALK.speed * dt);
-      moveWithCollision(walk.pos, d, walk.floorY, walk.colliders);
+      const from = walk.pos.clone();
+      // walls and every door that is closed; an open door is passable at once
+      moveWithCollision(walk.pos, d, walk.floorY, [...walk.colliders, ...blocking(doors)]);
+      const y = resolveHeight(walk.pos.x, walk.pos.z, walk.floorY, from.distanceTo(walk.pos), walk.supports, walk.baseY, walk.stepUp);
+      if (y === null) walk.pos.copy(from); // too high a step or too steep a ramp: not taken
+      else walk.floorY = y;
       aim();
     };
 
@@ -349,6 +401,11 @@ export default function ViewerPage() {
         scene.add(gltf.scene);
         model = gltf.scene;
         layerCeilings(model);
+        doors = buildDoors(model);
+        if (ceilingMeetsRoof(model)) separateCoplanar(model); // wall height = ceiling height: same plane
+        setRoofPresent(hasRoof(model));
+        setRoofOn(true);
+        setRoof.current = (on) => model && setRoofVisible(model, on);
         const box = modelBox(model);
         const s = box.getSize(new THREE.Vector3());
         center = box.getCenter(new THREE.Vector3());
@@ -359,7 +416,8 @@ export default function ViewerPage() {
         scene.remove(grid);
         grid.dispose();
         grid = new THREE.GridHelper(cells, cells);
-        grid.position.set(center.x, box.min.y, center.z);
+        // at the floor level (top of the slab), not the model's lowest point: the slab is below grade
+        grid.position.set(center.x, Math.min(groundLevel(model, lowestMm.current), box.max.y) - 0.002, center.z);
         scene.add(grid);
         Object.assign(controls, orbitLimits(box));
         place(false);
@@ -370,6 +428,9 @@ export default function ViewerPage() {
     );
 
     renderer.setAnimationLoop(() => {
+      const t = performance.now();
+      animateDoors(doors, Math.min(0.05, (t - lastFrame) / 1000));
+      lastFrame = t;
       stepWalk();
       renderer.render(scene, camera);
     });
@@ -391,6 +452,7 @@ export default function ViewerPage() {
       canvas.removeEventListener("pointermove", onLookMove);
       window.removeEventListener("pointerup", onLookUp);
       exitWalk();
+      clearTimeout(hintTimer);
       clearSelection();
       clearMeasure();
       model?.traverse((o) => {
@@ -405,6 +467,24 @@ export default function ViewerPage() {
       el.removeChild(renderer.domElement);
     };
   }, [target]);
+
+  // The model of a project floor can be regenerated elsewhere (Parameters tab, another tab): when this
+  // tab regains focus, reload the manifest and swap in the new generation if the floor's changed.
+  useEffect(() => {
+    if (!manifest || viewing !== null) return;
+    const onFocus = () =>
+      getProject(manifest.id, fetch, undefined, share.current).then((r) => {
+        const m = r.ok ? parseManifest(r.manifest) : null;
+        const f = m && pickFloor(m, floorId);
+        const now = manifest.floors.find((x) => x.id === floorId);
+        if (!m || !f || !now || f.generation_id === now.generation_id) return;
+        lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
+        setManifest(m);
+        setTarget(floorTarget(m, f));
+      });
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [manifest, floorId, viewing]);
 
   const floors = manifest ? sortFloors(manifest.floors) : [];
   const current = floors.find((f) => f.id === floorId);
@@ -434,7 +514,21 @@ export default function ViewerPage() {
         <button disabled={walking} onClick={() => toggleMeasure.current()}>
           {measuring ? "Measure: on (Esc)" : "Measure"}
         </button>{" "}
-        {walking ? "WASD/arrows move, drag to look" : status}
+        {roofPresent && (
+          <>
+            <button
+              aria-pressed={roofOn}
+              onClick={() => {
+                setRoofOn(!roofOn);
+                setRoof.current(!roofOn);
+              }}
+            >
+              {roofOn ? "Roof: on" : "Roof: off"}
+            </button>{" "}
+          </>
+        )}
+        {walking ? "WASD/arrows move, drag to look, E opens a door" : status}
+        {hint && <div role="status" style={{ color: "#ffcc66" }}>{hint}</div>}
         <ViewerNav shared={shared} manifest={manifest} viewing={viewing} />
         {floors.length > 0 && (
           <div role="group" aria-label="Floors" style={{ marginTop: 6 }}>

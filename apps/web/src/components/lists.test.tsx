@@ -22,7 +22,7 @@ test("no projects: empty state links to /new", () => {
 });
 
 test("recent buildings link to the project floor or the standalone model", () => {
-  const g = { generation_id: "b".repeat(32), created_at: "2026-05-01T10:20:30+00:00", project_id: null, project_name: null, floor_id: null, floor_name: null };
+  const g = { name: null, generation_id: "b".repeat(32), created_at: "2026-05-01T10:20:30+00:00", project_id: null, project_name: null, floor_id: null, floor_name: null };
   const html = renderToStaticMarkup(
     <RecentList items={[{ ...g, project_id: project.id, project_name: "House", floor_id: "floor-0", floor_name: "Ground" }, g]} />,
   );

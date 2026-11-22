@@ -4,6 +4,7 @@ import { API_BASE, send } from "./api";
 export type ProjectSummary = { id: string; role?: string; name: string; floor_count: number; version: number; updated_at: string; thumbnail: string | null };
 export type RecentGeneration = {
   generation_id: string;
+  name: string | null; // a standalone model: the uploaded file name unless renamed
   created_at: string;
   project_id: string | null;
   project_name: string | null;
@@ -45,6 +46,9 @@ export const renameFloor = (pid: string, floorId: string, name: string, f: Fetch
 export const removeFloor = (pid: string, floorId: string, f: Fetch = fetch) => call("DELETE", `/projects/${pid}/floors/${floorId}`, f);
 export const saveAsProject = (generationId: string, name: string, f: Fetch = fetch) =>
   call("POST", "/projects/from-generation", f, { generation_id: generationId, name });
+export const renameGeneration = (generationId: string, name: string, f: Fetch = fetch) =>
+  call("PATCH", `/generations/${generationId}`, f, { name });
+export const deleteGeneration = (generationId: string, f: Fetch = fetch) => call("DELETE", `/generations/${generationId}`, f);
 export const deleteProject = (pid: string, f: Fetch = fetch) => call("DELETE", `/projects/${pid}`, f);
 
 /** "2026-05-01T10:20:30+00:00" -> "2026-05-01 10:20 UTC" (stable across locales and SSR). */

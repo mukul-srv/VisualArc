@@ -7,7 +7,7 @@ import { createProject, getPresets, getProject, isGenerationId, splitUpload, upl
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
-import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile } from "@/lib/upload-state";
+import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache } from "@/lib/upload-state";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
@@ -35,6 +35,12 @@ export function UploadFlow() {
   const [conv, setConv] = useState<ConventionsSpec>(DEFAULT_CONVENTIONS);
   const [convInfo, setConvInfo] = useState<{ presets: PresetInfo[]; roles: string[] } | null>(null);
   const [layers, setLayers] = useState<LayerRole[]>([]);
+  // back/forward cache: the restored page still shows the previous file name; start over
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => restoredFromCache(e) && window.location.reload();
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
   useEffect(() => {
     getPresets().then((r) => r.ok && setPresets(r.presets)); // placeholders only; the backend applies them
     listConventions().then((r) => r.ok && setConvInfo({ presets: r.presets, roles: r.roles }));
@@ -186,7 +192,7 @@ export function UploadFlow() {
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
       <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "DXF floor plan to 3D"}</h1>
       <p>Upload a DXF drawn to the supported convention. Values the drawing lacks use nominal defaults, and every one is reported as assumed.</p>
-      <input type="file" accept=".dxf" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
+      <input type="file" accept=".dxf" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
         <p role="status">
           {job && "Large drawings can take a minute; keep this page open. "}
