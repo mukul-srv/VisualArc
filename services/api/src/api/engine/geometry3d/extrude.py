@@ -10,7 +10,7 @@ from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
-from api.engine.canonical.model import Floor, Opening, Wall
+from api.engine.canonical.model import Floor, Opening, Wall, _axis
 
 
 def _height(w: Wall) -> float:
@@ -61,6 +61,43 @@ def _wall_with_openings(
         [[d[0], 0, nx, sx], [d[1], 0, ny, sy], [0, 1, 0, z0], [0, 0, 0, 1]]
     )
     return mesh
+
+
+def _slab_box(axis: int, a0, a1, n0, n1, z0, z1) -> trimesh.Trimesh:
+    """Box from along-wall range [a0, a1], across-wall range [n0, n1] and height range [z0, z1]."""
+    lo = (a0, n0, z0) if axis == 0 else (n0, a0, z0)
+    hi = (a1, n1, z1) if axis == 0 else (n1, a1, z1)
+    return trimesh.creation.box(bounds=[lo, hi])
+
+
+def build_opening_parts(floor: Floor) -> dict[str, tuple[str, Opening, trimesh.Trimesh]]:
+    """Medium detail per opening with a `detail`: `<id>-frame` and `<id>-leaf` / `<id>-glass`
+    (id -> (part, opening, mesh)). The panel is drawn closed, centred in the wall."""
+    walls = {w.id: w for w in floor.walls}
+    out = {}
+    for o in floor.openings:
+        d = o.detail
+        if d is None:
+            continue
+        axis = _axis(o.span)
+        a0, a1 = sorted((o.span.start[axis], o.span.end[axis]))
+        c = o.span.start[1 - axis]
+        t, fw, pt = walls[o.wall_id].thickness.value, d.frame_width.value, d.panel_thickness.value
+        s = floor.elevation.value + o.sill_height.value
+        top = s + o.height.value
+        door = d.panel == "leaf"
+
+        def box(x0, x1, z0, z1, depth=t, axis=axis, c=c):
+            return _slab_box(axis, x0, x1, c - depth / 2, c + depth / 2, z0, z1)
+
+        frame = [box(a0, a0 + fw, s, top), box(a1 - fw, a1, s, top),
+                 box(a0 + fw, a1 - fw, top - fw, top)]
+        if not door:
+            frame.append(box(a0 + fw, a1 - fw, s, s + fw))
+        out[f"{o.id}-frame"] = ("frame", o, trimesh.util.concatenate(frame))
+        out[f"{o.id}-{d.panel}"] = (
+            d.panel, o, box(a0 + fw, a1 - fw, s if door else s + fw, top - fw, pt))
+    return out
 
 
 def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:

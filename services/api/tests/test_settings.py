@@ -48,6 +48,9 @@ def test_defaults_match_document_08():
         "default_door_sill_mm": 0.0,
         "default_window_height_mm": 1200.0,
         "default_window_sill_mm": 900.0,
+        "opening_frame_width_mm": 50.0,
+        "door_leaf_thickness_mm": 40.0,
+        "window_glass_thickness_mm": 24.0,
         "building_presets": (
             ("residential", dict_preset(2700, 2700, 2100, 1200, 900, 3000, 200, "gable", 30, 900)),
             ("commercial", dict_preset(3000, 2700, 2100, 1500, 900, 3600, 250, "flat", 0, 1100)),
@@ -71,6 +74,9 @@ def test_defaults_match_document_08():
             ("wall_neutral", ("#a8a8a8", 0.9)),
             ("floor_boundary", ("#8c7b6b", 0.8)),
             ("slab", ("#7d7266", 0.9)),
+            ("opening_frame", ("#5b4636", 0.7)),
+            ("opening_leaf", ("#a9824f", 0.7)),
+            ("opening_glass", ("#9fd0e6", 0.1)),
             ("ceiling", ("#f4f4f0", 0.95)),
         ),
     }

@@ -160,6 +160,30 @@ class Ceiling(_Model):
 
 # shortcut: model invariants use DEFAULTS.tolerance_mm, not a caller's Settings;
 # pass it via validation context if tolerance ever becomes per-run.
+class Swing(_Model):
+    """Door swing read from the arc symbol on the door layer; the leaf is modelled closed."""
+
+    hinge: Literal["start", "end"]  # the span end the arc is centred on (start = lower coordinate)
+    opens_toward: Literal["+x", "-x", "+y", "-y"]  # plan direction the leaf swings to
+    source: SourceRef  # the arc
+
+
+class OpeningDetail(_Model):
+    """Medium detail (frame + one panel), all nominal Settings values, never read from the drawing.
+    Frame: `frame_width` wide around the opening (jambs + head; a window also a sill), full wall
+    depth. Panel: a door leaf or window glass box, `panel_thickness` thick, centred in the wall."""
+
+    frame_width: Measured
+    panel: Literal["leaf", "glass"]
+    panel_thickness: Measured
+
+    @model_validator(mode="after")
+    def _check(self) -> "OpeningDetail":
+        if self.frame_width.value <= 0 or self.panel_thickness.value <= 0:
+            raise ValueError("frame width and panel thickness must be > 0 mm")
+        return self
+
+
 class Opening(_Model):
     """Door or window in a host wall (ADR-002 Option B)."""
 
@@ -173,6 +197,8 @@ class Opening(_Model):
     height: Measured
     sill_height: Measured  # above floor elevation
     sources: list[SourceRef] = Field(min_length=1)  # marker first, then jamb lines
+    swing: Swing | None = None  # doors only; None = no arc symbol found (never guessed)
+    detail: OpeningDetail | None = None  # None = opening too small for frame + panel
 
     @model_validator(mode="after")
     def _check(self) -> "Opening":

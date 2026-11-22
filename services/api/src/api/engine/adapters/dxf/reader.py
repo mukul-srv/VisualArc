@@ -37,7 +37,9 @@ from api.engine.canonical.model import (
 from api.engine.geometry2d.floor import floor_issue
 from api.engine.geometry2d.openings import (
     Marker,
+    SwingArc,
     build_openings,
+    door_swings,
     marker_rect,
     on_marker_boundary,
     resolve_openings,
@@ -532,14 +534,46 @@ def read_dxf(
                 message="DXF has no wall height; supply --wall-height (mm)",
             )
         )
+    # a user-given lintel (opening head) height sizes openings that have no height of their own;
+    # the preset's nominal heights stay when the lintel is only the assumed default
+    door_h, window_h = door_height, window_height
+    if (lintel := given.get("lintel_height")) is not None:
+        door_h = lintel if door_h is None else door_h
+        sill = window_sill if window_sill is not None else settings.default_window_sill_mm
+        if window_h is None and lintel > sill:
+            window_h = lintel - sill
+        elif window_h is None:
+            issues.append(
+                Issue(
+                    code="lintel_below_sill",
+                    severity="warning",
+                    message=f"lintel height {lintel:g} mm is not above the window sill "
+                    f"{sill:g} mm; window heights not derived from it",
+                )
+            )
     openings, opening_issues = build_openings(
         res.openings,
         wall_height,
-        {"door": (door_height, None), "window": (window_height, window_sill)},
+        {"door": (door_h, None), "window": (window_h, window_sill)},
         from_user,
         settings,
     )
     issues += opening_issues
+    arcs = []
+    for e in swings:  # extrusion-aware: the arc's midpoint and centre in world coordinates
+        t = e.construction_tool()
+        span = (t.end_angle - t.start_angle) % 360 or 360
+        a = math.radians(t.start_angle + span / 2)
+        mid = e.ocs().to_wcs((e.dxf.center.x + e.dxf.radius * math.cos(a),
+                              e.dxf.center.y + e.dxf.radius * math.sin(a), e.dxf.center.z))
+        arcs.append(SwingArc(mm(e.ocs().to_wcs(e.dxf.center)), mm(mid), _ref(e)))
+    swing_of, swing_issues = door_swings(res.openings, arcs, settings)
+    issues += swing_issues
+    openings = [
+        o.model_copy(update={"swing": swing_of[o.sources[0].entity_handle]})
+        if o.sources[0].entity_handle in swing_of else o
+        for o in openings
+    ]
 
     walls = [
         Wall(

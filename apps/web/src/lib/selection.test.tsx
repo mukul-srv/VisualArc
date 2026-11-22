@@ -90,7 +90,7 @@ test("raycast onto each opening's jamb picks that opening and shows its own meta
     expect(p.rows.find((r) => r.label === "Host wall")!.value).toBe(o.wall_id);
     expect(p.rows.find((r) => r.label === "Sill height")!.value).toBe(`${o.sill_height.value} mm`);
     expect(p.rows.find((r) => r.label === "Height")!.value).toBe(`${o.height.value} mm`);
-    expect(p.sources).toEqual(refs(o.sources));
+    expect(p.sources).toEqual([...refs(o.sources), ...(o as OpeningData).swing ? refs([(o as OpeningData).swing!.source]) : []]); // the swing arc is a source too
   }
 });
 
@@ -184,4 +184,21 @@ test("describeRoom shows the name with its provenance and the area in m2 with in
   expect(p.rows.find((r) => r.label === "Name")).toMatchObject({ value: "Kitchen", provenance: "source_extracted" });
   expect(p.rows.find((r) => r.label.startsWith("Area"))).toMatchObject({ value: "12.00 m²", provenance: "inferred" });
   expect(p.sources).toEqual(["A-ANNO-TEXT:5A"]);
+});
+
+test("describeOpening shows swing and nominal frame/leaf detail with provenance", () => {
+  const m = (value: number, source: "source_extracted" | "defaulted") => ({ value, unit: "mm", source });
+  const door = {
+    id: "opening-003", kind: "door", wall_id: "wall-001", span: { start: [0, 0] as [number, number], end: [900, 0] as [number, number] },
+    offset: m(0, "source_extracted"), width: m(900, "source_extracted"), height: m(2100, "defaulted"), sill_height: m(0, "defaulted"),
+    sources: [{ layer: "A-DOOR", entity_handle: "10" }],
+    swing: { hinge: "start", opens_toward: "+y", source: { layer: "A-DOOR", entity_handle: "39" } },
+    detail: { frame_width: m(50, "defaulted"), panel: "leaf", panel_thickness: m(40, "defaulted") },
+  } as OpeningData;
+  const p = describeOpening(door);
+  expect(p.rows.find((r) => r.label === "Swing")?.value).toContain("opens toward +y");
+  expect(p.rows.find((r) => r.label === "Leaf thickness")).toMatchObject({ provenance: "defaulted" });
+  expect(p.sources).toContain("A-DOOR:39");
+  const bare = describeOpening({ ...door, swing: null });
+  expect(bare.rows.find((r) => r.label === "Swing")?.value).toContain("not set");
 });
