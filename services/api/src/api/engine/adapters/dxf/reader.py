@@ -633,10 +633,16 @@ def read_dxf(
         )
     found, room_issues = find_rooms(paired, pieces, labels, settings) if paired else ([], [])
     issues += room_issues
+    if not paired and labels:
+        issues.append(Issue(
+            code="rooms_not_built", severity="warning",
+            message=f"no walls, so no rooms were built; {len(labels)} text label(s) not used",
+            sources=[x.ref for x in labels[: settings.unmapped_ref_cap]],
+        ))
     rooms = [
         Room(
             id=p.id, name=p.name, name_source="source_extracted" if p.name_from_label else "defaulted",
-            polygon=p.polygon, area=Area(value=p.area, source="inferred"),
+            polygon=p.polygon, holes=p.holes, area=Area(value=p.area, source="inferred"),
             label_sources=[x.ref for x in p.labels],
         )
         for p in found

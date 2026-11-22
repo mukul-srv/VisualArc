@@ -157,7 +157,7 @@ def test_invalid_floor_is_blocking_and_excluded(tmp_path: Path, ring):
 def test_clockwise_floor_is_valid(tmp_path: Path):
     ring = [(0, 0), (0, 1000), (1000, 1000), (1000, 0)]
     p = read_dxf(_plan(tmp_path, floor=ring)[0], 3000, ceiling_height=3000)
-    assert [i.code for i in p.issues] == ["elevation_defaulted", "wall_role_inferred", "no_closed_rooms"]
+    assert [i.code for i in p.issues] == ["elevation_defaulted", "wall_role_inferred", "room_outline_open", "no_closed_rooms"]
     assert [b.polygon for b in p.buildings[0].floors[0].boundaries] == [ring]
 
 

@@ -118,6 +118,7 @@ class Room(_Model):
     name: str
     name_source: Provenance  # source_extracted (a drawing label) or defaulted ("Room N")
     polygon: list[Point2]
+    holes: list[list[Point2]] = []  # free-standing wall pieces inside; `area` excludes them
     area: Area  # derived from the walls, so inferred
     label_sources: list[SourceRef] = []  # every label inside, reading order; the first names it
 

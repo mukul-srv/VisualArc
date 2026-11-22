@@ -8,7 +8,7 @@ Openings do not split walls, so doors and windows never open a room.
 
 from dataclasses import dataclass
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import unary_union
 
 from api.engine.canonical.model import Issue, Point2, SourceRef
@@ -29,7 +29,8 @@ class RoomPiece:
     name: str
     name_from_label: bool
     polygon: list[Point2]
-    area: float  # mm2, to the inner wall faces, minus any free-standing obstruction
+    holes: list[list[Point2]]  # free-standing wall pieces inside; the area excludes them
+    area: float  # mm2, to the inner wall faces
     labels: list[Label]  # every label inside, in reading order
 
 
@@ -39,6 +40,36 @@ def _reading(lab: Label) -> tuple[float, float]:
 
 def _where(lab: Label) -> str:
     return f"{lab.text!r} at ({lab.point[0]:g}, {lab.point[1]:g})"
+
+
+def _open_ends(
+    walls: list[PairedWall], pieces: list[JunctionPiece], settings: Settings
+) -> list[Issue]:
+    """Wall ends not joined to any other wall or junction: the outline is open there, so no
+    room closes through it (a room elsewhere may still close)."""
+    tol, free = settings.tolerance_mm, []
+    for w in walls:
+        others = unary_union(
+            [v.rect() for v in walls if v.id != w.id] + [Polygon(j.polygon) for j in pieces]
+        )
+        h = w.thickness / 2
+        y0, y1 = w.start[1], w.end[1]
+        horizontal = y0 == y1
+        for x, y in (w.start, w.end):
+            cap = LineString([(x, y - h), (x, y + h)] if horizontal else [(x - h, y), (x + h, y)])
+            if cap.intersection(others).length < w.thickness - tol:
+                free.append((w, (x, y)))
+    if not free:
+        return []
+    cap_n = settings.unmapped_ref_cap
+    return [Issue(
+        code="room_outline_open", severity="warning",
+        message=f"{len(free)} wall end(s) are not joined to another wall, so the outline is open "
+        "there and no room closes through them: "
+        + "; ".join(f"{w.id} end at ({p[0]:g}, {p[1]:g})" for w, p in free[:cap_n])
+        + ("; ..." if len(free) > cap_n else ""),
+        sources=list(dict.fromkeys(s.ref for w, _ in free[:cap_n] for s in w.sources)),
+    )]
 
 
 def find_rooms(
@@ -57,7 +88,15 @@ def find_rooms(
             hole = Polygon(ring)
             islands = [q for q in polys if q is not poly and hole.contains(q)]
             region = hole.difference(unary_union(islands)) if islands else hole
-            if not isinstance(region, Polygon) or region.area <= tol:
+            if isinstance(region, Polygon) and region.area <= tol:
+                continue  # numerical sliver
+            if not isinstance(region, Polygon):
+                x0, y0, x1, y1 = hole.bounds
+                issues.append(Issue(
+                    code="room_region_unusable", severity="warning",
+                    message=f"closed region {x0:.1f},{y0:.1f}..{x1:.1f},{y1:.1f} is not a single "
+                    "area once its free-standing wall pieces are removed; no room built for it",
+                ))
                 continue
             if islands:
                 x0, y0, x1, y1 = hole.bounds
@@ -68,6 +107,7 @@ def find_rooms(
                 ))
             regions.append(region)
     regions.sort(key=lambda g: (g.bounds[1], g.bounds[0]))
+    issues += _open_ends(walls, pieces, settings)
     if not regions:
         issues.append(Issue(
             code="no_closed_rooms", severity="warning",
@@ -104,7 +144,8 @@ def find_rooms(
         else:
             name = f"Room {i + 1}"
             unnamed.append(name)
-        rooms.append(RoomPiece(rid, name, bool(labs), _ring(Polygon(g.exterior)), g.area, labs))
+        holes = [_ring(Polygon(h)) for h in g.interiors]
+        rooms.append(RoomPiece(rid, name, bool(labs), _ring(Polygon(g.exterior)), holes, g.area, labs))
     if unnamed:
         issues.append(Issue(
             code="room_name_defaulted", severity="warning",
