@@ -11,6 +11,18 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class BuildingPreset:
+    """Nominal dimensions (mm) used, tagged `defaulted`, for values the user left out."""
+
+    wall_height: float
+    ceiling_height: float
+    door_height: float
+    window_height: float
+    window_sill: float
+    floor_to_floor: float  # next-floor elevation step when none is given
+
+
+@dataclass(frozen=True)
 class Settings:
     # Layer names of the MVP-0 convention. Matched case-insensitively (the reader
     # upper-cases the entity's layer), so these must be written in upper case.
@@ -34,6 +46,15 @@ class Settings:
     default_door_sill_mm: float = 0.0
     default_window_height_mm: float = 1200.0
     default_window_sill_mm: float = 900.0
+
+    # Nominal presets per building type, the single source of truth (the web reads them
+    # from GET /api/v1/presets). A missing height is filled from here, provenance
+    # `defaulted` plus a warning naming the value. Round trade values, not a standard.
+    # PROVISIONAL: unverified against any code or standard.
+    building_presets: tuple[tuple[str, BuildingPreset], ...] = (
+        ("residential", BuildingPreset(2700.0, 2700.0, 2100.0, 1200.0, 900.0, 3000.0)),
+        ("commercial", BuildingPreset(3000.0, 2700.0, 2100.0, 1500.0, 900.0, 3600.0)),
+    )
 
     # Two parallel wall lines pair into a wall only if their distance is within
     # [min, max]. 50 mm admits thin partitions/linings; 600 mm admits thick
@@ -106,6 +127,9 @@ class Settings:
         ("floor_boundary", ("#8c7b6b", 0.8)),
         ("ceiling", ("#f4f4f0", 0.95)),
     )
+
+    def preset(self, building_type: str) -> BuildingPreset:
+        return dict(self.building_presets)[building_type]
 
     @property
     def wall_layers(self) -> frozenset[str]:

@@ -9,6 +9,18 @@ from api.engine.geometry2d.walls import Segment, pair_walls
 from api.engine.settings import DEFAULTS, Settings
 
 
+def dict_preset(wall, ceiling, door, window, sill, f2f):
+    # asdict() recurses into the nested frozen dataclass, so compare as a dict
+    return {
+        "wall_height": float(wall),
+        "ceiling_height": float(ceiling),
+        "door_height": float(door),
+        "window_height": float(window),
+        "window_sill": float(sill),
+        "floor_to_floor": float(f2f),
+    }
+
+
 def test_defaults_match_document_08():
     # changing a default is a convention change: update Document 08 + ADR-003 too
     assert dataclasses.asdict(DEFAULTS) == {
@@ -24,6 +36,10 @@ def test_defaults_match_document_08():
         "default_door_sill_mm": 0.0,
         "default_window_height_mm": 1200.0,
         "default_window_sill_mm": 900.0,
+        "building_presets": (
+            ("residential", dict_preset(2700, 2700, 2100, 1200, 900, 3000)),
+            ("commercial", dict_preset(3000, 2700, 2100, 1500, 900, 3600)),
+        ),
         "wall_thickness_min_mm": 50.0,
         "wall_thickness_max_mm": 600.0,
         "role_face_tolerance_mm": 1.0,

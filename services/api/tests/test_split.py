@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 
 from api.engine.adapters.dxf.reader import load_doc, read_dxf
 from api.engine.adapters.dxf.split import FloorScope, detect_floors
+from api import uploads
+from api.engine.canonical.model import Issue
 from api.engine.settings import DEFAULTS, Settings
 from api.main import app
 
@@ -257,14 +259,51 @@ def test_split_rejections(client):
     assert _post(client, single, good).status_code == 422  # nothing to confirm
 
 
-def test_blocking_floor_creates_nothing(client, tmp_path):
+def test_blocking_floor_creates_nothing(client, tmp_path, monkeypatch):
     pre = _upload(client)
     body = _body(pre)
-    del body["wall_height"]  # every floor now blocks
+    real = uploads.read_project
+
+    def blocked(*a, **kw):  # no fixture floor can block on its own any more
+        p = real(*a, **kw)
+        p.issues.append(Issue(code="no_walls", severity="blocking", message="forced"))
+        return p
+
+    monkeypatch.setattr(uploads, "read_project", blocked)
     r = _post(client, pre, body)
     assert r.status_code == 409
     j = r.json()
     assert set(j["floors"]) == {c["key"] for c in pre["floor_candidates"]}
-    assert "wall_height_missing" in [i["code"] for i in j["issues"]]
+    assert "no_walls" in [i["code"] for i in j["issues"]]
     for d in ("projects", "generations"):
         assert not (tmp_path / d).exists() or not any((tmp_path / d).iterdir())
+
+
+def test_empty_elevations_follow_detected_order_times_preset_step(client):
+    pre = _upload(client)
+    body = _body(pre, building_type="commercial")
+    for fl in body["floors"]:
+        del fl["elevation"]
+    r = _post(client, pre, body)
+    assert r.status_code == 201
+    got = [client.get(f"/api/v1/projects/{r.json()['project_id']}").json()["floors"]][0]
+    assert [(fl["name"], fl["elevation"]["value"], fl["elevation"]["source"]) for fl in got] == [
+        ("Ground", 0.0, "defaulted"), ("First", 3600.0, "defaulted")
+    ]
+    msgs = [i["message"] for fl in r.json()["floors"] for i in fl["issues"] if i["code"] == "elevation_defaulted"]
+    assert len(msgs) == 2 and "3600" in msgs[1]
+
+
+def test_user_elevation_wins_and_mixed_collision_is_422(client):
+    pre = _upload(client)
+    body = _body(pre, elevs=(0, 3200))
+    del body["floors"][0]["elevation"]  # first auto (0), second user-given
+    r = _post(client, pre, body)
+    assert r.status_code == 201
+    got = client.get(f"/api/v1/projects/{r.json()['project_id']}").json()["floors"]
+    assert [(fl["elevation"]["value"], fl["elevation"]["source"]) for fl in got] == [
+        (0.0, "defaulted"), (3200.0, "user_provided")
+    ]
+    pre = _upload(client)
+    body = _body(pre, elevs=(0, 0))  # user-given duplicate still rejected
+    assert _post(client, pre, body).status_code == 422

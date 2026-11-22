@@ -34,12 +34,73 @@ def test_generation_success_serves_usable_glb(client):
     assert "# Verification report" in client.get(body["artifacts"]["report"]).text
 
 
-def test_missing_height_blocked_409_with_structured_issues(client, tmp_path):
-    r = client.post(GEN, json={"upload_id": _upload(client)})
-    assert r.status_code == 409
-    codes = {i["code"]: i["severity"] for i in r.json()["issues"]}
-    assert codes["wall_height_missing"] == "blocking"
-    assert not (tmp_path / "generations").exists()  # nothing stored on a block
+def _canon(client, r):
+    return client.get(r.json()["artifacts"]["canonical"]).json()["buildings"][0]["floors"][0]
+
+
+@pytest.mark.parametrize(
+    "kind, wall, ceiling, door, window, sill",
+    [
+        (None, 2700, 2700, 2100, 1200, 900),  # residential is the default
+        ("residential", 2700, 2700, 2100, 1200, 900),
+        ("commercial", 3000, 2700, 2100, 1500, 900),
+    ],
+)
+def test_missing_heights_come_from_preset_tagged_defaulted(client, kind, wall, ceiling, door, window, sill):
+    body = {"upload_id": _upload(client, "fixture_openings.dxf")}
+    if kind:
+        body["building_type"] = kind
+    r = client.post(GEN, json=body)
+    assert r.status_code == 201
+    floor = _canon(client, r)
+    assert {w["height"]["value"] for w in floor["walls"]} == {wall}
+    assert {w["height"]["source"] for w in floor["walls"]} == {"defaulted"}
+    assert (floor["ceiling_height"]["value"], floor["ceiling_height"]["source"]) == (ceiling, "defaulted")
+    by = {k: [o for o in floor["openings"] if o["kind"] == k] for k in ("door", "window")}
+    assert {o["height"]["value"] for o in by["door"]} == {door}
+    assert {o["height"]["value"] for o in by["window"]} == {window}
+    assert {o["sill_height"]["value"] for o in by["window"]} == {sill}
+    for o in by["door"] + by["window"]:
+        assert o["height"]["source"] == o["sill_height"]["source"] == "defaulted"
+    msgs = {i["code"]: i["message"] for i in r.json()["issues"] if i["severity"] == "warning"}
+    assert f"assumed {wall} mm ({kind or 'residential'} default)" in msgs["wall_height_defaulted"]
+    assert f"assumed {ceiling} mm" in msgs["ceiling_height_defaulted"]
+    assert not {i["code"] for i in r.json()["issues"] if i["severity"] == "blocking"}
+
+
+def test_user_values_win_over_preset_and_stay_user_provided(client):
+    r = client.post(
+        GEN,
+        json={
+            "upload_id": _upload(client, "fixture_openings.dxf"), "building_type": "commercial",
+            "wall_height": 3300, "ceiling_height": 3100, "door_height": 2000,
+        },
+    )
+    assert r.status_code == 201
+    floor = _canon(client, r)
+    assert {(w["height"]["value"], w["height"]["source"]) for w in floor["walls"]} == {(3300, "user_provided")}
+    assert (floor["ceiling_height"]["value"], floor["ceiling_height"]["source"]) == (3100, "user_provided")
+    doors = [o for o in floor["openings"] if o["kind"] == "door"]
+    assert {(o["height"]["value"], o["height"]["source"]) for o in doors} == {(2000, "user_provided")}
+    windows = [o for o in floor["openings"] if o["kind"] == "window"]
+    assert {o["height"]["value"] for o in windows} == {1500}  # untouched ones still follow the preset
+    codes = {i["code"] for i in r.json()["issues"]}
+    assert not codes & {"wall_height_defaulted", "ceiling_height_defaulted"}
+
+
+def test_unknown_building_type_is_422(client):
+    body = {"upload_id": "x", "building_type": "castle"}
+    assert client.post(GEN, json=body).status_code == 422
+
+
+def test_presets_endpoint_serves_settings(client):
+    from dataclasses import asdict
+
+    from api.engine.settings import DEFAULTS
+
+    r = client.get("/api/v1/presets")
+    assert r.status_code == 200
+    assert r.json() == {k: asdict(v) for k, v in DEFAULTS.building_presets}
 
 
 def test_openings_parameters_are_applied(client):
@@ -84,7 +145,7 @@ def test_unitless_needs_units_then_succeeds(client, tmp_path):
     uid = client.post("/api/v1/uploads", content=buf.getvalue().encode()).json()[
         "upload_id"
     ]
-    r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 3000})
+    r = client.post(GEN, json={"upload_id": uid})  # presets fill heights, never units
     assert r.status_code == 409
     assert "units_missing" in {i["code"] for i in r.json()["issues"]}
     r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 3000, "units": "m"})
@@ -105,12 +166,12 @@ def test_artifact_unknown_or_traversal_is_404(client, gid, name):
     assert client.get(f"{GEN}/{gid}/artifacts/{name}").status_code == 404
 
 
-def test_missing_ceiling_height_blocked_409_then_ok(client):
+def test_missing_ceiling_height_is_a_tagged_warning_not_a_block(client):
     uid = _upload(client)
     r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000})
-    assert r.status_code == 409
+    assert r.status_code == 201
     assert {i["code"] for i in r.json()["issues"]} == {
-        "ceiling_height_missing", "elevation_defaulted", "wall_role_inferred"
+        "ceiling_height_defaulted", "elevation_defaulted", "wall_role_inferred"
     }
     r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 2600})
     assert r.status_code == 201

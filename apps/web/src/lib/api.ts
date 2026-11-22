@@ -17,13 +17,25 @@ export type Issue = {
 export type Preflight = {
   upload_id: string;
   issues: Issue[];
-  needs: ("wall_height" | "ceiling_height" | "units")[];
+  needs: "units"[]; // only what can never be defaulted
   inventory: { layers: string[]; entity_counts: Record<string, number> };
   floor_candidates?: FloorCandidate[]; // >= 2: the user must confirm the floors (split step)
 };
 
+export type BuildingType = "residential" | "commercial";
+export type Preset = {
+  wall_height: number;
+  ceiling_height: number;
+  door_height: number;
+  window_height: number;
+  window_sill: number;
+  floor_to_floor: number;
+};
+export type Presets = Record<BuildingType, Preset>;
+
 export type GenerationParams = {
   upload_id: string;
+  building_type?: BuildingType; // missing heights come from this type's preset, tagged as assumed
   wall_height?: number;
   ceiling_height?: number;
   units?: string;
@@ -104,7 +116,7 @@ const post = (path: string, body: unknown, f: Fetch) =>
 export const createProject = (name: string, f: Fetch = fetch) =>
   send<{ project_id: string }>(() => post("/projects", { name }, f));
 
-export type FloorParams = GenerationParams & { floor_name: string; elevation: number };
+export type FloorParams = GenerationParams & { floor_name: string; elevation?: number }; // empty: assumed
 export const addFloor = (projectId: string, params: FloorParams, f: Fetch = fetch) =>
   send<{ floor: Floor; generation_id: string; issues: Issue[] }>(() =>
     post(`/projects/${projectId}/floors`, params, f),
@@ -114,6 +126,12 @@ export const splitUpload = (uploadId: string, body: SplitBody, f: Fetch = fetch)
   send<{ project_id: string; floors: { key: string; floor: Floor; generation_id: string; issues: Issue[] }[]; issues: Issue[] }>(() =>
     post(`/uploads/${uploadId}/split`, body, f),
   );
+
+export const getPresets = (f: Fetch = fetch) =>
+  send<{ presets: Presets }>(async () => {
+    const res = await f(`${API_BASE}/api/v1/presets`, { credentials: "include" });
+    return res.ok ? new Response(JSON.stringify({ presets: await res.json() })) : res;
+  });
 
 export const getProject = (projectId: string, f: Fetch = fetch) =>
   send<{ manifest: unknown }>(async () => {

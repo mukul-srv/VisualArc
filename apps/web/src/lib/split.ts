@@ -17,8 +17,8 @@ export const bboxSize = (c: FloorCandidate) => ({
   height: c.bbox.max[1] - c.bbox.min[1],
 });
 
-/** Offsets are prefilled from the engine's proposal (shown as "proposed"); the elevation
- *  is never guessed. The key is only a suggested name. */
+/** Offsets are prefilled from the engine's proposal; an empty elevation is sent as absent and
+ *  assumed (and tagged) by the backend. The key is only a suggested name. */
 export const initialRows = (cs: FloorCandidate[]): SplitRow[] =>
   cs.map((c) => ({
     key: c.key,
@@ -33,7 +33,7 @@ export type SplitBody = Omit<GenerationParams, "upload_id"> & {
   project_name: string;
   floors: (
     | { key: string; exclude: true }
-    | { key: string; exclude: false; name: string; elevation: number; offset_x: number; offset_y: number }
+    | { key: string; exclude: false; name: string; elevation?: number; offset_x: number; offset_y: number }
   )[];
 };
 
@@ -46,21 +46,19 @@ export function buildSplitRequest(
   rows: SplitRow[],
   projectName: string,
 ): { ok: true; body: SplitBody } | { ok: false; errors: string[] } {
-  // a consolidated file stops at the split, so preflight reports no wall/ceiling "needs": require both here
-  const needs: Preflight["needs"] = [...new Set<Preflight["needs"][number]>([...pre.needs, "wall_height", "ceiling_height"])];
-  const base = buildRequest({ ...pre, needs }, form);
+  const base = buildRequest(pre, form);
   const errors = base.ok ? [] : [...base.errors];
   if (!projectName.trim()) errors.push("Project name is required.");
   const kept = rows.filter((r) => !r.exclude);
   if (!kept.length) errors.push("Build at least one floor.");
   for (const r of kept) {
     if (!r.name.trim()) errors.push(`${r.key}: floor name is required.`);
-    if (!finite(r.elevation)) errors.push(`${r.key}: elevation (mm) must be a number.`);
+    if (r.elevation.trim() !== "" && !finite(r.elevation)) errors.push(`${r.key}: elevation (mm) must be a number.`);
     if (!finite(r.offsetX) || !finite(r.offsetY)) errors.push(`${r.key}: offsets (mm) must be numbers.`);
   }
   const names = kept.map((r) => r.name.trim().toLowerCase());
   if (new Set(names).size < names.length) errors.push("Floor names must be unique.");
-  const elevs = kept.filter((r) => finite(r.elevation)).map((r) => Number(r.elevation));
+  const elevs = kept.filter((r) => r.elevation.trim() !== "" && finite(r.elevation)).map((r) => Number(r.elevation));
   if (new Set(elevs).size < elevs.length) errors.push("Floor elevations must be unique.");
   if (errors.length || !base.ok) return { ok: false, errors };
   const params: Partial<GenerationParams> = { ...base.params };
@@ -77,7 +75,7 @@ export function buildSplitRequest(
               key: r.key,
               exclude: false as const,
               name: r.name.trim(),
-              elevation: Number(r.elevation),
+              ...(r.elevation.trim() === "" ? {} : { elevation: Number(r.elevation) }),
               offset_x: Number(r.offsetX),
               offset_y: Number(r.offsetY),
             },

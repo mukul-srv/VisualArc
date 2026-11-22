@@ -9,13 +9,13 @@ test("upload posts the raw file body and returns preflight", async () => {
   const f = (async (url: string, init: RequestInit) => {
     seen = { url, init };
     return new Response(
-      JSON.stringify({ upload_id: "a".repeat(32), issues: [], needs: ["wall_height"], inventory: { layers: [], entity_counts: {} } }),
+      JSON.stringify({ upload_id: "a".repeat(32), issues: [], needs: ["units"], inventory: { layers: [], entity_counts: {} } }),
       { status: 201 },
     );
   }) as unknown as typeof fetch;
   const file = new Blob(["dxf"]);
   const r = await uploadDxf(file, f);
-  expect(r.ok && r.needs).toEqual(["wall_height"]);
+  expect(r.ok && r.needs).toEqual(["units"]);
   expect(seen!.url).toMatch(/\/api\/v1\/uploads$/);
   expect(seen!.init.body).toBe(file);
 });

@@ -39,6 +39,8 @@ class GenerationRequest(BaseModel):
     door_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     window_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
+    # missing heights are filled from this type's preset (tagged `defaulted`, with a warning)
+    building_type: Literal["residential", "commercial"] = "residential"
 
 
 def _prefix(generation_id: str) -> str:
@@ -59,6 +61,7 @@ def read_project(req: GenerationRequest, **floor) -> Project:
             window_height=req.window_height,
             window_sill=req.window_sill,
             ceiling_height=req.ceiling_height,
+            building_type=req.building_type,
             **floor,
         )
     except InputError as e:

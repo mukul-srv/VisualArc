@@ -6,6 +6,8 @@ used; the file is stored under a server-generated id.
 """
 
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -24,11 +26,7 @@ from api.storage import new_id, upload_key, upload_path, valid_id
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 
 # preflight issues that mean "the user must supply this parameter"
-_NEEDS = {
-    "wall_height_missing": "wall_height",
-    "ceiling_height_missing": "ceiling_height",
-    "units_missing": "units",
-}
+_NEEDS = {"units_missing": "units"}  # heights are never asked: presets fill them, tagged
 
 
 async def _save(request: Request, limit: int) -> int:
@@ -47,6 +45,12 @@ async def _save(request: Request, limit: int) -> int:
     return size
 
 
+@router.get("/presets")
+def get_presets() -> dict:
+    """Nominal values per building type (mm), so the web never duplicates them."""
+    return {k: asdict(v) for k, v in DEFAULTS.building_presets}
+
+
 @router.post("/uploads", status_code=201)
 async def create_upload(request: Request, user: CurrentUser) -> dict:
     upload_id = new_id()
@@ -55,7 +59,7 @@ async def create_upload(request: Request, user: CurrentUser) -> dict:
         if not await _save(request, DEFAULTS.max_dxf_bytes):
             raise HTTPException(422, "empty upload: send the DXF as the request body")
         inventory = build_inventory(path)
-        project = read_dxf(path)
+        project = read_dxf(path, building_type="residential")
     except InputError as e:
         path.unlink(missing_ok=True)
         raise HTTPException(422, str(e).replace(str(path), "the uploaded file")) from e
@@ -90,14 +94,14 @@ class FloorConfirm(BaseModel):
     key: str
     exclude: bool = False
     name: str | None = Field(None, min_length=1, max_length=100)
-    elevation: float | None = Field(None, allow_inf_nan=False, description="mm")
+    elevation: float | None = Field(None, allow_inf_nan=False, description="mm")  # None: assumed
     offset_x: float | None = Field(None, allow_inf_nan=False, description="mm")
     offset_y: float | None = Field(None, allow_inf_nan=False, description="mm")
 
     @model_validator(mode="after")
     def _complete(self) -> "FloorConfirm":
-        if not self.exclude and None in (self.name, self.elevation, self.offset_x, self.offset_y):
-            raise ValueError(f"{self.key}: name, elevation, offset_x and offset_y are required")
+        if not self.exclude and None in (self.name, self.offset_x, self.offset_y):
+            raise ValueError(f"{self.key}: name, offset_x and offset_y are required")
         return self
 
 
@@ -134,24 +138,37 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
         raise HTTPException(422, "at least one floor must be built")
     if len({f.name.strip().casefold() for f in kept}) < len(kept):
         raise HTTPException(422, "floor names must be unique")
-    if len({f.elevation for f in kept}) < len(kept):
+    # empty elevation: position in the detected floor order x floor-to-floor, tagged
+    step = DEFAULTS.preset(req.building_type).floor_to_floor
+    elev, assumed = {}, {}
+    for n, f in enumerate(kept):
+        if f.elevation is None:
+            elev[f.key] = n * step
+            assumed[f.key] = (
+                f"Floor elevation assumed {n * step:g} mm (floor {n + 1} in detected order "
+                f"x {step:g} mm {req.building_type} floor-to-floor)"
+            )
+        else:
+            elev[f.key] = f.elevation
+    if len(set(elev.values())) < len(kept):
         raise HTTPException(422, "floor elevations must be unique")
     notes = (*split.issues, *(excluded_issue(cands[f.key]) for f in req.floors if f.exclude))
     params = req.model_dump(exclude={"upload_id", "project_name", "floors"})
     jobs = [
         (
             f.key,
-            FloorRequest(upload_id=upload_id, floor_name=f.name, elevation=f.elevation, **params),
+            FloorRequest(upload_id=upload_id, floor_name=f.name, elevation=elev[f.key], **params),
             FloorScope(cands[f.key].handles, (f.offset_x, f.offset_y), notes),
+            assumed.get(f.key),
         )
         for f in kept
     ]
     # Read every floor first so a blocking floor leaves nothing behind. shortcut: each
     # floor is read twice (check, then generate); share the Project if it gets slow.
     blocked = {}
-    for n, (key, freq, scope) in enumerate(jobs):
+    for n, (key, freq, scope, why) in enumerate(jobs):
         p = read_project(freq, floor_id=f"floor-{n}", floor_name=freq.floor_name.strip(),
-                         floor_elevation=freq.elevation, scope=scope)
+                         floor_elevation=freq.elevation, elevation_assumed=why, scope=scope)
         if has_blocking(p):
             blocked[key] = [i.model_dump(mode="json") for i in p.issues]
     if blocked:
@@ -165,8 +182,8 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
         )
     pid = create_project(req.project_name, user.id)
     floors = []
-    for key, freq, scope in jobs:
-        out = add_floor(pid, freq, scope, user.id)
+    for key, freq, scope, why in jobs:
+        out = add_floor(pid, freq, scope, user.id, why)
         if isinstance(out, JSONResponse):  # cannot happen after the check above
             raise HTTPException(500, "floor blocked after the pre-check")
         floors.append({"key": key, **out})

@@ -1,11 +1,14 @@
-import type { GenerationParams, Issue, Preflight } from "./api";
+import type { BuildingType, GenerationParams, Issue, Preflight } from "./api";
 
 export const UNITS = ["mm", "cm", "m", "in", "ft"] as const;
 
+export const BUILDING_TYPES: readonly BuildingType[] = ["residential", "commercial"];
+
+// Empty height fields mean "use the preset"; the backend tags those values as assumed.
 export type FormValues = {
+  buildingType: BuildingType;
   wallHeight: string;
   ceilingHeight: string;
-  ceilingConfirmed: boolean; // a prefilled ceiling height is not user-provided until confirmed
   units: string;
   doorHeight: string;
   windowHeight: string;
@@ -17,23 +20,6 @@ export const splitIssues = (issues: Issue[]) => ({
   warnings: issues.filter((i) => i.severity === "warning"),
 });
 
-/** Typing a wall height prefills the ceiling height only while the user has not set their
- *  own; the prefill is always unconfirmed. */
-export function setWallHeight(f: FormValues, text: string): FormValues {
-  const prefilled = f.ceilingHeight === "" || (f.ceilingHeight === f.wallHeight && !f.ceilingConfirmed);
-  return { ...f, wallHeight: text, ...(prefilled ? { ceilingHeight: text, ceilingConfirmed: false } : {}) };
-}
-
-/** Editing the ceiling height withdraws any earlier confirmation. */
-export function setCeilingHeight(f: FormValues, text: string): FormValues {
-  return { ...f, ceilingHeight: text, ceilingConfirmed: false };
-}
-
-/** Generate stays disabled until the ceiling height is entered (if required) and confirmed. */
-export function ceilingReady(pre: Preflight, f: FormValues): boolean {
-  return f.ceilingHeight.trim() === "" ? !pre.needs.includes("ceiling_height") : f.ceilingConfirmed;
-}
-
 function num(text: string, label: string, min: "positive" | "nonneg", errors: string[]): number | undefined {
   if (text.trim() === "") return undefined;
   const v = Number(text);
@@ -44,28 +30,22 @@ function num(text: string, label: string, min: "positive" | "nonneg", errors: st
   return v;
 }
 
-/** Validates the form against what preflight says is required. Never defaults silently. */
+/** Validates what the user typed. Empty fields are omitted: the backend fills them from the
+ *  building-type preset and says so; only units (never defaultable) are required. */
 export function buildRequest(
   pre: Preflight,
   f: FormValues,
 ): { ok: true; params: GenerationParams } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const wall_height = num(f.wallHeight, "Wall height", "positive", errors);
-  if (pre.needs.includes("wall_height") && wall_height === undefined && !errors.length) {
-    errors.push("Wall height is required");
-  }
   const ceiling_height = num(f.ceilingHeight, "Ceiling height", "positive", errors);
-  if (pre.needs.includes("ceiling_height") && ceiling_height === undefined && !errors.length) {
-    errors.push("Ceiling height is required");
-  }
-  if (ceiling_height !== undefined && !f.ceilingConfirmed) errors.push("Confirm the ceiling height");
   if (pre.needs.includes("units") && !f.units) errors.push("Drawing units are required (the DXF has none)");
   if (f.units && !(UNITS as readonly string[]).includes(f.units)) errors.push("Unknown units");
   const door_height = num(f.doorHeight, "Door height", "positive", errors);
   const window_height = num(f.windowHeight, "Window height", "positive", errors);
   const window_sill = num(f.windowSill, "Window sill", "nonneg", errors);
   if (errors.length) return { ok: false, errors };
-  const params: GenerationParams = { upload_id: pre.upload_id };
+  const params: GenerationParams = { upload_id: pre.upload_id, building_type: f.buildingType };
   const set = { wall_height, ceiling_height, units: f.units || undefined, door_height, window_height, window_sill };
   for (const [k, v] of Object.entries(set)) if (v !== undefined) (params as Record<string, unknown>)[k] = v;
   return { ok: true, params };

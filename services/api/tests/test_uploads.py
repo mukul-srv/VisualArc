@@ -28,9 +28,10 @@ def test_valid_upload_returns_preflight(client, tmp_path):
     body = r.json()
     assert len(body["upload_id"]) == 32
     assert body["inventory"]["layers"] and body["inventory"]["entity_counts"]
-    assert body["needs"] == ["ceiling_height", "wall_height"]  # height is never in the DXF
+    assert body["needs"] == []  # heights are not in the DXF but presets fill them, tagged
     codes = {i["code"]: i["severity"] for i in body["issues"]}
-    assert codes["wall_height_missing"] == "blocking"
+    assert codes["wall_height_defaulted"] == codes["ceiling_height_defaulted"] == "warning"
+    assert "wall_height_missing" not in codes
     assert [p.name for p in _stored(tmp_path)] == [f"{body['upload_id']}.dxf"]
 
 
@@ -40,7 +41,7 @@ def test_unitless_upload_needs_units(client):
     buf = io.StringIO()
     doc.write(buf)
     r = client.post(URL, content=buf.getvalue().encode())
-    assert r.status_code == 201 and "units" in r.json()["needs"]
+    assert r.status_code == 201 and r.json()["needs"] == ["units"]
 
 
 @pytest.mark.parametrize(
