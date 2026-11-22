@@ -409,11 +409,25 @@ export default function ViewerPage() {
         </button>{" "}
         {walking ? "WASD/arrows move, drag to look" : status}
         {!manifest && !shared && (
-          <div><Link href="/" style={{ color: "#8cf" }}>All projects</Link></div>
+          <div>
+            <Link href="/" style={{ color: "#8cf" }}>&larr; Back to dashboard</Link>
+            <nav aria-label="Breadcrumb"><Link href="/" style={{ color: "#8cf" }}>Dashboard</Link> / Model</nav>
+          </div>
         )}
         {manifest && (
           <div>
-            {shared ? <span>Shared view (read-only): {manifest.name}</span> : <a href={`/projects/${manifest.id}`} style={{ color: "#8cf" }}>Project: {manifest.name}</a>}
+            {shared ? <span>Shared view (read-only): {manifest.name}</span> : (
+              <>
+                <Link href={viewing !== null ? `/projects/${manifest.id}#versions` : `/projects/${manifest.id}`} style={{ color: "#8cf" }}>
+                  &larr; Back to {viewing !== null ? "versions" : "project"}
+                </Link>
+                <nav aria-label="Breadcrumb">
+                  <Link href="/" style={{ color: "#8cf" }}>Dashboard</Link> /{" "}
+                  <Link href={`/projects/${manifest.id}`} style={{ color: "#8cf" }}>{manifest.name}</Link> /{" "}
+                  {viewing !== null ? <><Link href={`/projects/${manifest.id}#versions`} style={{ color: "#8cf" }}>Versions</Link> / Version {viewing}</> : "Viewer"}
+                </nav>
+              </>
+            )}
             {viewing !== null && <b role="status"> Viewing version {viewing} (read-only)</b>}
           </div>
         )}
