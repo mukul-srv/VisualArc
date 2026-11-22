@@ -36,3 +36,4 @@ docs/
 
 # local runtime data (uploads, generations)
 var/
+.impeccable/
