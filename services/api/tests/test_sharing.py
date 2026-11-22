@@ -163,7 +163,7 @@ def test_removed_editor_loses_artifacts_of_own_floors(proj, owner, tmp_path, mon
     editor, ee = _user(tmp_path, monkeypatch)
     _grant(owner, proj, ee, "editor")
     assert _floor(editor, proj, "Up", 3000).status_code == 201
-    mine = [f for f in editor.get(f"{P}/{proj}").json()["floors"] if f["name"] == "Up"][0]["generation_id"]
+    mine = next(f for f in editor.get(f"{P}/{proj}").json()["floors"] if f["name"] == "Up")["generation_id"]
     art = f"/api/v1/generations/{mine}/artifacts/glb"
     assert editor.get(art).status_code == 200
     owner.delete(f"{P}/{proj}/access", params={"email": ee})
