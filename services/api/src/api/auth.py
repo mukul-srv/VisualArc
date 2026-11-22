@@ -183,8 +183,6 @@ def register(req: RegisterRequest):
         if db.scalar(select(UserRow.id).where(UserRow.email == req.email)):
             raise HTTPException(409, "an account with this email already exists")
         db.add(user)
-        db.flush()
-        claim_invites(db, user)
         db.commit()
     return _login_response(user, 201)
 
@@ -374,7 +372,8 @@ def user_for_profile(provider: str, p: OAuthProfile) -> UserRow | str:
             )
             db.add(user)
             db.flush()
-            claim_invites(db, user)
+        # email is provider-verified here (password register is not), so pending invites may convert
+        claim_invites(db, user)
         db.add(OAuthAccountRow(
             id=new_id(), provider=provider, provider_user_id=p.provider_user_id, user_id=user.id
         ))

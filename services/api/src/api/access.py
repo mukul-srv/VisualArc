@@ -56,14 +56,13 @@ def can_access(db: Session, row, who: "str | Who", need: str = "owner") -> bool:
     if isinstance(row, ProjectRow):
         r = project_role(db, row, who)
         return r is not None and RANK[r] >= RANK[need]
-    if row.owner_id is not None and row.owner_id == who.user_id:
-        return True
     if isinstance(row, GenerationRow) and need == "viewer":
         ps = db.scalars(select(ProjectRow).join(
             ProjectVersionRow, ProjectVersionRow.project_id == ProjectRow.id).where(
-            ProjectVersionRow.snapshot["generation_ids"].contains([row.id])).distinct())
-        return any(project_role(db, p, who) for p in ps)
-    return False
+            ProjectVersionRow.snapshot["generation_ids"].contains([row.id])).distinct()).all()
+        if ps:  # project roles decide, so a removed editor loses the floors they generated
+            return any(project_role(db, p, who) for p in ps)
+    return row.owner_id is not None and row.owner_id == who.user_id
 
 
 def owned(db: Session, model, id: str, who: "str | Who", what: str, lock: bool = False,
@@ -76,7 +75,7 @@ def owned(db: Session, model, id: str, who: "str | Who", what: str, lock: bool =
 
 
 def claim_invites(db: Session, user: UserRow) -> None:
-    """Turn pending invites for the new user's email into grants. Caller commits."""
+    """Turn pending invites for the user's VERIFIED email (OAuth only) into grants. Caller commits."""
     for inv in db.scalars(select(ProjectInviteRow).where(ProjectInviteRow.email == user.email)).all():
         db.add(ProjectGrantRow(project_id=inv.project_id, user_id=user.id, role=inv.role))
         db.delete(inv)

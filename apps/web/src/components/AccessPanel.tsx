@@ -72,6 +72,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
             </select>
             <button disabled={busy || !email.trim()}>Add</button>
           </form>
+          <p>Invites for emails without an account convert only when that person signs in with GitHub or Google using the same verified email. Someone who signs up with a password must be added again after registering.</p>
           <h3>Read-only link</h3>
           {link ? (
             <div className={styles.row}>

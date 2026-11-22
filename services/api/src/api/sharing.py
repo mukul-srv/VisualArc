@@ -88,6 +88,8 @@ def put_access(pid: str, req: GrantRequest, user: CurrentUser):
         target = db.scalar(select(UserRow).where(UserRow.email == req.email))
         existing = (db.get(ProjectGrantRow, (pid, target.id)) if target
                     else db.get(ProjectInviteRow, (pid, req.email)))
+        if target and (stale := db.get(ProjectInviteRow, (pid, req.email))):
+            db.delete(stale)  # invite left from before the account registered
         if existing is not None:
             existing.role = req.role
         else:
