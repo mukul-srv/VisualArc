@@ -1,6 +1,8 @@
 import { isGenerationId, type Preflight, type Presets } from "../lib/api";
 import { BUILDING_TYPES, UNITS, type FormValues } from "../lib/params";
 import { bboxSize, type SplitRow } from "../lib/split";
+import { HELP } from "../lib/help";
+import { Hint } from "./Hint";
 
 export type ProjectTarget = { on: boolean; target: string; floorName: string; elevation: string };
 
@@ -45,7 +47,7 @@ export function UploadForm(p: Props) {
   return (
     <>
       <fieldset style={{ border: "none", padding: 0, margin: "8px 0" }}>
-        <legend>Building type</legend>
+        <legend>Building type<Hint text={HELP.buildingType} /></legend>
         {BUILDING_TYPES.map((t) => (
           <label key={t} style={{ marginRight: 16, textTransform: "capitalize" }}>
             <input type="radio" name="building-type" value={t} checked={form.buildingType === t} onChange={() => setForm({ ...form, buildingType: t })} /> {t}
@@ -93,7 +95,7 @@ export function UploadForm(p: Props) {
         </>
       )}
       <details style={{ margin: "12px 0" }}>
-        <summary>Advanced settings</summary>
+        <summary title={HELP.advancedUpload}>Advanced settings</summary>
         <p>Leave a field empty to use the default shown; defaults are reported as assumed in the result.</p>
         {field("wallHeight", "Wall height (mm)", "wall_height")}
         {field("ceilingHeight", "Ceiling height (mm)", "ceiling_height")}

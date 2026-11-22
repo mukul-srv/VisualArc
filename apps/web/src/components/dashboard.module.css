@@ -86,3 +86,34 @@
 .crumbList li {
   display: inline;
 }
+
+.more {
+  display: inline-block;
+}
+
+.more > summary {
+  cursor: pointer;
+  list-style: revert;
+}
+
+.moreBody {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.hint {
+  display: inline-block;
+  margin-left: 4px;
+  width: 1.2em;
+  height: 1.2em;
+  line-height: 1.2em;
+  text-align: center;
+  border: 1px solid #888;
+  border-radius: 50%;
+  font-size: 0.75em;
+  color: #555;
+  cursor: help;
+}

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { createLink, getAccess, grantAccess, removeAccess, revokeLink, type AccessInfo } from "../lib/projects";
 import { viewerUrl } from "../lib/project";
+import { HELP } from "../lib/help";
+import { Hint } from "./Hint";
 import styles from "./dashboard.module.css";
 
 type Role = "viewer" | "editor";
@@ -58,6 +60,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
   return (
     <section aria-label="Sharing">
       <h2>Sharing</h2>
+      <p>Invite people by email, or create a link that lets anyone look at the model.<Hint text={HELP.roles} /></p>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {info && (
         <>
@@ -85,8 +88,11 @@ export function AccessPanel({ projectId }: { projectId: string }) {
             </select>
             <button disabled={busy || !email.trim() || blocked !== null} title={blocked ?? (email.trim() ? undefined : "Enter an email first")}>Add</button>
           </form>
-          <p>Invites for emails without an account convert only when that person signs in with GitHub or Google using the same verified email. Someone who signs up with a password must be added again after registering.</p>
-          <h3>Read-only link</h3>
+          <details>
+            <summary>About invites to people without an account</summary>
+            <p>Invites for emails without an account convert only when that person signs in with GitHub or Google using the same verified email. Someone who signs up with a password must be added again after registering.</p>
+          </details>
+          <h3>Read-only link<Hint text={HELP.link} /></h3>
           {link ? (
             <div className={styles.row}>
               <input readOnly aria-label="Share link" value={link} size={50} onFocus={(e) => e.currentTarget.select()} />

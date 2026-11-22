@@ -24,6 +24,13 @@ export function resetForNewFile(proj: ProjectTarget, locked: boolean) {
   };
 }
 
+/** Where the person is in the upload flow, in plain words (shown as one line above the form). */
+export function uploadStep(hasFile: boolean, working: boolean, addingToProject: boolean): { n: 1 | 2 | 3; text: string } {
+  if (working) return { n: 3, text: "Step 3 of 3: building the 3D model. You will land in the viewer when it is ready." };
+  if (!hasFile) return { n: 1, text: `Step 1 of 3: choose your DXF floor plan${addingToProject ? " for the new floor" : ""}.` };
+  return { n: 2, text: "Step 2 of 3: check the notes below, then press Generate. The defaults are fine to start with." };
+}
+
 /** Remount key of the upload page: one per query string, so a different project target never
  *  inherits the previous file name, form or split rows. */
 export const uploadKey = (search: string) => `new:${search}`;
