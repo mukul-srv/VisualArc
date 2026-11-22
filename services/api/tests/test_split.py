@@ -208,14 +208,16 @@ def test_split_creates_project_with_one_generation_per_floor(client):
     assert [(x["name"], x["elevation"]["value"]) for x in m["floors"]] == [("Ground", 0), ("First", 3200.5)]
     assert {x["elevation"]["source"] for x in m["floors"]} == {"user_provided"}
     assert "content_not_reconstructed" in [i["code"] for i in out["issues"]]
-    for fl, (w, h), c in zip(out["floors"], SIZES, body["floors"]):
+    for fl, (w, h), c in zip(out["floors"], SIZES, body["floors"], strict=True):
         canon = client.get(fl["artifacts"]["canonical"]).json()
         cf = canon["buildings"][0]["floors"][0]
         assert cf["plan_offset"] == {"x": c["offset_x"], "y": c["offset_y"], "unit": "mm", "source": "user_provided"}
         assert "content_not_reconstructed" in [i["code"] for i in canon["issues"]]  # carried into the floor
         scene = trimesh.load(trimesh.util.wrap_as_stream(client.get(fl["artifacts"]["glb"]).content), file_type="glb")
         ext = scene.bounds[1] - scene.bounds[0]
-        assert (ext[0], ext[2]) == pytest.approx((w / 1000, h / 1000), abs=1e-6)  # source floor size, in m
+        top = max(x["elevation"]["value"] for x in m["floors"])
+        eaves = 0.6 if fl["floor"]["elevation"]["value"] == top else 0  # only the top floor has a roof: 300 mm overhang a side
+        assert (ext[0], ext[2]) == pytest.approx((w / 1000 + eaves, h / 1000 + eaves), abs=1e-6)  # in m
 
 
 def test_split_prefix_variant(client):

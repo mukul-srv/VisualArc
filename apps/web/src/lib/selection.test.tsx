@@ -229,3 +229,20 @@ test("describeElement shows a stair's steps, a flight without steps, and a ramp'
   const ramp = describeElement({ id: "ramp-001", type: "ramp", direction: "+x", rise: m(3200, "inferred"), thickness: m(200, "defaulted"), slope: 0.6736842105, sources: [] });
   expect(ramp.rows.find((r) => r.label === "Slope")?.value).toBe("67.4 % (1:1.5)");
 });
+
+test("describeElement shows a roof's type and pitch with provenance, and a fallback", () => {
+  const m = (value: number, source: "inferred" | "defaulted" | "source_extracted") => ({ value, unit: "mm", source });
+  const roof = describeElement({
+    id: "roof-001", type: "roof", kind: "gable", requested: "gable", outline_source: "roof_layer", ridge_axis: "x",
+    base_elevation: m(3000, "inferred"), ridge_height: m(1443.4, "inferred"), overhang: m(0, "source_extracted"),
+    pitch: { value: 30, unit: "deg", source: "defaulted" }, type_param: { value: "gable", unit: "none", source: "defaulted" },
+    sources: [{ layer: "A-ROOF", entity_handle: "3B" }],
+  });
+  expect(roof.rows.find((r) => r.label === "Type")).toMatchObject({ value: "gable", provenance: "defaulted" });
+  expect(roof.rows.find((r) => r.label === "Pitch")).toMatchObject({ value: "30 deg", provenance: "defaulted" });
+  expect(roof.rows.find((r) => r.label.startsWith("Ridge height"))).toMatchObject({ provenance: "inferred" });
+  expect(roof.rows.find((r) => r.label === "Outline from")?.value).toBe("roof-plan layer");
+  const flat = describeElement({ id: "roof-002", type: "roof", kind: "flat", requested: "hip", outline_source: "walls", thickness: m(200, "defaulted"), sources: [] });
+  expect(flat.rows.find((r) => r.label === "Requested type")?.value).toContain("hip");
+  expect(flat.rows.find((r) => r.label === "Pitch")?.value).toBe("not used (flat)");
+});

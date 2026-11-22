@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -130,6 +131,8 @@ def add_floor(
     version: bool = True,  # False: the split flow records one version for all its floors
     db: Session | None = None,  # the caller's transaction (it commits); default: our own
     progress=None,  # job stage callback, see api.jobs
+    roof: bool | None = None,  # None: this floor gets the roof if it is the highest (the old top
+    # floor then gives its roof up); the split flow knows every elevation and passes it
 ):
     """Generate and append a floor (a new version). HTTPException 404 (unknown or foreign ids)
     / 422 (duplicate name or elevation); returns the 409 response when blocking issues stop it."""
@@ -168,12 +171,27 @@ def add_floor(
         # unique within a version (a restore may reuse an id for a different generation)
         # (next after the highest existing index, so ids stay unique after a floor was removed)
         fid = f"floor-{1 + max((_floor_index(f['id']) for f in manifest['floors']), default=-1)}"
+        # a roof belongs to the highest floor only (an equal elevation is rejected above)
+        auto = roof is None
+        if auto:
+            roof = all(elevation > f["elevation"]["value"] for f in manifest["floors"])
         gid, issues = run_generation(
             req, owner_id, db=db, floor_id=fid, floor_name=name, floor_elevation=elevation,
-            elevation_assumed=assumed, scope=scope, progress=progress,
+            elevation_assumed=assumed, scope=scope, progress=progress, roof=roof,
         )
         if gid is None:
             return blocked_response(issues)
+        floors = list(manifest["floors"])
+        if auto and roof and floors:
+            prev = max(floors, key=lambda f: f["elevation"]["value"])
+            if prev.get("roof"):  # the old top floor gives its roof up
+                moved = _replay(db, pid, prev, {}, False, owner_id)[0]
+                if moved is None:
+                    issues = [*issues, {
+                        "code": "roof_on_lower_floor", "severity": "warning", "sources": [],
+                        "message": f"floor {prev['name']!r} still has a roof; it could not be regenerated"}]
+                else:
+                    floors = [moved if f["id"] == prev["id"] else f for f in floors]
         floor = {
             "id": fid,
             "name": name,
@@ -181,6 +199,7 @@ def add_floor(
                 value=elevation, source="defaulted" if assumed else "user_provided"
             ).model_dump(mode="json"),
             "generation_id": gid,
+            "roof": roof,
             "request": stored,
             "elevation_assumed": assumed,
             "scope": None if scope is None else {
@@ -189,7 +208,7 @@ def add_floor(
         }
         row.data = {
             **manifest,
-            "floors": [*manifest["floors"], floor],
+            "floors": [*floors, floor],
             "params": {**manifest.get("params", {}), fid: _params(req)},
         }
         if version:
@@ -340,9 +359,24 @@ def remove_floor(pid: str, floor_id: str, user: CurrentUser):
         row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
         gone = _floor(row, floor_id)
         params = {k: v for k, v in row.data.get("params", {}).items() if k != floor_id}
-        row.data = {**row.data, "params": params,
-                    "floors": [f for f in row.data["floors"] if f["id"] != floor_id]}
+        left = [f for f in row.data["floors"] if f["id"] != floor_id]
+        issues = []
+        if left and gone.get("roof"):  # the roof moves down to the new highest floor
+            new_top = max(left, key=lambda f: f["elevation"]["value"])
+            moved = None
+            if "request" in new_top and not new_top.get("roof"):
+                moved = _replay(db, pid, new_top, {}, True, user.id)[0]
+            if moved is not None:
+                left = [moved if f["id"] == new_top["id"] else f for f in left]
+            elif not new_top.get("roof"):  # legacy floor without a stored request, or blocked
+                issues.append({
+                    "code": "roof_on_lower_floor", "severity": "warning", "sources": [],
+                    "message": f"the roof of the removed floor could not move to {new_top['name']!r} "
+                    "(it cannot be regenerated); that floor has no roof"})
+        row.data = {**row.data, "params": params, "floors": left}
         _version(db, row, user.id, f"Removed floor {gone['name']}")
+    if issues:  # nothing is lost silently: the removal went through, the roof did not move
+        return JSONResponse({"issues": issues})
     return Response(status_code=204)
 
 
@@ -423,6 +457,30 @@ def check_regenerable(db: Session, pid: str, user_id: str) -> None:
                                  f"editable: {', '.join(old)}. Re-add them from their DXF.")
 
 
+def _replay(db: Session, pid: str, f: dict, overrides: dict, roof: bool, user_id: str, progress=None):
+    """Regenerate one floor from its stored request (+ overrides). (new floor dict, issues), or
+    None when blocking issues stopped it. 422 when the floor predates stored requests."""
+    if "request" not in f:
+        raise HTTPException(422, f"floor {f['name']!r} cannot be regenerated; re-add it")
+    req = FloorRequest(**{**f["request"], **overrides})
+    saved = db.get(ProjectConventionsRow, pid)
+    if req.conventions is None and saved is not None:
+        req = req.model_copy(update={"conventions": ConventionsSpec(
+            preset=saved.preset, mapping=saved.mapping)})
+    sc = f.get("scope")
+    scope = None if sc is None else FloorScope(
+        frozenset(sc["handles"]), tuple(sc["offset"]),
+        tuple(Issue.model_validate(i) for i in sc["notes"]))
+    gid, found = run_generation(
+        req, user_id, db=db, floor_id=f["id"], floor_name=f["name"],
+        floor_elevation=f["elevation"]["value"], elevation_assumed=f.get("elevation_assumed"),
+        scope=scope, progress=progress, roof=roof,
+        check_upload=False)  # editor access to the project covers its stored uploads
+    if gid is None:
+        return None, found
+    return {**f, "generation_id": gid, "roof": roof, "request": {**f["request"], **overrides}}, found
+
+
 def regenerate(pid: str, overrides: dict, user_id: str, progress=None):
     """Apply parameter overrides (None resets one) to the project and regenerate every floor from
     its stored request, as one new version. All-or-nothing: a blocking floor changes nothing and
@@ -437,29 +495,13 @@ def regenerate(pid: str, overrides: dict, user_id: str, progress=None):
             params = {k: v for k, v in {**manifest.get("parameters", {}), **overrides}.items()
                       if v is not None}
             floors, issues = [], []
+            top = max(f["elevation"]["value"] for f in manifest["floors"]) if manifest["floors"] else None
             for f in manifest["floors"]:
-                if "request" not in f:
-                    raise HTTPException(422, f"floor {f['name']!r} cannot be regenerated; re-add it")
-                req = FloorRequest(**{**f["request"], **overrides})
-                saved = db.get(ProjectConventionsRow, pid)
-                if req.conventions is None and saved is not None:
-                    req = req.model_copy(update={"conventions": ConventionsSpec(
-                        preset=saved.preset, mapping=saved.mapping)})
-                sc = f.get("scope")
-                scope = None if sc is None else FloorScope(
-                    frozenset(sc["handles"]), tuple(sc["offset"]),
-                    tuple(Issue.model_validate(i) for i in sc["notes"]))
-                gid, found = run_generation(
-                    req, user_id, db=db, floor_id=f["id"], floor_name=f["name"],
-                    floor_elevation=f["elevation"]["value"], elevation_assumed=f.get("elevation_assumed"),
-                    scope=scope, progress=progress,
-                    check_upload=False)  # editor access to the project covers its stored uploads
-                if gid is None:
-                    issues += found
-                    continue
-                floors.append({**f, "generation_id": gid,
-                               "request": {**f["request"], **overrides}})
+                moved, found = _replay(db, pid, f, overrides, f["elevation"]["value"] == top,
+                                       user_id, progress)
                 issues += found
+                if moved is not None:
+                    floors.append(moved)
             if len(floors) < len(manifest["floors"]):
                 raise _Blocked
             row.data = {**manifest, "floors": floors, "parameters": params,

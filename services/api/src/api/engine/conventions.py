@@ -26,7 +26,7 @@ from dataclasses import dataclass, replace
 from api.engine.adapters.dxf.split import strip_floor_prefix
 from api.engine.settings import DEFAULTS, Settings
 
-ROLES: tuple[str, ...] = ("wall", "wall_exterior", "wall_interior", "floor", "door", "window", "column", "balcony", "stair", "ramp", "ignore")
+ROLES: tuple[str, ...] = ("wall", "wall_exterior", "wall_interior", "floor", "door", "window", "column", "balcony", "stair", "ramp", "roof", "ignore")
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,7 @@ def known_roles(settings: Settings) -> dict[str, str]:
     out.update({l: "window" for l in settings.window_layers})
     out.update({l: "column" for l in settings.column_layers})
     out.update({l: "balcony" for l in settings.balcony_layers})
+    out.update({l: "roof" for l in settings.roof_layers})
     out.update({l: "stair" for l in settings.stair_layers})
     out.update({l: "ramp" for l in settings.ramp_layers})
     return out
@@ -106,6 +107,7 @@ def resolve(preset: str, mapping: dict[str, str] | None = None) -> Settings:
         window_extra=tuple(extra["window"]),
         column_extra=tuple(extra["column"]),
         balcony_extra=tuple(extra["balcony"]),
+        roof_extra=tuple(extra["roof"]),
         stair_extra=tuple(extra["stair"]),
         ramp_extra=tuple(extra["ramp"]),
         ignore_layers=tuple(extra["ignore"]),

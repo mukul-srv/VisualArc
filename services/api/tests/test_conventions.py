@@ -43,7 +43,7 @@ def test_custom_mapping_resolution():
 
 @pytest.mark.parametrize("preset,mapping,msg", [
     ("nope", {}, "unknown conventions preset"),
-    ("aia", {"X": "roof"}, "unknown role"),
+    ("aia", {"X": "chimney"}, "unknown role"),
     ("aia", {"a-wall": "door"}, "already mapped"),
     ("aia", {"X": "wall", "x": "door"}, "mapped to both"),
     ("aia", {"L1|A-WALL": "door"}, "already mapped"),

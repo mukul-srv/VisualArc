@@ -11,6 +11,7 @@ const ROLE_LABEL: Record<string, string> = {
   window: "window",
   column: "column (rectangle or circle)",
   balcony: "balcony / terrace outline",
+  roof: "roof-plan outline",
   stair: "stair (outline + arrow line)",
   ramp: "ramp (outline + arrow line)",
   ignore: "ignore (reported, not read)",

@@ -109,9 +109,10 @@ test("success path: openings fixture -> viewer-loadable GLB with metadata", asyn
 
   const gltf = await loadGlb(api.glbUrl(gen.generation_id));
   const size = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3());
-  expect(size.x).toBeCloseTo(9.6, 3);
-  expect(size.y).toBeCloseTo(3.2, 3);
-  expect(size.z).toBeCloseTo(4.0, 3);
+  // the default gable roof (30 deg) adds 300 mm eaves a side and a ridge of (4.0 + 0.6) / 2 x tan 30 deg
+  expect(size.x).toBeCloseTo(9.6 + 0.6, 3);
+  expect(size.y).toBeCloseTo(0.2 + 3.0 + 2.3 * Math.tan(Math.PI / 6), 3); // slab + walls + ridge
+  expect(size.z).toBeCloseTo(4.0 + 0.6, 3);
 
   // opening metadata made it through API -> GLB -> three.js userData
   let openings = 0;

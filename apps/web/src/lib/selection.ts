@@ -27,7 +27,7 @@ export type RoomData = { id: string; name: string; name_source: Provenance; area
 
 export type ElementData = {
   id: string;
-  type: "wall" | "junction" | "floor_boundary" | "slab" | "column" | "balcony" | "balcony_railing" | "stair" | "ramp" | "ceiling" | "opening_part";
+  type: "wall" | "junction" | "floor_boundary" | "slab" | "column" | "balcony" | "balcony_railing" | "stair" | "ramp" | "roof" | "ceiling" | "opening_part";
   floor_id?: string;
   thickness?: Measured;
   height?: Measured | null; // wall height; for a ceiling, the ceiling-height parameter
@@ -44,6 +44,15 @@ export type ElementData = {
   railing_thickness?: Measured | null;
   balcony_id?: string; // balcony_railing
   direction?: string | null; // stair, ramp: towards the top
+  kind?: "flat" | "gable" | "hip"; // roof: what was built
+  requested?: "flat" | "gable" | "hip"; // roof: what the parameters asked for
+  outline_source?: "roof_layer" | "walls";
+  base_elevation?: Measured | null;
+  overhang?: Measured | null;
+  pitch?: { value: number; unit: string; source: Provenance } | null;
+  ridge_axis?: "x" | "y" | null;
+  ridge_height?: Measured | null;
+  type_param?: { value: number | string; unit: string; source: Provenance } | null;
   total_rise?: Measured | null; // stair
   rise_param?: Measured | null;
   run_param?: Measured | null;
@@ -170,6 +179,25 @@ export function describeElement(ud: ElementData): Panel {
         measured("Railing thickness", ud.railing_thickness),
       ],
       sourcesLabel: "Source entity (balcony layer)",
+      sources: refs(ud.sources),
+    };
+  }
+  if (ud.type === "roof") {
+    return {
+      title: "Roof",
+      id: ud.id,
+      rows: [
+        ...where,
+        { label: "Type", value: ud.kind ?? "", provenance: ud.type_param?.source },
+        ...(ud.requested && ud.requested !== ud.kind ? [{ label: "Requested type", value: `${ud.requested} (not possible here, see issues)` }] : []),
+        ud.pitch ? { label: "Pitch", value: `${ud.pitch.value} deg`, provenance: ud.pitch.source } : { label: "Pitch", value: "not used (flat)" },
+        measured("Base elevation (top of walls)", ud.base_elevation),
+        ...(ud.ridge_height ? [measured("Ridge height above the base", ud.ridge_height), { label: "Ridge runs along", value: ud.ridge_axis ?? "" }] : []),
+        ...(ud.overhang ? [measured("Eave overhang", ud.overhang)] : []),
+        ...(ud.thickness ? [measured("Slab thickness", ud.thickness)] : []),
+        { label: "Outline from", value: ud.outline_source === "roof_layer" ? "roof-plan layer" : "walls" },
+      ],
+      sourcesLabel: "Source entities (roof-plan outline)",
       sources: refs(ud.sources),
     };
   }

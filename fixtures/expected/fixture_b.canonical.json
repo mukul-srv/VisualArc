@@ -554,6 +554,7 @@
           "columns": [],
           "balconies": [],
           "stairs": [],
+          "roofs": [],
           "ramps": [],
           "plan_offset": null
         }
@@ -638,6 +639,12 @@
       "code": "room_name_defaulted",
       "severity": "warning",
       "message": "no label inside Room 1; numbered names assumed",
+      "sources": []
+    },
+    {
+      "code": "roof_type_unknown",
+      "severity": "warning",
+      "message": "no roof type (choose a building type or set the parameter); no roof built",
       "sources": []
     }
   ],

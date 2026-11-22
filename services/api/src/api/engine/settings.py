@@ -52,6 +52,15 @@ class Settings:
     balcony_layer: str = "A-BALC"  # closed outline of a balcony or terrace slab
     column_extra: tuple[str, ...] = ()
     balcony_extra: tuple[str, ...] = ()
+    # Roof-plan layer (AIA A-ROOF): closed polygons there are the roof outlines, used instead of
+    # the wall/slab outline. Per-project additions go in roof_extra. Upper case.
+    roof_layer: str = "A-ROOF"
+    roof_extra: tuple[str, ...] = ()
+    # Flat roof slab thickness and pitched-roof eave overhang (every side). Nominal round values,
+    # never read from a drawing, recorded `defaulted`. PROVISIONAL: unverified against any standard.
+    roof_thickness_mm: float = 200.0
+    roof_overhang_mm: float = 300.0
+
     # Stair/ramp layers: AIA A-FLOR-STRS for stairs; the ramp layer is a project extension.
     # Each holds closed axis-aligned rectangles (the flight outline) and one axis-aligned LINE per
     # flight drawn from the bottom towards the top (the direction). Upper case.
@@ -173,6 +182,7 @@ class Settings:
         ("wall_neutral", ("#a8a8a8", 0.9)),
         ("floor_boundary", ("#8c7b6b", 0.8)),
         ("slab", ("#7d7266", 0.9)),
+        ("roof", ("#8a4b3c", 0.8)),
         ("stair", ("#b8ad9e", 0.85)),
         ("ramp", ("#a39b8f", 0.85)),
         ("column", ("#9a9a94", 0.85)),
@@ -206,6 +216,10 @@ class Settings:
     @property
     def column_layers(self) -> frozenset[str]:
         return frozenset({self.column_layer, *self.column_extra})
+
+    @property
+    def roof_layers(self) -> frozenset[str]:
+        return frozenset({self.roof_layer, *self.roof_extra})
 
     @property
     def stair_layers(self) -> frozenset[str]:

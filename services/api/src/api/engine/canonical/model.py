@@ -231,6 +231,30 @@ class Ramp(_Model):
     sources: list[SourceRef] = Field(min_length=1)
 
 
+class Roof(_Model):
+    """Roof over one building outline: a flat slab, or a solid gable/hip volume above the top of
+    the walls. `kind` is what was built, `requested` what the parameters asked for (they differ
+    when an unsupported outline fell back to flat, with an issue). Pitched: `polygon` is the
+    outline, the roof extends `overhang` beyond it on every side (0 for a drawn roof-plan outline,
+    which already is the roof edge) and the ridge rises
+    `ridge_height` above the eaves plane (half the overall short span x tan pitch)."""
+
+    id: str
+    type: Literal["roof"] = "roof"
+    kind: Literal["flat", "gable", "hip"]
+    requested: Literal["flat", "gable", "hip"]
+    polygon: list[Point2]
+    outline_source: Literal["roof_layer", "walls"]
+    base_elevation: Measured | None = None  # floor elevation + wall height (inferred); None: no walls
+    thickness: Measured | None = None  # flat roofs
+    overhang: Measured | None = None  # pitched roofs
+    pitch: Param | None = None  # pitched roofs, degrees
+    ridge_axis: Literal["x", "y"] | None = None  # pitched roofs: the ridge runs along it
+    ridge_height: Measured | None = None  # pitched roofs (inferred)
+    type_param: Param | None = None  # the roof_type parameter with its provenance
+    sources: list[SourceRef] = []  # roof-plan outline; empty when taken from the walls
+
+
 class Ceiling(_Model):
     """Slab at floor elevation + user ceiling height, one per floor boundary."""
 
@@ -329,6 +353,7 @@ class Floor(_Model):
     columns: list[Column] = []
     balconies: list[Balcony] = []
     stairs: list[Stair] = []
+    roofs: list[Roof] = []
     ramps: list[Ramp] = []
     plan_offset: PlanOffset | None = None  # None = plan coordinates are the source's
 
