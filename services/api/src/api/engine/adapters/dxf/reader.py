@@ -794,11 +794,6 @@ def read_dxf(
                 message="total rise (ceiling height + slab thickness) is unknown "
                 f"({'no ceiling height' if ceil_h is None else 'no slab thickness'}); no steps or "
                 "ramp slope built", sources=[f.ref for f in flights[: settings.unmapped_ref_cap]]))
-        if slab_t is not None and slab_p == "defaulted" and flights and not boundaries and not balc:
-            issues.append(Issue(
-                code="slab_thickness_defaulted", severity="warning",
-                message=f"Slab thickness assumed {slab_t:g} mm ({building_type} default); "
-                "not in the DXF"))
         for f in flights:
             poly = [(f.rect[0], f.rect[1]), (f.rect[2], f.rect[1]), (f.rect[2], f.rect[3]),
                     (f.rect[0], f.rect[3])]
@@ -820,6 +815,12 @@ def read_dxf(
                     slope=slope, sources=srcs))
                 continue
             kw = {}
+            if total is not None and f.direction is not None and not rise_p:
+                issues.append(Issue(
+                    code="stair_rise_param_missing", severity="warning",
+                    message=f"{f.id}: no stair rise parameter (choose a building type or set "
+                    "the parameter), so the steps cannot be counted; no steps built",
+                    sources=srcs))
             if total is not None and f.direction is not None and rise_p:
                 n = round(total.value / rise_p)
                 if n < 2:
@@ -854,12 +855,11 @@ def read_dxf(
         rail_src = "user_provided" if "railing_height" in given else "defaulted"
         slab_b = given.get("slab_thickness", preset.slab_thickness if preset else None)
         slab_src = "user_provided" if "slab_thickness" in given else "defaulted"
-        for what, v, src in (("railing height", railing_h, rail_src), ("slab thickness", slab_b, slab_src)):
-            if v is not None and src == "defaulted" and not (boundaries and what == "slab thickness"):
-                issues.append(Issue(  # (the floor slab already reported its default)
-                    code=f"{what.replace(' ', '_')}_defaulted", severity="warning",
-                    message=f"Balcony {what} assumed {v:g} mm ({building_type} default); not in the DXF",
-                    sources=[p.ref for p in pieces_b]))
+        if railing_h is not None and rail_src == "defaulted":
+            issues.append(Issue(
+                code="railing_height_defaulted", severity="warning",
+                message=f"Balcony railing height assumed {railing_h:g} mm ({building_type} "
+                "default); not in the DXF", sources=[p.ref for p in pieces_b]))
         if railing_h is None:
             issues.append(Issue(
                 code="railing_height_missing", severity="warning",
@@ -879,15 +879,6 @@ def read_dxf(
         slab_t := given.get("slab_thickness", preset.slab_thickness if preset else None)
     ):
         slab_src = "user_provided" if "slab_thickness" in given else "defaulted"
-        if slab_src == "defaulted":
-            issues.append(
-                Issue(
-                    code="slab_thickness_defaulted",
-                    severity="warning",
-                    message=f"Slab thickness assumed {slab_t:g} mm ({building_type} default); "
-                    "not in the DXF",
-                )
-            )
         slabs = [
             Slab(
                 id=b.id.replace("fb-", "slab-", 1),
@@ -898,6 +889,19 @@ def read_dxf(
             )
             for b in boundaries
         ]
+    # one report for the default, whichever of slabs, balconies, stairs or ramps use it
+    slab_default = given.get("slab_thickness") is None and preset is not None
+    if slab_default and (
+        slabs or balconies or any(s.total_rise for s in stairs) or any(r.thickness for r in ramps)
+    ):
+        issues.append(
+            Issue(
+                code="slab_thickness_defaulted",
+                severity="warning",
+                message=f"Slab thickness assumed {preset.slab_thickness:g} mm ({building_type} "
+                "default); not in the DXF",
+            )
+        )
     parameters = {
         name: Param(value=given[name], unit=unit, source="user_provided")
         if name in given

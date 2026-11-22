@@ -186,3 +186,27 @@ def test_editor_changes_stair_rise_and_the_steps_follow(client):
     s = f["stairs"][0]
     assert s["riser_count"] == 16 and s["rise_param"] == {"value": 200.0, "unit": "mm", "source": "user_provided"}
     assert s["riser_height"]["value"] == 200.0  # 3200 / 16
+
+
+def test_missing_rise_parameter_is_reported_not_silent(tmp_path):
+    # total rise is known (ceiling + slab given) but there is no building type or stair rise
+    p = read_dxf(_plan(tmp_path), 3000, ceiling_height=3000, params={"slab_thickness": 200})
+    (s,) = _floor(p).stairs
+    assert s.total_rise.value == 3200.0 and s.riser_count is None and s.rise_param is None
+    assert "stair_rise_param_missing" in _codes(p)
+
+
+def test_default_slab_is_reported_once_for_stairs_and_balconies_without_floor_boundary(tmp_path):
+    balcony = [("A-BALC", [(1000, -1500), (5000, -1500), (5000, 0), (1000, 0)], True)]
+    for extra in ([], balcony):  # stairs only, then stairs + a balcony; no A-FLOR in either
+        p = _read(_plan(tmp_path, extra=extra), params=None)
+        assert _codes(p).count("slab_thickness_defaulted") == 1
+    # user-given thickness: nothing to report
+    assert "slab_thickness_defaulted" not in _codes(_read(_plan(tmp_path), params={"slab_thickness": 200}))
+
+
+def test_arrow_inside_two_overlapping_outlines_is_ambiguous(tmp_path):
+    overlap = [("A-FLOR-STRS", [(450, 800), (5200, 800), (5200, 1800), (450, 1800)], True)]
+    p = _read(_plan(tmp_path, extra=overlap))  # the arrow at y=1000 lies in both outlines
+    assert len(_floor(p).stairs) == 2 and all(s.direction is None for s in _floor(p).stairs)
+    assert _codes(p).count("stair_direction_ambiguous") == 2

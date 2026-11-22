@@ -65,15 +65,30 @@ def find_flights(
     tol = settings.tolerance_mm
     flights, issues, used = [], [], set()
     counts: dict[str, int] = {}
-    for o in sorted(outlines, key=lambda o: (o.kind, o.rect[1], o.rect[0])):
-        mine = [
+
+    def within(o: Outline) -> list[Arrow]:
+        return [
             a for a in arrows
             if a.kind == o.kind and _inside(o.rect, a.start, tol) and _inside(o.rect, a.end, tol)
         ]
+
+    claims: dict[int, int] = {}  # arrow -> how many outlines contain it
+    for o in outlines:
+        for a in within(o):
+            claims[id(a)] = claims.get(id(a), 0) + 1
+    for o in sorted(outlines, key=lambda o: (o.kind, o.rect[1], o.rect[0])):
+        mine = within(o)
         used.update(id(a) for a in mine)
         counts[o.kind] = n = counts.get(o.kind, 0) + 1
         fid, direction, arrow = f"{o.kind}-{n:03d}", None, None
-        if len(mine) == 1 and (direction := _direction(mine[0], tol)) is not None:
+        if len(mine) == 1 and claims[id(mine[0])] > 1:
+            issues.append(Issue(
+                code="stair_direction_ambiguous", severity="warning",
+                message=f"{fid}: its arrow line {mine[0].ref.entity_handle} also lies inside "
+                "another outline of the same kind (overlapping outlines); direction left unset",
+                sources=[o.ref, mine[0].ref],
+            ))
+        elif len(mine) == 1 and (direction := _direction(mine[0], tol)) is not None:
             arrow = mine[0].ref
         elif len(mine) == 1:
             issues.append(Issue(
