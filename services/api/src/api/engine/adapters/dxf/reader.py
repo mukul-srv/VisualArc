@@ -14,6 +14,7 @@ from pathlib import Path
 import ezdxf
 from ezdxf import units
 
+from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
     Building,
     Ceiling,
@@ -28,7 +29,6 @@ from api.engine.canonical.model import (
     SourceRef,
     Wall,
 )
-from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.geometry2d.floor import floor_issue
 from api.engine.geometry2d.openings import (
     Marker,

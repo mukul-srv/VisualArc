@@ -3,7 +3,6 @@ import importlib.util
 from pathlib import Path
 
 import ezdxf
-import pytest
 
 from api.engine.adapters.dxf.reader import read_dxf
 from api.engine.exporters.glb import build_meta, build_scene
@@ -25,7 +24,7 @@ def _walls(p):
 
 def _on_perimeter(w, width, height, ext):
     """Oracle from generator constants: centreline runs along the building edge."""
-    (x0, y0), (x1, y1) = w.centreline.start, w.centreline.end
+    (x0, y0), (_x1, y1) = w.centreline.start, w.centreline.end
     if y0 == y1:
         return y0 in (ext / 2, height - ext / 2)
     return x0 in (ext / 2, width - ext / 2)
@@ -71,7 +70,7 @@ def test_inference_fixture_b_all_exterior():
 
 
 def test_inference_on_fixture_g_geometry_when_layers_flattened(tmp_path):
-    g = _gen("make_fixture_g")
+    _gen("make_fixture_g")
     doc = ezdxf.readfile(INPUT / "fixture_g.dxf")
     for e in doc.modelspace().query("LINE"):
         e.dxf.layer = "A-WALL"

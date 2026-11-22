@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # scratch DB name: web workflow test refuses `visual_arc`
+  DATABASE_URL: postgresql+psycopg://visual_arc:visual_arc@localhost:5432/visual_arc_ci
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: visual_arc
+          POSTGRES_PASSWORD: visual_arc
+          POSTGRES_DB: visual_arc_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U visual_arc -d visual_arc_ci"
+          --health-interval 2s --health-retries 30
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: services/api/uv.lock
+      - run: uv sync --locked
+      - run: uv run alembic upgrade head
+      - run: uv run ruff check
+      - run: uv run pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: visual_arc
+          POSTGRES_PASSWORD: visual_arc
+          POSTGRES_DB: visual_arc_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U visual_arc -d visual_arc_ci"
+          --health-interval 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: services/api/uv.lock
+      - name: API deps and migrated scratch DB (for workflow.test.ts)
+        working-directory: services/api
+        run: |
+          uv sync --locked
+          uv run alembic upgrade head
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - working-directory: apps/web
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test
+
+  semgrep:
+    runs-on: ubuntu-latest
+    container: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep scan --config p/default --error --metrics=off
