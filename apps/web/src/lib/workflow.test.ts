@@ -110,7 +110,7 @@ test("success path: openings fixture -> viewer-loadable GLB with metadata", asyn
   const gltf = await loadGlb(api.glbUrl(gen.generation_id));
   const size = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3());
   expect(size.x).toBeCloseTo(9.6, 3);
-  expect(size.y).toBeCloseTo(3.0, 3);
+  expect(size.y).toBeCloseTo(3.2, 3);
   expect(size.z).toBeCloseTo(4.0, 3);
 
   // opening metadata made it through API -> GLB -> three.js userData
@@ -150,7 +150,7 @@ test("2-floor project: create, add floors, manifest, each floor GLB sits at its 
   for (const f of m.floors) {
     expect(f.elevation.source).toBe("user_provided");
     const box = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(f.generation_id))).scene);
-    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000, 3); // elevation is already in the GLB
+    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000 - 0.2, 3); // elevation is in the GLB; the default 200 mm slab sits below it
   }
 });
 
@@ -176,7 +176,7 @@ test("consolidated DXF: preflight lists floors, generation blocks, confirm creat
   expect(sortFloors(m.floors).map((f) => f.name)).toEqual(["Ground", "First"]);
   for (const f of m.floors) {
     const box = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(f.generation_id))).scene);
-    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000, 3);
+    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000 - 0.2, 3);
   }
 });
 

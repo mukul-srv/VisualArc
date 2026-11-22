@@ -67,5 +67,8 @@ const startPost = (path: string, body: unknown, f: Fetch) => () =>
 export const generateJob = (params: GenerationParams, onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
   run<{ generation_id: string; issues: Issue[] }>(startPost("/generations", params, f), onProgress, f, intervalMs);
 
+export const changeParametersJob = (projectId: string, values: Record<string, number | string | null>, onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
+  run<{ version: number; issues: Issue[] }>(startPost(`/projects/${projectId}/parameters`, values, f), onProgress, f, intervalMs);
+
 export const addFloorJob = (projectId: string, params: FloorParams, onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
   run<{ floor: Floor; generation_id: string; issues: Issue[] }>(startPost(`/projects/${projectId}/floors`, params, f), onProgress, f, intervalMs);

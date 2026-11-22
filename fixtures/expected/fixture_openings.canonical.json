@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.6.0",
+  "schema_version": "0.7.0",
   "id": "fixture_openings",
   "units": "mm",
   "source_file": "fixture_openings.dxf",
@@ -1160,6 +1160,11 @@
                 "unit": "mm",
                 "source": "inferred"
               },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
               "sources": [
                 {
                   "format": "dxf",
@@ -1193,6 +1198,11 @@
                 "value": 3000.0,
                 "unit": "mm",
                 "source": "inferred"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
               },
               "sources": [
                 {
@@ -1228,6 +1238,11 @@
                 "unit": "mm",
                 "source": "inferred"
               },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
               "sources": [
                 {
                   "format": "dxf",
@@ -1237,6 +1252,7 @@
               ]
             }
           ],
+          "slabs": [],
           "plan_offset": null
         }
       ]
@@ -1492,5 +1508,12 @@
         }
       ]
     }
-  ]
+  ],
+  "parameters": {
+    "ceiling_height": {
+      "value": 3000.0,
+      "unit": "mm",
+      "source": "user_provided"
+    }
+  }
 }

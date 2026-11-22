@@ -20,6 +20,15 @@ class BuildingPreset:
     window_height: float
     window_sill: float
     floor_to_floor: float  # next-floor elevation step when none is given
+    # project parameters (engine/parameters.py); `roof_type` / `roof_pitch` (degrees) are
+    # read by the roof step, stair and railing values by the stair/railing steps
+    slab_thickness: float = 200.0
+    roof_type: str = "flat"
+    roof_pitch: float = 0.0
+    stair_rise: float = 175.0
+    stair_run: float = 280.0
+    lintel_height: float = 2100.0  # opening head height above the floor
+    railing_height: float = 900.0
 
 
 @dataclass(frozen=True)
@@ -60,8 +69,8 @@ class Settings:
     # `defaulted` plus a warning naming the value. Round trade values, not a standard.
     # PROVISIONAL: unverified against any code or standard.
     building_presets: tuple[tuple[str, BuildingPreset], ...] = (
-        ("residential", BuildingPreset(2700.0, 2700.0, 2100.0, 1200.0, 900.0, 3000.0)),
-        ("commercial", BuildingPreset(3000.0, 2700.0, 2100.0, 1500.0, 900.0, 3600.0)),
+        ("residential", BuildingPreset(2700.0, 2700.0, 2100.0, 1200.0, 900.0, 3000.0, 200.0, "gable", 30.0)),
+        ("commercial", BuildingPreset(3000.0, 2700.0, 2100.0, 1500.0, 900.0, 3600.0, 250.0, "flat", 0.0, railing_height=1100.0)),
     )
 
     # Two parallel wall lines pair into a wall only if their distance is within
@@ -124,7 +133,7 @@ class Settings:
 
     # Presentation only (never changes geometry): kind -> (sRGB hex, roughness).
     # Kinds: wall role, "wall_neutral" (junctions, and walls whose role is unresolved),
-    # floor_boundary, ceiling. Junctions get the neutral tone, not a wall role's:
+    # floor_boundary, slab, ceiling. Junctions get the neutral tone, not a wall role's:
     # they sit between walls of mixed roles, and a distinct tone keeps them visible
     # when checking the model. Mid-light, non-metal values so every kind reads
     # against the viewer background and under the selection highlight.
@@ -133,6 +142,7 @@ class Settings:
         ("wall_interior", ("#e6e0d4", 0.9)),
         ("wall_neutral", ("#a8a8a8", 0.9)),
         ("floor_boundary", ("#8c7b6b", 0.8)),
+        ("slab", ("#7d7266", 0.9)),
         ("ceiling", ("#f4f4f0", 0.95)),
     )
 

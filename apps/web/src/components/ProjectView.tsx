@@ -8,6 +8,7 @@ import { deleteProject, listVersions, removeFloor, renameFloor, renameProject, r
 import { ConventionsPanel } from "./ConventionsPanel";
 import { getProjectConventions, listConventions, putProjectConventions, type ConventionsSpec, type PresetInfo } from "../lib/conventions";
 import { AccessPanel } from "./AccessPanel";
+import { ParametersPanel } from "./ParametersPanel";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { VersionList } from "./lists";
@@ -46,7 +47,7 @@ export function ProjectView({ id }: { id: string }) {
   // /projects/<id>#sharing (the dashboard's Share button) opens that section directly
   useEffect(() => {
     const t = window.location.hash.slice(1);
-    if (["floors", "conventions", "versions", "sharing"].includes(t)) queueMicrotask(() => setTab(t as TabId));
+    if (["floors", "parameters", "conventions", "versions", "sharing"].includes(t)) queueMicrotask(() => setTab(t as TabId));
   }, []);
   const select = (t: TabId) => {
     setTab(t);
@@ -107,6 +108,7 @@ export function ProjectView({ id }: { id: string }) {
             <p><small>Renaming and removing floors is available here. Editing walls, openings and other model elements is not supported yet (planned); to change the geometry, fix the DXF and add it as a new floor.</small></p>
           </>
         )}
+        {shown === "parameters" && <ParametersPanel projectId={id} readOnly={!edit} onChanged={load} />}
         {shown === "conventions" && conv && convInfo && (
           <>
             <ConventionsPanel spec={conv} setSpec={setConv} presets={convInfo.presets} roles={convInfo.roles} layers={[]} disabled={busy} readOnly={!edit} />

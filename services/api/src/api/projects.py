@@ -28,11 +28,13 @@ from api.db import (
     session,
 )
 from api.engine.adapters.dxf.split import FloorScope
-from api.engine.canonical.model import Measured
+from api.engine.canonical.model import Issue, Measured
+from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS
 from api.generations import (
     ConventionsSpec,
     GenerationRequest,
+    ParamFields,
     blocked_response,
     result,
     run_generation,
@@ -45,8 +47,7 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(current_user)])
 public_router = APIRouter(prefix="/api/v1")
 
 # request fields recorded per floor with provenance (None = the preset fills it, `defaulted`)
-_PARAMS = ("building_type", "wall_height", "ceiling_height", "door_height", "window_height",
-           "window_sill", "units")
+_PARAMS = ("building_type", "wall_height", "door_height", "window_height", "units", *PARAMS)
 
 
 class ProjectRequest(BaseModel):
@@ -76,7 +77,7 @@ def _version(db: Session, row: ProjectRow, user_id: str | None, message: str) ->
     v = ProjectVersionRow(
         id=new_id(), project_id=row.id, number=number, created_by=user_id, message=message,
         snapshot={"floors": floors, "generation_ids": [f["generation_id"] for f in floors],
-                  "params": row.data.get("params", {})},
+                  "params": row.data.get("params", {}), "parameters": row.data.get("parameters", {})},
     )
     db.add(v)
     db.flush()
@@ -138,6 +139,10 @@ def add_floor(
     with _tx(db) as db:  # noqa: PLR1704
         row = owned(db, ProjectRow, pid, owner_id or "", "unknown project", lock=True, need="editor")
         manifest = row.data
+        # project parameters the user set apply to every floor unless this request gives its own
+        req = req.model_copy(update={k: v for k, v in manifest.get("parameters", {}).items()
+                                     if k not in req.model_fields_set})
+        stored = req.model_dump(mode="json")  # what regeneration replays (project conventions apply then)
         saved = db.get(ProjectConventionsRow, pid)
         if req.conventions is None and saved is not None:  # the project's conventions apply
             req = req.model_copy(update={
@@ -176,6 +181,11 @@ def add_floor(
                 value=elevation, source="defaulted" if assumed else "user_provided"
             ).model_dump(mode="json"),
             "generation_id": gid,
+            "request": stored,
+            "elevation_assumed": assumed,
+            "scope": None if scope is None else {
+                "handles": sorted(scope.handles), "offset": list(scope.offset),
+                "notes": [i.model_dump(mode="json") for i in scope.notes]},
         }
         row.data = {
             **manifest,
@@ -196,7 +206,8 @@ def _floor_index(floor_id: str) -> int:
 def _manifest(row: ProjectRow, v: ProjectVersionRow, role: str) -> dict:
     return {"role": role,
         "id": row.id, "name": row.data["name"], "floors": v.snapshot["floors"],
-        "params": v.snapshot.get("params", {}), "version": v.number,
+        "params": v.snapshot.get("params", {}), "parameters": v.snapshot.get("parameters", {}),
+        "version": v.number,
         "updated_at": v.created_at.isoformat(),
     }
 
@@ -367,5 +378,95 @@ def restore_version(pid: str, number: int, user: CurrentUser):
         row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
         old = _version_row(db, pid, number)
         row.data = {**row.data, "floors": old.snapshot["floors"],
-                    "params": old.snapshot.get("params", {})}
+                    "params": old.snapshot.get("params", {}),
+                    "parameters": old.snapshot.get("parameters", {})}
         return _info(_version(db, row, user.id, f"Restored version {number}"))
+
+
+class ParametersRequest(ParamFields):
+    """Fields present in the body are set (a value) or reset to the preset default (null)."""
+
+
+def parameter_overrides(req: ParametersRequest) -> dict:
+    return {k: getattr(req, k) for k in req.model_fields_set}
+
+
+def effective_parameters(manifest: dict) -> dict:
+    """Every parameter with value, unit and provenance: the user's (set here, or given when a
+    floor was added) else the building-type preset's, tagged `defaulted`."""
+    floors = manifest["floors"]
+    first = manifest.get("params", {}).get(floors[0]["id"], {}) if floors else {}
+    preset = DEFAULTS.preset(first.get("building_type", {}).get("value") or "residential")
+    out = {}
+    for name, unit in PARAMS.items():
+        v = manifest.get("parameters", {}).get(name)
+        if v is None and first.get(name, {}).get("source") == "user_provided":
+            v = first[name]["value"]
+        out[name] = ({"value": v, "unit": unit, "source": "user_provided"} if v is not None else
+                     {"value": getattr(preset, name), "unit": unit, "source": "defaulted"})
+    return out
+
+
+@public_router.get("/projects/{pid}/parameters")
+def get_parameters(pid: str, who: Principal):
+    with session() as db:
+        row = owned(db, ProjectRow, pid, who, "unknown project", need="viewer")
+        return effective_parameters(row.data)
+
+
+def check_regenerable(db: Session, pid: str, user_id: str) -> None:
+    """404/403 like any editor write; 422 when a floor predates stored requests."""
+    row = owned(db, ProjectRow, pid, user_id, "unknown project", need="editor")
+    old = [f["name"] for f in row.data["floors"] if "request" not in f]
+    if old:
+        raise HTTPException(422, "cannot regenerate floors created before parameters were "
+                                 f"editable: {', '.join(old)}. Re-add them from their DXF.")
+
+
+def regenerate(pid: str, overrides: dict, user_id: str, progress=None):
+    """Apply parameter overrides (None resets one) to the project and regenerate every floor from
+    its stored request, as one new version. All-or-nothing: a blocking floor changes nothing and
+    returns the 409 response."""
+    class _Blocked(Exception):
+        pass
+
+    try:
+        with session() as db, db.begin():
+            row = owned(db, ProjectRow, pid, user_id, "unknown project", lock=True, need="editor")
+            manifest = row.data
+            params = {k: v for k, v in {**manifest.get("parameters", {}), **overrides}.items()
+                      if v is not None}
+            floors, issues = [], []
+            for f in manifest["floors"]:
+                if "request" not in f:
+                    raise HTTPException(422, f"floor {f['name']!r} cannot be regenerated; re-add it")
+                req = FloorRequest(**{**f["request"], **overrides})
+                saved = db.get(ProjectConventionsRow, pid)
+                if req.conventions is None and saved is not None:
+                    req = req.model_copy(update={"conventions": ConventionsSpec(
+                        preset=saved.preset, mapping=saved.mapping)})
+                sc = f.get("scope")
+                scope = None if sc is None else FloorScope(
+                    frozenset(sc["handles"]), tuple(sc["offset"]),
+                    tuple(Issue.model_validate(i) for i in sc["notes"]))
+                gid, found = run_generation(
+                    req, user_id, db=db, floor_id=f["id"], floor_name=f["name"],
+                    floor_elevation=f["elevation"]["value"], elevation_assumed=f.get("elevation_assumed"),
+                    scope=scope, progress=progress,
+                    check_upload=False)  # editor access to the project covers its stored uploads
+                if gid is None:
+                    issues += found
+                    continue
+                floors.append({**f, "generation_id": gid,
+                               "request": {**f["request"], **overrides}})
+                issues += found
+            if len(floors) < len(manifest["floors"]):
+                raise _Blocked
+            row.data = {**manifest, "floors": floors, "parameters": params,
+                        "params": {f["id"]: _params(FloorRequest(**f["request"])) for f in floors}}
+            names = ", ".join(sorted(overrides)) or "none"
+            v = _version(db, row, user_id, f"Parameters changed: {names}"[:200])
+            number = v.number
+    except _Blocked:
+        return blocked_response(issues)
+    return {"project_id": pid, "version": number, "floors": floors, "issues": issues}

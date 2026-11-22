@@ -18,6 +18,7 @@ from api.db import GenerationRow, ProjectRow, UploadRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.canonical.model import Project
 from api.engine.conventions import resolve
+from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS
 from api.pipeline import has_blocking, write_artifacts
 from api.sharing import Principal
@@ -59,15 +60,31 @@ class ConventionsSpec(BaseModel):
         return self
 
 
-class GenerationRequest(BaseModel):
+# parameters with no dedicated reader argument (ceiling_height and window_sill have one)
+EXTRA_PARAMS = tuple(k for k in PARAMS if k not in ("ceiling_height", "window_sill"))
+
+
+class ParamFields(BaseModel):
+    """The project parameters (engine/parameters.py). None = the preset's value, tagged `defaulted`."""
+
     model_config = ConfigDict(extra="forbid")
+    ceiling_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
+    slab_thickness: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    roof_type: Literal["flat", "gable"] | None = None
+    roof_pitch: float | None = Field(None, ge=0, lt=90, allow_inf_nan=False, description="degrees")
+    stair_rise: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    stair_run: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    lintel_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+    railing_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
+
+
+class GenerationRequest(ParamFields):
     upload_id: str
     wall_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
-    ceiling_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     units: Literal[tuple(USER_UNITS)] | None = None  # type: ignore[valid-type]
     door_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     window_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
-    window_sill: float | None = Field(None, ge=0, allow_inf_nan=False, description="mm")
     # missing heights are filled from this type's preset (tagged `defaulted`, with a warning)
     building_type: Literal["residential", "commercial"] = "residential"
     # None: the project's saved conventions (floors) or the AIA default
@@ -83,11 +100,13 @@ def request_settings(req: "GenerationRequest"):
     return DEFAULTS if c is None else resolve(c.preset, c.mapping)
 
 
-def read_project(req: GenerationRequest, user_id: str | None = None, **floor) -> Project:
+def read_project(req: GenerationRequest, user_id: str | None = None, check_upload: bool = True,
+                 **floor) -> Project:
     """Read the upload (owned by `user_id`) into a Project; nothing is stored. `floor` =
     floor_id/floor_name/floor_elevation/scope, passed to read_dxf."""
-    with session() as db:
-        owned(db, UploadRow, req.upload_id, user_id or "", "unknown upload_id")
+    if check_upload:  # False: the caller already holds project access to a stored request
+        with session() as db:
+            owned(db, UploadRow, req.upload_id, user_id or "", "unknown upload_id")
     if not upload_path(req.upload_id).is_file():
         raise HTTPException(404, "unknown upload_id")
     try:
@@ -99,6 +118,7 @@ def read_project(req: GenerationRequest, user_id: str | None = None, **floor) ->
             window_height=req.window_height,
             window_sill=req.window_sill,
             ceiling_height=req.ceiling_height,
+            params={k: getattr(req, k) for k in EXTRA_PARAMS if getattr(req, k) is not None},
             building_type=req.building_type,
             settings=request_settings(req),
             **floor,
@@ -111,14 +131,15 @@ def read_project(req: GenerationRequest, user_id: str | None = None, **floor) ->
 
 
 def run_generation(
-    req: GenerationRequest, owner_id: str | None = None, db=None, progress=None, **floor
+    req: GenerationRequest, owner_id: str | None = None, db=None, progress=None,
+    check_upload: bool = True, **floor
 ) -> tuple[str | None, list[dict]]:
     """Shared by /generations and project floors. Returns (generation_id, issues);
     `progress(stage)` reports stages to a job; the id is None when blocking issues stopped it (nothing is stored). With `db` the
     row joins the caller's transaction (the caller commits); blobs are never rolled back."""
     if progress:
         progress("parsing")
-    project = read_project(req, owner_id, **floor)
+    project = read_project(req, owner_id, check_upload, **floor)
     if progress:
         progress("building-model")
     issues = [i.model_dump(mode="json") for i in project.issues]

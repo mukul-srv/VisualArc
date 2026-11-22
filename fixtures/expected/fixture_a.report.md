@@ -1,7 +1,7 @@
 # Verification report: fixture_a
 
 - Source file: `fixture_a.dxf`
-- Schema version: 0.6.0
+- Schema version: 0.7.0
 - Units: mm
 - Result: **OK** (0 blocking, 2 warnings)
 
@@ -45,6 +45,7 @@ Junctions (6) are always `inferred`: corner/T fill between paired-line walls, no
 - Walls: 7
 - Junctions: 6
 - Floor boundaries: 2
+- Slabs: 0
 - Openings: 0
 
 ## Expected versus generated
@@ -55,6 +56,7 @@ Junctions (6) are always `inferred`: corner/T fill between paired-line walls, no
 | walls | 7 | 7 | yes |
 | junctions | 6 | 6 | yes |
 | floor boundaries | 2 | 2 | yes |
+| slabs | 0 | 0 | yes |
 | openings | 0 | 0 | yes |
 | Wall heights (mm) | 3000 | 3000 | yes |
 

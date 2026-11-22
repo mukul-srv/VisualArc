@@ -30,7 +30,7 @@ def test_generation_success_serves_usable_glb(client):
     glb = client.get(body["artifacts"]["glb"])
     assert glb.status_code == 200 and glb.headers["content-type"] == "model/gltf-binary"
     scene = trimesh.load(trimesh.util.wrap_as_stream(glb.content), file_type="glb")
-    assert scene.bounds.round(6).tolist() == [[0, 0, -5.2], [8.2, 3.0, 0]]
+    assert scene.bounds.round(6).tolist() == [[0, -0.2, -5.2], [8.2, 3.0, 0]]  # y min: the default 200 mm slab
     assert "# Verification report" in client.get(body["artifacts"]["report"]).text
 
 
@@ -171,7 +171,7 @@ def test_missing_ceiling_height_is_a_tagged_warning_not_a_block(client):
     r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000})
     assert r.status_code == 201
     assert {i["code"] for i in r.json()["issues"]} == {
-        "ceiling_height_defaulted", "elevation_defaulted", "wall_role_inferred"
+        "ceiling_height_defaulted", "elevation_defaulted", "wall_role_inferred", "slab_thickness_defaulted"
     }
     r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 2600})
     assert r.status_code == 201

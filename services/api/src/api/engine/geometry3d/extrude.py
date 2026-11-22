@@ -64,7 +64,7 @@ def _wall_with_openings(
 
 
 def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
-    """Element id -> mesh for every wall, junction and floor boundary."""
+    """Element id -> mesh for every wall, junction, floor boundary, slab and ceiling."""
     z0 = floor.elevation.value
     heights = {w.id: _height(w) for w in floor.walls}
     hosted: dict[str, list[Opening]] = {}
@@ -86,6 +86,15 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
         )
     for b in floor.boundaries:
         meshes[b.id] = _flat(Polygon(b.polygon), z0)
+    for sl in floor.slabs:
+        t = sl.thickness.value
+        m = _prism(Polygon(sl.polygon), z0 - t, t)
+        # the top face is the floor boundary's surface: drop it here (open top) so the two
+        # coplanar faces do not z-fight; boundary + slab together are the closed solid
+        top = (m.face_normals[:, 2] > 0.5) & (m.triangles_center[:, 2] > z0 - 1e-6)
+        m.update_faces(~top)
+        m.remove_unreferenced_vertices()
+        meshes[sl.id] = m
     for c in floor.ceilings:  # underside faces down so it shows from inside
         meshes[c.id] = _flat(Polygon(c.polygon), c.elevation.value, up=False)
     return meshes

@@ -1,7 +1,7 @@
 """Background generation jobs: DB job table + one in-process worker thread (no broker).
 
 POST starts a job (access checked up front, the work runs on the single worker); the client polls
-GET /jobs/{id} for status/stage/progress and the final result or error. Stages: queued, parsing,
+GET /jobs/{id} for status/stage/progress and the final result or error. Kinds: generation, floor, parameters (regenerate every floor). Stages: queued, parsing,
 building-model, exporting, done. A blocking-issue outcome is a failed job whose `result` holds the
 issues. shortcut: a single runner in one API process; on startup `recover_jobs` fails whatever the
 previous process left queued or running. Move to a real queue before running several API workers.
@@ -20,7 +20,14 @@ from api.access import owned, project_role
 from api.auth import CurrentUser, current_user
 from api.db import JobRow, ProjectRow, UploadRow, session
 from api.generations import GenerationRequest, result, run_generation
-from api.projects import FloorRequest, add_floor
+from api.projects import (
+    FloorRequest,
+    ParametersRequest,
+    add_floor,
+    check_regenerable,
+    parameter_overrides,
+    regenerate,
+)
 from api.storage import new_id
 
 router = APIRouter(prefix="/api/v1/jobs", dependencies=[Depends(current_user)])
@@ -74,6 +81,8 @@ def execute(job_id: str) -> None:
         _set(job_id, status="running")
         if kind == "floor":
             out = add_floor(pid, FloorRequest(**request), None, owner, progress=progress)
+        elif kind == "parameters":
+            out = regenerate(pid, request, owner, progress=progress)
         else:
             gid, issues = run_generation(GenerationRequest(**request), owner, progress=progress)
             out = (JSONResponse(status_code=409, content={"issues": issues}) if gid is None
@@ -110,7 +119,8 @@ def _start(user, kind: str, pid: str | None, req) -> JSONResponse:
         owned(db, UploadRow, req.upload_id, user.id, "unknown upload_id")
         if pid is not None:
             owned(db, ProjectRow, pid, user.id, "unknown project", need="editor")
-        job = _create(db, user, kind, pid, req.model_dump(mode="json"))
+        # exclude_unset: which fields the caller set matters (project parameters fill the rest)
+        job = _create(db, user, kind, pid, req.model_dump(mode="json", exclude_unset=True))
         jid = job.id
     submit(jid)
     return JSONResponse(status_code=202, content={"job_id": jid})
@@ -124,6 +134,19 @@ def start_generation(req: GenerationRequest, user: CurrentUser):
 @router.post("/projects/{pid}/floors", status_code=202)
 def start_floor(pid: str, req: FloorRequest, user: CurrentUser):
     return _start(user, "floor", pid, req)
+
+
+@router.post("/projects/{pid}/parameters", status_code=202)
+def start_parameters(pid: str, req: ParametersRequest, user: CurrentUser):
+    """Set (value) or reset (null) project parameters and regenerate every floor, as a job."""
+    overrides = parameter_overrides(req)
+    if not overrides:
+        raise HTTPException(422, "no parameters given")
+    with session() as db, db.begin():
+        check_regenerable(db, pid, user.id)
+        jid = _create(db, user, "parameters", pid, overrides).id
+    submit(jid)
+    return JSONResponse(status_code=202, content={"job_id": jid})
 
 
 @router.get("/{job_id}")

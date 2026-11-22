@@ -9,7 +9,7 @@ from api.engine.geometry2d.walls import Segment, pair_walls
 from api.engine.settings import DEFAULTS, Settings
 
 
-def dict_preset(wall, ceiling, door, window, sill, f2f):
+def dict_preset(wall, ceiling, door, window, sill, f2f, slab, roof, pitch, railing):
     # asdict() recurses into the nested frozen dataclass, so compare as a dict
     return {
         "wall_height": float(wall),
@@ -18,6 +18,13 @@ def dict_preset(wall, ceiling, door, window, sill, f2f):
         "window_height": float(window),
         "window_sill": float(sill),
         "floor_to_floor": float(f2f),
+        "slab_thickness": float(slab),
+        "roof_type": roof,
+        "roof_pitch": float(pitch),
+        "stair_rise": 175.0,
+        "stair_run": 280.0,
+        "lintel_height": 2100.0,
+        "railing_height": float(railing),
     }
 
 
@@ -42,8 +49,8 @@ def test_defaults_match_document_08():
         "default_window_height_mm": 1200.0,
         "default_window_sill_mm": 900.0,
         "building_presets": (
-            ("residential", dict_preset(2700, 2700, 2100, 1200, 900, 3000)),
-            ("commercial", dict_preset(3000, 2700, 2100, 1500, 900, 3600)),
+            ("residential", dict_preset(2700, 2700, 2100, 1200, 900, 3000, 200, "gable", 30, 900)),
+            ("commercial", dict_preset(3000, 2700, 2100, 1500, 900, 3600, 250, "flat", 0, 1100)),
         ),
         "wall_thickness_min_mm": 50.0,
         "wall_thickness_max_mm": 600.0,
@@ -63,6 +70,7 @@ def test_defaults_match_document_08():
             ("wall_interior", ("#e6e0d4", 0.9)),
             ("wall_neutral", ("#a8a8a8", 0.9)),
             ("floor_boundary", ("#8c7b6b", 0.8)),
+            ("slab", ("#7d7266", 0.9)),
             ("ceiling", ("#f4f4f0", 0.95)),
         ),
     }

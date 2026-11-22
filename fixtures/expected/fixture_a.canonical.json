@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.6.0",
+  "schema_version": "0.7.0",
   "id": "fixture_a",
   "units": "mm",
   "source_file": "fixture_a.dxf",
@@ -549,6 +549,11 @@
                 "unit": "mm",
                 "source": "inferred"
               },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
               "sources": [
                 {
                   "format": "dxf",
@@ -583,6 +588,11 @@
                 "unit": "mm",
                 "source": "inferred"
               },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
               "sources": [
                 {
                   "format": "dxf",
@@ -592,6 +602,7 @@
               ]
             }
           ],
+          "slabs": [],
           "plan_offset": null
         }
       ]
@@ -671,5 +682,12 @@
         }
       ]
     }
-  ]
+  ],
+  "parameters": {
+    "ceiling_height": {
+      "value": 3000.0,
+      "unit": "mm",
+      "source": "user_provided"
+    }
+  }
 }

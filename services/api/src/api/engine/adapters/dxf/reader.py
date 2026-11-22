@@ -24,8 +24,10 @@ from api.engine.canonical.model import (
     Junction,
     LineGeometry,
     Measured,
+    Param,
     PlanOffset,
     Project,
+    Slab,
     SourceRef,
     Wall,
 )
@@ -39,6 +41,7 @@ from api.engine.geometry2d.openings import (
 )
 from api.engine.geometry2d.role import resolve_roles
 from api.engine.geometry2d.walls import Segment
+from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS, Settings
 
 # user-facing --units choices -> $INSUNITS code (kept small and explicit)
@@ -206,6 +209,7 @@ def read_dxf(
     scope: FloorScope | None = None,  # one confirmed floor of a consolidated DXF
     building_type: str | None = None,  # None: no presets, missing heights block (CLI)
     elevation_assumed: str | None = None,  # why floor_elevation is an assumption, if it is
+    params: dict[str, float | str] | None = None,  # user-given project parameters (parameters.py)
 ) -> Project:
     if building_type is not None and building_type not in dict(settings.building_presets):
         raise ValueError(f"unknown building type {building_type!r}")
@@ -227,6 +231,12 @@ def read_dxf(
             raise ValueError(f"{name} must be > 0 mm, got {v}")
     if window_sill is not None and window_sill < 0:
         raise ValueError(f"window sill must be >= 0 mm, got {window_sill}")
+    given = {k: v for k, v in {"ceiling_height": ceiling_height, "window_sill": window_sill,
+                               **(params or {})}.items() if v is not None}
+    if unknown := set(given) - set(PARAMS):
+        raise ValueError(f"unknown parameters {sorted(unknown)}")
+    if given.get("slab_thickness", 1) <= 0:
+        raise ValueError("slab thickness must be > 0 mm")
     doc = load_doc(path, settings.max_dxf_bytes if max_bytes is None else max_bytes)
     check_complexity(doc, settings)
     wall_layers, floor_layers = settings.wall_layers, settings.floor_layers
@@ -576,6 +586,7 @@ def read_dxf(
                 id=b.id.replace("fb-", "ceiling-", 1),
                 polygon=b.polygon,
                 elevation=top,
+                height=ceil_h,
                 sources=b.sources,
             )
             for b in boundaries
@@ -606,12 +617,44 @@ def read_dxf(
                 message="DXF has no ceiling height; supply --ceiling-height (mm)",
             )
         )
+    slabs = []
+    if boundaries and (
+        slab_t := given.get("slab_thickness", preset.slab_thickness if preset else None)
+    ):
+        slab_src = "user_provided" if "slab_thickness" in given else "defaulted"
+        if slab_src == "defaulted":
+            issues.append(
+                Issue(
+                    code="slab_thickness_defaulted",
+                    severity="warning",
+                    message=f"Slab thickness assumed {slab_t:g} mm ({building_type} default); "
+                    "not in the DXF",
+                )
+            )
+        slabs = [
+            Slab(
+                id=b.id.replace("fb-", "slab-", 1),
+                boundary_id=b.id,
+                polygon=b.polygon,
+                thickness=Measured(value=slab_t, source=slab_src),
+                sources=b.sources,
+            )
+            for b in boundaries
+        ]
+    parameters = {
+        name: Param(value=given[name], unit=unit, source="user_provided")
+        if name in given
+        else Param(value=getattr(preset, name), unit=unit, source="defaulted")
+        for name, unit in PARAMS.items()
+        if name in given or preset
+    }
     floor = Floor(
         id=floor_id,
         name=floor_name,
         elevation=elevation,
         ceiling_height=ceil_h,
         ceilings=ceilings or [],
+        slabs=slabs,
         walls=walls,
         junctions=junctions,
         boundaries=boundaries,
@@ -619,5 +662,6 @@ def read_dxf(
         plan_offset=PlanOffset(x=ox, y=oy, source="user_provided") if scope else None,
     )
     return Project(
-        **project, buildings=[Building(id="bldg-0", floors=[floor])], issues=issues
+        **project, buildings=[Building(id="bldg-0", floors=[floor])], issues=issues,
+        parameters=parameters,
     )

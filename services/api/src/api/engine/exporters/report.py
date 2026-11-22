@@ -28,6 +28,8 @@ def _measured(project: Project) -> Iterator[tuple[str, str, Measured, list[Sourc
                 yield w.id, "thickness", w.thickness, w.sources
                 if w.height is not None:
                     yield w.id, "height", w.height, w.sources
+            for sl in f.slabs:
+                yield sl.id, "thickness", sl.thickness, sl.sources
             for o in f.openings:
                 for name in ("offset", "width", "height", "sill_height"):
                     yield o.id, name, getattr(o, name), o.sources
@@ -54,6 +56,7 @@ def _counts(project: Project) -> dict[str, int]:
         "walls": sum(len(f.walls) for f in floors),
         "junctions": sum(len(f.junctions) for f in floors),
         "floor boundaries": sum(len(f.boundaries) for f in floors),
+        "slabs": sum(len(f.slabs) for f in floors),
         "openings": sum(len(f.openings) for f in floors),
     }
 
