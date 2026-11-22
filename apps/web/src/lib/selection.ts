@@ -27,7 +27,7 @@ export type RoomData = { id: string; name: string; name_source: Provenance; area
 
 export type ElementData = {
   id: string;
-  type: "wall" | "junction" | "floor_boundary" | "slab" | "column" | "balcony" | "balcony_railing" | "ceiling" | "opening_part";
+  type: "wall" | "junction" | "floor_boundary" | "slab" | "column" | "balcony" | "balcony_railing" | "stair" | "ramp" | "ceiling" | "opening_part";
   floor_id?: string;
   thickness?: Measured;
   height?: Measured | null; // wall height; for a ceiling, the ceiling-height parameter
@@ -43,6 +43,15 @@ export type ElementData = {
   railing_height?: Measured | null; // balcony
   railing_thickness?: Measured | null;
   balcony_id?: string; // balcony_railing
+  direction?: string | null; // stair, ramp: towards the top
+  total_rise?: Measured | null; // stair
+  rise_param?: Measured | null;
+  run_param?: Measured | null;
+  riser_count?: number | null;
+  riser_height?: Measured | null;
+  tread_depth?: Measured | null;
+  rise?: Measured | null; // ramp
+  slope?: number | null;
   sources?: SourceRef[];
   openings?: OpeningData[];
   opening?: OpeningData; // opening_part: the opening this frame/leaf/glass belongs to
@@ -161,6 +170,39 @@ export function describeElement(ud: ElementData): Panel {
         measured("Railing thickness", ud.railing_thickness),
       ],
       sourcesLabel: "Source entity (balcony layer)",
+      sources: refs(ud.sources),
+    };
+  }
+  if (ud.type === "stair") {
+    return {
+      title: "Stair",
+      id: ud.id,
+      rows: [
+        ...where,
+        { label: "Direction (towards the top)", value: ud.direction ?? "not set (no usable arrow line)" },
+        measured("Total rise (ceiling + slab)", ud.total_rise),
+        measured("Target riser height (parameter)", ud.rise_param),
+        measured("Target tread depth (parameter)", ud.run_param),
+        ud.riser_count ? { label: "Risers", value: `${ud.riser_count} (${ud.riser_count - 1} treads)` } : { label: "Steps", value: "not built (see issues)" },
+        measured("Riser height", ud.riser_height),
+        measured("Tread depth (from the drawing)", ud.tread_depth),
+      ],
+      sourcesLabel: "Source entities (outline, then arrow line)",
+      sources: refs(ud.sources),
+    };
+  }
+  if (ud.type === "ramp") {
+    return {
+      title: "Ramp",
+      id: ud.id,
+      rows: [
+        ...where,
+        { label: "Direction (towards the top)", value: ud.direction ?? "not set (no usable arrow line)" },
+        measured("Rise (ceiling + slab)", ud.rise),
+        measured("Slab thickness", ud.thickness),
+        { label: "Slope", value: ud.slope == null ? "not built (see issues)" : `${(ud.slope * 100).toFixed(1)} % (1:${(1 / ud.slope).toFixed(1)})` },
+      ],
+      sourcesLabel: "Source entities (outline, then arrow line)",
       sources: refs(ud.sources),
     };
   }

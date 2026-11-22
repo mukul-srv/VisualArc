@@ -118,6 +118,43 @@ def build_balcony_railings(floor: Floor) -> dict[str, tuple[Balcony, trimesh.Tri
     return out
 
 
+def _flight_frame(polygon, direction):
+    """(axis, bottom coordinate, sign, n0, n1, length): the flight along its direction."""
+    xs, ys = [p[0] for p in polygon], [p[1] for p in polygon]
+    axis, sign = (0 if direction[1] == "x" else 1), (1 if direction[0] == "+" else -1)
+    lo, hi = (min(xs), max(xs)) if axis == 0 else (min(ys), max(ys))
+    n0, n1 = (min(ys), max(ys)) if axis == 0 else (min(xs), max(xs))
+    return axis, (lo if sign > 0 else hi), sign, n0, n1, hi - lo
+
+
+def build_stair(s, z0: float) -> trimesh.Trimesh | None:
+    """Solid steps: block k (1..n-1) spans its tread and rises k risers above the floor."""
+    if s.riser_count is None:
+        return None
+    axis, bottom, sign, n0, n1, _ = _flight_frame(s.polygon, s.direction)
+    g, r = s.tread_depth.value, s.riser_height.value
+    blocks = []
+    for k in range(1, s.riser_count):
+        a, b = sorted((bottom + sign * (k - 1) * g, bottom + sign * k * g))
+        blocks.append(_slab_box(axis, a, b, n0, n1, z0, z0 + k * r))
+    return trimesh.util.concatenate(blocks)
+
+
+def build_ramp(r, z0: float) -> trimesh.Trimesh | None:
+    """Inclined slab: top from the floor (bottom end) up by `rise`, `thickness` thick vertically."""
+    if r.rise is None or r.thickness is None or r.direction is None:
+        return None
+    axis, bottom, sign, n0, n1, length = _flight_frame(r.polygon, r.direction)
+    t = r.thickness.value
+    a0, a1 = sorted((bottom, bottom + sign * length))
+    mesh = _slab_box(axis, a0, a1, n0, n1, z0 - t, z0)  # flat slab, then shear z by the slope
+    k = sign * r.rise.value / length  # dz per mm along the plan axis; det = 1, winding survives
+    row = [0.0, 0.0, 1.0, -k * bottom]
+    row[axis] = k
+    mesh.apply_transform([[1, 0, 0, 0], [0, 1, 0, 0], row, [0, 0, 0, 1]])
+    return mesh
+
+
 def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
     """Element id -> mesh for every wall, junction, floor boundary, slab and ceiling."""
     z0 = floor.elevation.value
@@ -141,6 +178,12 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
         )
     for b in floor.boundaries:
         meshes[b.id] = _flat(Polygon(b.polygon), z0)
+    for st in floor.stairs:  # without direction or heights: reported by the reader, no mesh
+        if (m := build_stair(st, z0)) is not None:
+            meshes[st.id] = m
+    for rp in floor.ramps:
+        if (m := build_ramp(rp, z0)) is not None:
+            meshes[rp.id] = m
     for col in floor.columns:
         if col.height is None:  # ceiling height missing: blocking, nothing is exported
             continue

@@ -70,6 +70,8 @@ Junctions (8) are always `inferred`: corner/T fill between paired-line walls, no
 - Rooms: 3
 - Columns: 0
 - Balconies: 0
+- Stairs: 0
+- Ramps: 0
 - Openings: 7
 
 ## Expected versus generated
@@ -84,6 +86,8 @@ Junctions (8) are always `inferred`: corner/T fill between paired-line walls, no
 | rooms | 3 | 3 | yes |
 | columns | 0 | 0 | yes |
 | balconies | 0 | 0 | yes |
+| stairs | 0 | 0 | yes |
+| ramps | 0 | 0 | yes |
 | openings | 7 | 7 | yes |
 | Wall heights (mm) | 3000 | 3000 | yes |
 

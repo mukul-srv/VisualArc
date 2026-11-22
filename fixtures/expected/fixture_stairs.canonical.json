@@ -1,0 +1,683 @@
+{
+  "schema_version": "0.7.0",
+  "id": "fixture_stairs",
+  "units": "mm",
+  "source_file": "fixture_stairs.dxf",
+  "buildings": [
+    {
+      "id": "bldg-0",
+      "floors": [
+        {
+          "id": "floor-0",
+          "name": "Level 0",
+          "elevation": {
+            "value": 0.0,
+            "unit": "mm",
+            "source": "defaulted"
+          },
+          "ceiling_height": {
+            "value": 3000.0,
+            "unit": "mm",
+            "source": "user_provided"
+          },
+          "walls": [
+            {
+              "id": "wall-001",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  200.0,
+                  100.0
+                ],
+                "end": [
+                  6200.0,
+                  100.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "33"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "37"
+                }
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
+            },
+            {
+              "id": "wall-002",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  100.0,
+                  200.0
+                ],
+                "end": [
+                  100.0,
+                  4200.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "36"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "3A"
+                }
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
+            },
+            {
+              "id": "wall-003",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  6300.0,
+                  200.0
+                ],
+                "end": [
+                  6300.0,
+                  4200.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "38"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "34"
+                }
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
+            },
+            {
+              "id": "wall-004",
+              "type": "wall",
+              "centreline": {
+                "kind": "line",
+                "start": [
+                  200.0,
+                  4300.0
+                ],
+                "end": [
+                  6200.0,
+                  4300.0
+                ]
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "source_extracted"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "39"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-WALL",
+                  "entity_handle": "35"
+                }
+              ],
+              "role": "exterior",
+              "role_source": "inferred"
+            }
+          ],
+          "junctions": [
+            {
+              "id": "junction-001",
+              "type": "junction",
+              "polygon": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  200.0,
+                  0.0
+                ],
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  0.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-001",
+                "wall-002"
+              ]
+            },
+            {
+              "id": "junction-002",
+              "type": "junction",
+              "polygon": [
+                [
+                  6200.0,
+                  0.0
+                ],
+                [
+                  6400.0,
+                  0.0
+                ],
+                [
+                  6400.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  200.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-001",
+                "wall-003"
+              ]
+            },
+            {
+              "id": "junction-003",
+              "type": "junction",
+              "polygon": [
+                [
+                  0.0,
+                  4200.0
+                ],
+                [
+                  200.0,
+                  4200.0
+                ],
+                [
+                  200.0,
+                  4400.0
+                ],
+                [
+                  0.0,
+                  4400.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-002",
+                "wall-004"
+              ]
+            },
+            {
+              "id": "junction-004",
+              "type": "junction",
+              "polygon": [
+                [
+                  6200.0,
+                  4200.0
+                ],
+                [
+                  6400.0,
+                  4200.0
+                ],
+                [
+                  6400.0,
+                  4400.0
+                ],
+                [
+                  6200.0,
+                  4400.0
+                ]
+              ],
+              "source": "inferred",
+              "wall_ids": [
+                "wall-003",
+                "wall-004"
+              ]
+            }
+          ],
+          "boundaries": [
+            {
+              "id": "fb-001",
+              "type": "floor_boundary",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  4200.0
+                ],
+                [
+                  200.0,
+                  4200.0
+                ]
+              ],
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "3B"
+                }
+              ]
+            }
+          ],
+          "openings": [],
+          "ceilings": [
+            {
+              "id": "ceiling-001",
+              "type": "ceiling",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  4200.0
+                ],
+                [
+                  200.0,
+                  4200.0
+                ]
+              ],
+              "elevation": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "height": {
+                "value": 3000.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "3B"
+                }
+              ]
+            }
+          ],
+          "slabs": [
+            {
+              "id": "slab-001",
+              "type": "slab",
+              "boundary_id": "fb-001",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  4200.0
+                ],
+                [
+                  200.0,
+                  4200.0
+                ]
+              ],
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR",
+                  "entity_handle": "3B"
+                }
+              ]
+            }
+          ],
+          "rooms": [
+            {
+              "id": "room-001",
+              "type": "room",
+              "name": "Room 1",
+              "name_source": "defaulted",
+              "polygon": [
+                [
+                  200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  200.0
+                ],
+                [
+                  6200.0,
+                  4200.0
+                ],
+                [
+                  200.0,
+                  4200.0
+                ]
+              ],
+              "holes": [],
+              "area": {
+                "value": 24000000.0,
+                "unit": "mm2",
+                "source": "inferred"
+              },
+              "label_sources": []
+            }
+          ],
+          "columns": [],
+          "balconies": [],
+          "stairs": [
+            {
+              "id": "stair-001",
+              "type": "stair",
+              "polygon": [
+                [
+                  450.0,
+                  500.0
+                ],
+                [
+                  5200.0,
+                  500.0
+                ],
+                [
+                  5200.0,
+                  1500.0
+                ],
+                [
+                  450.0,
+                  1500.0
+                ]
+              ],
+              "direction": "+x",
+              "total_rise": {
+                "value": 3200.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "rise_param": {
+                "value": 160.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "run_param": {
+                "value": 250.0,
+                "unit": "mm",
+                "source": "user_provided"
+              },
+              "riser_count": 20,
+              "riser_height": {
+                "value": 160.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "tread_depth": {
+                "value": 250.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR-STRS",
+                  "entity_handle": "3C"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR-STRS",
+                  "entity_handle": "3D"
+                }
+              ]
+            }
+          ],
+          "ramps": [
+            {
+              "id": "ramp-001",
+              "type": "ramp",
+              "polygon": [
+                [
+                  450.0,
+                  2500.0
+                ],
+                [
+                  5200.0,
+                  2500.0
+                ],
+                [
+                  5200.0,
+                  3500.0
+                ],
+                [
+                  450.0,
+                  3500.0
+                ]
+              ],
+              "direction": "+x",
+              "rise": {
+                "value": 3200.0,
+                "unit": "mm",
+                "source": "inferred"
+              },
+              "thickness": {
+                "value": 200.0,
+                "unit": "mm",
+                "source": "defaulted"
+              },
+              "slope": 0.6736842105263158,
+              "sources": [
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR-RAMP",
+                  "entity_handle": "3E"
+                },
+                {
+                  "format": "dxf",
+                  "layer": "A-FLOR-RAMP",
+                  "entity_handle": "3F"
+                }
+              ]
+            }
+          ],
+          "plan_offset": null
+        }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "code": "elevation_defaulted",
+      "severity": "warning",
+      "message": "floor elevation assumed 0 mm; DXF plan carries no elevation",
+      "sources": []
+    },
+    {
+      "code": "wall_role_inferred",
+      "severity": "warning",
+      "message": "4 wall(s) have no role layer (A-WALL-EXTR, A-WALL-INTR); role inferred from geometry (a face on the outer boundary of all walls = exterior). Walls around an interior courtyard read as interior.",
+      "sources": [
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "33"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "37"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "36"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "3A"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "38"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "34"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "39"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-WALL",
+          "entity_handle": "35"
+        }
+      ]
+    },
+    {
+      "code": "room_name_defaulted",
+      "severity": "warning",
+      "message": "no label inside Room 1; numbered names assumed",
+      "sources": []
+    },
+    {
+      "code": "ramp_slope_steep",
+      "severity": "warning",
+      "message": "ramp-001: rises 3200 mm (ceiling + slab, a full floor) over 4750 mm = 1:1.5, steeper than the 1:12 limit; built as drawn",
+      "sources": [
+        {
+          "format": "dxf",
+          "layer": "A-FLOR-RAMP",
+          "entity_handle": "3E"
+        },
+        {
+          "format": "dxf",
+          "layer": "A-FLOR-RAMP",
+          "entity_handle": "3F"
+        }
+      ]
+    },
+    {
+      "code": "slab_thickness_defaulted",
+      "severity": "warning",
+      "message": "Slab thickness assumed 200 mm (residential default); not in the DXF",
+      "sources": []
+    }
+  ],
+  "parameters": {
+    "ceiling_height": {
+      "value": 3000.0,
+      "unit": "mm",
+      "source": "user_provided"
+    },
+    "slab_thickness": {
+      "value": 200.0,
+      "unit": "mm",
+      "source": "defaulted"
+    },
+    "roof_type": {
+      "value": "gable",
+      "unit": "none",
+      "source": "defaulted"
+    },
+    "roof_pitch": {
+      "value": 30.0,
+      "unit": "deg",
+      "source": "defaulted"
+    },
+    "stair_rise": {
+      "value": 160.0,
+      "unit": "mm",
+      "source": "user_provided"
+    },
+    "stair_run": {
+      "value": 250.0,
+      "unit": "mm",
+      "source": "user_provided"
+    },
+    "window_sill": {
+      "value": 900.0,
+      "unit": "mm",
+      "source": "defaulted"
+    },
+    "lintel_height": {
+      "value": 2100.0,
+      "unit": "mm",
+      "source": "defaulted"
+    },
+    "railing_height": {
+      "value": 900.0,
+      "unit": "mm",
+      "source": "defaulted"
+    }
+  }
+}

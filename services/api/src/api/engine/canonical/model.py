@@ -185,6 +185,52 @@ class Balcony(_Model):
     sources: list[SourceRef] = Field(min_length=1)
 
 
+Direction = Literal["+x", "-x", "+y", "-y"]
+
+
+class Stair(_Model):
+    """Straight flight from a rectangle on the stair layer. `direction` (towards the top) comes
+    from the arrow line; without it (or without the heights) nothing is built and an issue says
+    why. Steps are solid blocks: `riser_count` risers of `riser_height`, `riser_count - 1`
+    treads of `tread_depth` (the top riser meets the floor above)."""
+
+    id: str
+    type: Literal["stair"] = "stair"
+    polygon: list[Point2]  # the 4 corners of the drawn flight
+    direction: Direction | None = None
+    total_rise: Measured | None = None  # ceiling height + slab thickness (derived: inferred)
+    rise_param: Measured | None = None  # target riser height used to count the steps
+    run_param: Measured | None = None  # nominal tread depth, compared with the drawing
+    riser_count: int | None = None
+    riser_height: Measured | None = None  # total_rise / riser_count (inferred)
+    tread_depth: Measured | None = None  # drawn length / (riser_count - 1) (inferred)
+    sources: list[SourceRef] = Field(min_length=1)  # outline first, then the arrow
+
+    @model_validator(mode="after")
+    def _check(self) -> "Stair":
+        steps = (self.riser_count, self.riser_height, self.tread_depth)
+        if any(v is None for v in steps) and any(v is not None for v in steps):
+            raise ValueError(f"{self.id}: step fields go together")
+        if self.riser_count is not None and self.direction is None:
+            raise ValueError(f"{self.id}: steps need a direction")
+        if self.riser_count is not None and self.riser_count < 2:
+            raise ValueError(f"{self.id}: a stair needs at least 2 risers")
+        return self
+
+
+class Ramp(_Model):
+    """Inclined slab over a rectangle on the ramp layer, rising `rise` towards `direction`."""
+
+    id: str
+    type: Literal["ramp"] = "ramp"
+    polygon: list[Point2]
+    direction: Direction | None = None
+    rise: Measured | None = None  # ceiling height + slab thickness (inferred)
+    thickness: Measured | None = None  # slab thickness parameter
+    slope: float | None = None  # rise / drawn length, unitless
+    sources: list[SourceRef] = Field(min_length=1)
+
+
 class Ceiling(_Model):
     """Slab at floor elevation + user ceiling height, one per floor boundary."""
 
@@ -282,6 +328,8 @@ class Floor(_Model):
     rooms: list[Room] = []
     columns: list[Column] = []
     balconies: list[Balcony] = []
+    stairs: list[Stair] = []
+    ramps: list[Ramp] = []
     plan_offset: PlanOffset | None = None  # None = plan coordinates are the source's
 
     @model_validator(mode="after")
