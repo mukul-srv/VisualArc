@@ -92,7 +92,8 @@ export default function ViewerPage() {
     const sun = new THREE.DirectionalLight(0xffffff, 1.5);
     sun.position.set(5, 10, 5);
     scene.add(sun);
-    scene.add(new THREE.GridHelper(20, 20)); // 1 cell = 1 m
+    let grid = new THREE.GridHelper(20, 20); // 1 cell = 1 m; resized to the model once loaded
+    scene.add(grid);
     scene.add(new THREE.AxesHelper(2)); // R=X, G=Y(up), B=Z
 
     // --- selection: click (not drag) picks a mesh; a hit inside a wall's aperture picks the opening
@@ -307,11 +308,15 @@ export default function ViewerPage() {
         camera = ortho;
         controls.object = ortho;
         controls.enableRotate = false;
+        controls.mouseButtons.LEFT = THREE.MOUSE.PAN; // click-drag moves across the plan
+        controls.touches.ONE = THREE.TOUCH.PAN;
         fitPlan();
       } else if (!isTop && camera === ortho && saved3d) {
         camera = persp;
         controls.object = persp;
         controls.enableRotate = true;
+        controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+        controls.touches.ONE = THREE.TOUCH.ROTATE;
         persp.position.copy(saved3d.position);
         controls.target.copy(saved3d.target);
       } else if (!isTop) {
@@ -334,6 +339,13 @@ export default function ViewerPage() {
         center = box.getCenter(new THREE.Vector3());
         size = Math.max(s.x, s.z);
         planBox = box;
+        // grid extends well past the model (3x its larger side, min 20 m, even cell count)
+        const cells = Math.max(20, Math.ceil((size * 3) / 2) * 2);
+        scene.remove(grid);
+        grid.dispose();
+        grid = new THREE.GridHelper(cells, cells);
+        grid.position.set(center.x, box.min.y, center.z);
+        scene.add(grid);
         Object.assign(controls, orbitLimits(box));
         place(false);
         setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
