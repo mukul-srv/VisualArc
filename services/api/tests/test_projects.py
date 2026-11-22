@@ -51,7 +51,7 @@ def test_two_floors_manifest_and_glb_at_elevation(client):
     assert canon["elevation"]["source"] == "user_provided"
     glb = client.get(b.json()["artifacts"]["glb"]).content
     scene = trimesh.load(trimesh.util.wrap_as_stream(glb), file_type="glb")
-    assert scene.bounds[0][1] == pytest.approx(3.2005, abs=1e-6)  # model already at elevation
+    assert scene.bounds[0][1] == pytest.approx(3.2005 - 0.2, abs=1e-6)  # at elevation, minus the default 200 mm slab
 
 
 def test_duplicate_name_and_elevation_rejected_nothing_appended(client):

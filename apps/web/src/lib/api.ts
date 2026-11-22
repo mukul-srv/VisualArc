@@ -30,6 +30,13 @@ export type Preset = {
   window_height: number;
   window_sill: number;
   floor_to_floor: number;
+  slab_thickness?: number;
+  roof_type?: string;
+  roof_pitch?: number;
+  stair_rise?: number;
+  stair_run?: number;
+  lintel_height?: number;
+  railing_height?: number;
 };
 export type Presets = Record<BuildingType, Preset>;
 

@@ -22,22 +22,23 @@ export type OpeningData = {
 
 export type ElementData = {
   id: string;
-  type: "wall" | "junction" | "floor_boundary" | "ceiling";
+  type: "wall" | "junction" | "floor_boundary" | "slab" | "ceiling";
   floor_id?: string;
   thickness?: Measured;
-  height?: Measured | null;
+  height?: Measured | null; // wall height; for a ceiling, the ceiling-height parameter
   role?: "exterior" | "interior" | null; // wall; absent in pre-0.4.0 GLBs
   role_source?: Provenance | null;
   wall_ids?: string[];
   source?: Provenance; // junction: always "inferred"
   elevation?: Measured; // ceiling: floor elevation + ceiling height
+  boundary_id?: string; // slab: the floor boundary it sits under
   sources?: SourceRef[];
   openings?: OpeningData[];
 };
 
 export const PROVENANCE_LABEL: Record<Provenance, string> = {
   source_extracted: "extracted from DXF",
-  user_provided: "user-provided",
+  user_provided: "user-specified",
   defaulted: "ASSUMED DEFAULT (not in the drawing)",
   inferred: "INFERRED (not drawn)",
 };
@@ -131,7 +132,16 @@ export function describeElement(ud: ElementData): Panel {
     return {
       title: "Ceiling",
       id: ud.id,
-      rows: [...floor, measured("Elevation", ud.elevation)],
+      rows: [...floor, measured("Elevation", ud.elevation), ...(ud.height ? [measured("Ceiling height", ud.height)] : [])],
+      sourcesLabel: "Source entities (floor boundary)",
+      sources: refs(ud.sources),
+    };
+  }
+  if (ud.type === "slab") {
+    return {
+      title: "Slab",
+      id: ud.id,
+      rows: [...floor, measured("Thickness", ud.thickness), { label: "Under", value: ud.boundary_id ?? "" }],
       sourcesLabel: "Source entities (floor boundary)",
       sources: refs(ud.sources),
     };

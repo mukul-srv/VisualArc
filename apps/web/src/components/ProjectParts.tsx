@@ -5,7 +5,7 @@ import { useState } from "react";
 import { sortFloors, viewerUrl, type Floor, type Role } from "../lib/project";
 import styles from "./dashboard.module.css";
 
-export type TabId = "floors" | "conventions" | "versions" | "sharing";
+export type TabId = "floors" | "parameters" | "conventions" | "versions" | "sharing";
 
 /** Which actions a role gets: viewers read, editors change content, only the owner shares/deletes. */
 export const can = (role: Role) => ({
@@ -15,6 +15,7 @@ export const can = (role: Role) => ({
 
 export const tabsFor = (role: Role): { id: TabId; label: string }[] => [
   { id: "floors", label: "Floors" },
+  { id: "parameters", label: "Parameters" },
   { id: "conventions", label: "Conventions" },
   { id: "versions", label: "Versions" },
   ...(can(role).manage ? [{ id: "sharing" as const, label: "Sharing" }] : []),

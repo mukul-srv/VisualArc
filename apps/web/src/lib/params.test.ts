@@ -48,3 +48,16 @@ test("negative sill rejected, unknown units rejected", () => {
   expect(buildRequest(pre([]), form({ windowSill: "-1" })).ok).toBe(false);
   expect(buildRequest(pre([]), form({ units: "parsecs" })).ok).toBe(false);
 });
+
+import { diffParameters } from "./parameters";
+
+test("diffParameters sets changes, resets emptied user values, keeps untouched defaults", () => {
+  const loaded = {
+    ceiling_height: { value: 2700, unit: "mm", source: "defaulted" },
+    slab_thickness: { value: 300, unit: "mm", source: "user_provided" },
+    roof_pitch: { value: 30, unit: "deg", source: "defaulted" },
+  } as const;
+  const r = diffParameters({ ...loaded }, { ceiling_height: "2400", slab_thickness: "", roof_pitch: "30" });
+  expect(r).toEqual({ ok: true, values: { ceiling_height: 2400, slab_thickness: null } });
+  expect(diffParameters({ ...loaded }, { ceiling_height: "-1", slab_thickness: "300", roof_pitch: "90" }).ok).toBe(false);
+});

@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.engine.settings import DEFAULTS
 
-SCHEMA_VERSION = "0.6.0"
+SCHEMA_VERSION = "0.7.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -95,6 +95,32 @@ class FloorBoundary(_Model):
     sources: list[SourceRef]
 
 
+class Param(_Model):
+    """One project parameter (engine/parameters.py) with its provenance: `user_provided`
+    (the user's value) or `defaulted` (the building-type preset's)."""
+
+    value: float | str
+    unit: Literal["mm", "deg", "none"]
+    source: Provenance
+
+
+class Slab(_Model):
+    """Floor slab under a floor boundary: top at floor elevation, `thickness` below it."""
+
+    id: str
+    type: Literal["slab"] = "slab"
+    boundary_id: str
+    polygon: list[Point2]  # same ring as its boundary
+    thickness: Measured
+    sources: list[SourceRef]  # the boundary's sources
+
+    @model_validator(mode="after")
+    def _check(self) -> "Slab":
+        if self.thickness.value <= 0:
+            raise ValueError(f"{self.id}: slab thickness must be > 0 mm")
+        return self
+
+
 class Ceiling(_Model):
     """Slab at floor elevation + user ceiling height, one per floor boundary."""
 
@@ -103,6 +129,7 @@ class Ceiling(_Model):
     polygon: list[Point2]  # same ring as its boundary
     # derived sum (floor elevation + ceiling height): never source_extracted
     elevation: Measured
+    height: Measured | None = None  # the ceiling-height parameter it was built from
     sources: list[SourceRef]  # the boundary's sources
 
 
@@ -161,6 +188,7 @@ class Floor(_Model):
     boundaries: list[FloorBoundary] = []
     openings: list[Opening] = []
     ceilings: list[Ceiling] = []
+    slabs: list[Slab] = []
     plan_offset: PlanOffset | None = None  # None = plan coordinates are the source's
 
     @model_validator(mode="after")
@@ -220,3 +248,4 @@ class Project(_Model):
     source_file: str
     buildings: list[Building] = []
     issues: list[Issue] = []
+    parameters: dict[str, Param] = {}

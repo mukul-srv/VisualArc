@@ -30,6 +30,11 @@ const call = (method: string, path: string, f: Fetch, body?: unknown) =>
     return res.status === 204 ? new Response("{}") : res;
   });
 
+// Project parameters (ceiling height, slab thickness, roof...) with provenance; changing them is a job
+// (lib/jobs.ts changeParametersJob) because every floor is regenerated.
+export type ProjectParam = { value: number | string; unit: "mm" | "deg" | "none"; source: "user_provided" | "defaulted" };
+export const getParameters = (pid: string, f: Fetch = fetch) => call("GET", `/projects/${pid}/parameters`, f);
+
 export const listProjects = (f: Fetch = fetch) => listOf<ProjectSummary>("/projects", f);
 export const recentGenerations = (f: Fetch = fetch) => listOf<RecentGeneration>("/generations/recent", f);
 export const listVersions = (pid: string, f: Fetch = fetch) => listOf<VersionInfo>(`/projects/${pid}/versions`, f);
