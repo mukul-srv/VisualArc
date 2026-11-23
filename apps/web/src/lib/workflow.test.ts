@@ -352,7 +352,7 @@ test("a door of fixture_openings opens about its hinge and becomes passable", as
 });
 
 
-test("raising the ceiling or the wall height regenerates the stair at the new height, in the served GLB", async () => {
+test("raising the ceiling regenerates the stair at the new height in the served GLB; the walls alone do not move it", async () => {
   const jobs = await import("./jobs");
   const created = await api.createProject("Stairs params");
   if (!created.ok) throw new Error(created.message);
@@ -370,12 +370,17 @@ test("raising the ceiling or the wall height regenerates the stair at the new he
     scene.traverse((o) => o.userData?.type === "stair" && (y = new THREE.Box3().setFromObject(o).max.y));
     return y;
   };
-  expect(await top()).toBeCloseTo(0.2 + 19 * 0.16, 3); // 20 risers: the top tread, a riser below the floor above
-  // [parameters, total rise = taller of wall/ceiling + 200 mm slab, risers = round(total / 160)]
-  for (const [body, total, risers] of [[{ wall_height: 3600 }, 3800, 24], [{ ceiling_height: 4000 }, 4200, 26], [{ ceiling_height: 3000, wall_height: 3000 }, 3200, 20]] as const) {
+  // finished floor 0.2 m; total rise = ceiling + 200 mm slab = the distance to the next finished floor;
+  // risers = round(total / 160); the top tread is one riser below that floor (0.2 + (risers - 1) * total / risers)
+  const tread = (total: number, risers: number) => 0.2 + ((risers - 1) * total) / risers / 1000;
+  expect(await top()).toBeCloseTo(tread(3200, 20), 3); // 3.24
+  for (const [body, total, risers] of [
+    [{ ceiling_height: 4000 }, 4200, 26], // the ceiling rises: the stair follows at once, no walking needed
+    [{ wall_height: 5000 }, 4200, 26], // walls above the ceiling: the next floor does not move, nor does the stair
+    [{ ceiling_height: 3000, wall_height: 3000 }, 3200, 20],
+  ] as const) {
     const r = await jobs.changeParametersJob(pid, body);
     if (!r.ok) throw new Error(r.message);
-    // the top tread is one riser (total / risers) below the floor above; no walking needed to see it
-    expect(await top()).toBeCloseTo(0.2 + ((risers - 1) * total) / risers / 1000, 3);
+    expect(await top()).toBeCloseTo(tread(total, risers), 3);
   }
 }, 120_000);

@@ -56,6 +56,15 @@ export const STEP = {
 
 export const stepUpLimit = (model: THREE.Object3D) => (maxRiser(model) ?? STEP.fallback) + STEP.slack;
 
+/** The height to stand at where the walker already is, before any move. A stale height (the surface
+ *  under the walker is gone: a model swapped, a floor changed) with nothing within a step down would
+ *  otherwise trap them: every move reads as stepping off an edge. No support in reach: fall to the
+ *  baseline. Support in reach: stand on it. */
+export function settle(x: number, z: number, feetY: number, supports: THREE.Mesh[], baseY: number, stepUp: number): number {
+  const s = supportAt(x, z, feetY, supports, stepUp);
+  return s ? s.y : baseY;
+}
+
 const down = new THREE.Vector3(0, -1, 0);
 const caster = new THREE.Raycaster();
 

@@ -177,7 +177,7 @@ def test_missing_ceiling_height_is_a_tagged_warning_not_a_block(client):
     assert r.status_code == 201
     assert {i["code"] for i in r.json()["issues"]} == {
         "ceiling_height_defaulted", "elevation_defaulted", "wall_role_inferred", "slab_thickness_defaulted",
-        "room_name_defaulted", "roof_type_defaulted",
+        "room_name_defaulted", "roof_type_defaulted", "walls_above_ceiling",
     }
     r = client.post(GEN, json={"upload_id": uid, "wall_height": 3000, "ceiling_height": 2600})
     assert r.status_code == 201

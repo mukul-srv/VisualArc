@@ -14,10 +14,10 @@ import { ViewerToolbar } from "@/components/ViewerToolbar";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distanceToOpening, doorFor, nearestDoor, toggle as toggleDoor, whyNoToggle, type Door } from "@/lib/doors";
-import { collectSupports, dampTo, groundLevel, resolveHeight, stepUpLimit } from "@/lib/ground";
+import { collectSupports, dampTo, groundLevel, resolveHeight, settle, stepUpLimit } from "@/lib/ground";
 import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
 import { createTapGate } from "@/lib/tap";
-import { BASE_LIGHTS, WALK_FILL } from "@/lib/lighting";
+import { setWalkFill, SKY_LIGHT, SUN_LIGHT, WALK_FILL } from "@/lib/lighting";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, describeRoom, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel, type RoomData } from "@/lib/selection";
@@ -116,12 +116,11 @@ export default function ViewerPage() {
     const controls = new OrbitControls(persp as THREE.Camera, renderer.domElement);
 
     // the lights are data (lib/lighting.ts); walk mode adds a fill so the roof underside and ceilings show
-    const [sky, sunLight] = BASE_LIGHTS as [Extract<(typeof BASE_LIGHTS)[number], { kind: "hemisphere" }>, Extract<(typeof BASE_LIGHTS)[number], { kind: "directional" }>];
-    scene.add(new THREE.HemisphereLight(sky.sky, sky.ground, sky.intensity));
-    const sun = new THREE.DirectionalLight(sunLight.color, sunLight.intensity);
-    sun.position.set(...sunLight.dir);
+    scene.add(new THREE.HemisphereLight(SKY_LIGHT.sky, SKY_LIGHT.ground, SKY_LIGHT.intensity));
+    const sun = new THREE.DirectionalLight(SUN_LIGHT.color, SUN_LIGHT.intensity);
+    sun.position.set(...SUN_LIGHT.dir);
     scene.add(sun);
-    const fill = new THREE.AmbientLight(WALK_FILL.kind === "ambient" ? WALK_FILL.color : 0xffffff, WALK_FILL.intensity);
+    const fill = new THREE.AmbientLight(WALK_FILL.color, WALK_FILL.intensity);
     let grid = new THREE.GridHelper(20, 20); // 1 cell = 1 m; resized to the model once loaded
     scene.add(grid);
     scene.add(new THREE.AxesHelper(2)); // R=X, G=Y(up), B=Z
@@ -288,7 +287,7 @@ export default function ViewerPage() {
       if (!walk) return;
       walk.restore();
       persp.layers.disable(CEILING_LAYER);
-      scene.remove(fill);
+      setWalkFill(scene, fill, false);
       keys.clear();
       camera.position.copy(walk.saved.position);
       controls.target.copy(walk.saved.target);
@@ -320,7 +319,7 @@ export default function ViewerPage() {
         saved: { position: camera.position.clone(), target: controls.target.clone() },
       };
       persp.layers.enable(CEILING_LAYER); // ceilings are drawn only while walking
-      scene.add(fill); // inside, down-facing surfaces get no sun or sky
+      setWalkFill(scene, fill, true); // inside, down-facing surfaces get no sun or sky
       controls.enabled = false;
       setWalking(true);
       aim();
@@ -362,6 +361,7 @@ export default function ViewerPage() {
       last = now;
       if (!walk) return;
       // the eye eases to the exact ground height every frame (also when standing still or falling)
+      walk.floorY = settle(walk.pos.x, walk.pos.z, walk.floorY, walk.supports, walk.baseY, walk.stepUp); // never floating
       const goal = walk.floorY + WALK.eye;
       if (Math.abs(walk.eyeY - goal) > 1e-4) {
         walk.eyeY = dampTo(walk.eyeY, goal, dt);

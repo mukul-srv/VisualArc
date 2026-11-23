@@ -754,6 +754,20 @@ def read_dxf(
                     f"{settings.floor_label}; no ceiling built",
                 )
             )
+        if (
+            wall_height is not None
+            and wall_height > ceiling_height + settings.tolerance_mm
+            and ("wall_height" in given or "ceiling_height" in given)  # not just the preset's own pair
+        ):
+            issues.append(
+                Issue(
+                    code="walls_above_ceiling",
+                    severity="warning",
+                    message=f"wall height {wall_height:g} mm exceeds ceiling height {ceiling_height:g} mm: "
+                    "the storey is the ceiling height, so stairs and the next floor follow the ceiling "
+                    "and the walls rise above it (roof sits on the walls); set both to move the storey",
+                )
+            )
         if wall_height is not None and ceiling_height > wall_height:
             issues.append(
                 Issue(
@@ -816,14 +830,13 @@ def read_dxf(
         run_p = given.get("stair_run", preset.stair_run if preset else None)
         total = None
         if ceil_h is not None and slab_t is not None:  # derived sum, so inferred
-            # the storey height is the taller of the ceiling and the walls (a stair has to reach what is
-            # above the room, so raising either parameter raises the stair), plus the slab above
-            storey = max(ceil_h.value, height.value if height is not None else 0.0)
-            total = Measured(value=storey + slab_t, source="inferred")
+            # the storey is the CEILING height (vertical convention, model.py): the next floor's slab
+            # starts at this ceiling plane, so the stair rises ceiling + slab to the next finished floor
+            total = Measured(value=ceil_h.value + slab_t, source="inferred")
         elif flights:
             issues.append(Issue(
                 code="stair_rise_unknown", severity="warning",
-                message="total rise (storey height + slab thickness) is unknown "
+                message="total rise (ceiling height + slab thickness) is unknown "
                 f"({'no ceiling height' if ceil_h is None else 'no slab thickness'}); no steps or "
                 "ramp slope built", sources=[f.ref for f in flights[: settings.unmapped_ref_cap]]))
         for f in flights:

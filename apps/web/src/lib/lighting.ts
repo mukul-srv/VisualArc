@@ -5,19 +5,26 @@
 // brown: it rendered at about the background colour (headless render of the real model: pixel 28,19,22
 // against a background of 30,30,34), so nothing could be told apart. Walking inside needs a fill light.
 
-export type Light =
-  | { kind: "hemisphere"; sky: number; ground: number; intensity: number }
-  | { kind: "ambient"; color: number; intensity: number }
-  | { kind: "directional"; color: number; intensity: number; dir: [number, number, number] };
+export type HemisphereLight = { kind: "hemisphere"; sky: number; ground: number; intensity: number };
+export type AmbientLight = { kind: "ambient"; color: number; intensity: number };
+export type DirectionalLight = { kind: "directional"; color: number; intensity: number; dir: [number, number, number] };
+export type Light = HemisphereLight | AmbientLight | DirectionalLight;
 
 export const BACKGROUND = 0x1e1e22;
+// Each light has its own precise type, so the viewer needs no casts to build the three.js lights.
+export const SKY_LIGHT: HemisphereLight = { kind: "hemisphere", sky: 0xffffff, ground: 0x444455, intensity: 1.2 };
+export const SUN_LIGHT: DirectionalLight = { kind: "directional", color: 0xffffff, intensity: 1.5, dir: [5, 10, 5] };
 /** Lights of the orbit view (the viewer adds exactly these). */
-export const BASE_LIGHTS: Light[] = [
-  { kind: "hemisphere", sky: 0xffffff, ground: 0x444455, intensity: 1.2 },
-  { kind: "directional", color: 0xffffff, intensity: 1.5, dir: [5, 10, 5] },
-];
+export const BASE_LIGHTS: Light[] = [SKY_LIGHT, SUN_LIGHT];
 /** Added in walk mode: inside, down-facing surfaces (roof underside, ceilings) get no sun or sky. */
-export const WALK_FILL: Light = { kind: "ambient", color: 0xffffff, intensity: 0.9 };
+export const WALK_FILL: AmbientLight = { kind: "ambient", color: 0xffffff, intensity: 0.9 };
+
+/** Put the walk fill into the scene (once) or take it out; safe to call in any order. */
+export function setWalkFill(scene: { add(o: never): unknown; remove(o: never): unknown; children: unknown[] }, fill: unknown, on: boolean): void {
+  const present = scene.children.includes(fill);
+  if (on && !present) scene.add(fill as never);
+  if (!on && present) scene.remove(fill as never);
+}
 
 const rgb = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].map((v) => v / 255) as [number, number, number];
 const luminance = ([r, g, b]: [number, number, number]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
