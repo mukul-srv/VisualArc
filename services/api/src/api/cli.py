@@ -44,6 +44,7 @@ def _read(args):
         args.wall_height,
         args.max_bytes,
         args.units,
+        args.units_override,
         door_height=args.door_height,
         window_height=args.window_height,
         window_sill=args.window_sill,
@@ -97,6 +98,11 @@ def _main(argv: list[str] | None) -> None:
         choices=list(USER_UNITS),
         help="drawing units; required if the DXF has no $INSUNITS, error if it conflicts",
     )
+    p.add_argument(
+        "--units-override",
+        action="store_true",
+        help="--units replace a $INSUNITS header you know is wrong (reported as units_overridden)",
+    )
     p.add_argument("--out", type=Path, help="write JSON here instead of stdout")
     p = sub.add_parser("build", help="DXF -> canonical JSON + GLB + meta report")
     p.add_argument("dxf", type=Path)
@@ -113,6 +119,11 @@ def _main(argv: list[str] | None) -> None:
         "--units",
         choices=list(USER_UNITS),
         help="drawing units; required if the DXF has no $INSUNITS, error if it conflicts",
+    )
+    p.add_argument(
+        "--units-override",
+        action="store_true",
+        help="--units replace a $INSUNITS header you know is wrong (reported as units_overridden)",
     )
     p.add_argument("--out", type=Path, required=True, help="output directory")
     p.add_argument(

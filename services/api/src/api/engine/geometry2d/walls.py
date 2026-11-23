@@ -2,11 +2,14 @@
 
 Input: wall boundary segments in mm. Output: walls (centreline + thickness from
 the distance between two parallel face lines), inferred junction pieces filling
-L/T corners, and Issues. Never guesses: ambiguous pairings are blocking.
+L/T corners, and Issues. Never guesses: ambiguous pairings are blocking. Collinear
+segments that overlap are the same line drawn twice: they are merged into one (the
+union of the same points, nothing measured changes) and reported as a warning.
 """
 
 import math
 from dataclasses import dataclass
+from itertools import combinations
 
 from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.polygon import orient
@@ -101,12 +104,67 @@ def _usable(segments: list[Segment], tol: float) -> tuple[list[_Axial], list[Iss
     return axial, issues
 
 
+def _merge_overlaps(axial: list[_Axial], tol: float) -> tuple[list[_Axial], list[Issue]]:
+    """Merge collinear segments (same axis, line and layer) that overlap into one covering their union.
+    Segments that only touch end to end (split faces) stay as they are. Overlapping lines on different
+    layers are not merged: the layer carries the wall role, so pair_walls blocks on them."""
+    axial_pos = {a: n for n, a in enumerate(axial)}
+    out, issues = [], []
+    # lines within tol of each other are one line (float noise): number them, then order by layer and start
+    line_id: dict[_Axial, int] = {}
+    n, prev = -1, None
+    for a in sorted(axial, key=lambda a: (a.axis, a.c)):
+        if prev is None or a.axis != prev.axis or a.c - prev.c > tol:
+            n, prev = n + 1, a
+        line_id[a] = n
+    by_line = sorted(axial, key=lambda a: (line_id[a], a.seg.layer, a.lo))
+    i = 0
+    while i < len(by_line):
+        first = by_line[i]
+        group, hi = [first], first.hi
+        i += 1
+        while (
+            i < len(by_line)
+            and by_line[i].axis == first.axis
+            and by_line[i].seg.layer == first.seg.layer
+            and abs(by_line[i].c - first.c) <= tol
+            and by_line[i].lo < hi - tol
+        ):
+            group.append(by_line[i])
+            hi = max(hi, by_line[i].hi)
+            i += 1
+        if len(group) == 1:
+            out.append(first)
+            continue
+        rep = min(group, key=lambda a: axial_pos[a])  # the first drawn keeps its handle
+        lo = min(a.lo for a in group)
+        start, end = ((lo, first.c), (hi, first.c)) if first.axis == "h" else ((first.c, lo), (first.c, hi))
+        merged = Segment(rep.seg.handle, rep.seg.layer, start, end)
+        m = _Axial(merged, first.axis, first.c, lo, hi)
+        axial_pos[m] = axial_pos[rep]
+        out.append(m)
+        handles = ", ".join(sorted(a.seg.handle for a in group))
+        issues.append(
+            Issue(
+                code="overlapping_wall_lines",
+                severity="warning",
+                message=f"segments {handles} overlap on the same line; merged into one line "
+                f"({lo:.1f} to {hi:.1f} mm, same extent, nothing moved)",
+                sources=[a.seg.ref for a in group],
+            )
+        )
+    out.sort(key=lambda a: axial_pos[a])
+    return out, issues
+
+
 def pair_walls(
     segments: list[Segment], settings: Settings = DEFAULTS
 ) -> tuple[list[PairedWall], list[Issue]]:
     tol = settings.tolerance_mm
     thk_min, thk_max = settings.wall_thickness_min_mm, settings.wall_thickness_max_mm
     axial, issues = _usable(segments, tol)
+    axial, merged = _merge_overlaps(axial, tol)
+    issues += merged
 
     cands: dict[_Axial, list[_Axial]] = {a: [] for a in axial}
     for i, a in enumerate(axial):
@@ -117,13 +175,15 @@ def pair_walls(
             if shared <= tol:  # disjoint or touching end-to-end (split faces)
                 continue
             if abs(a.c - b.c) <= tol:
-                # duplicate/overlapping line on the same axis: never auto-dedupe
+                # same-layer overlaps were merged above, so this is the same line on two layers
+                # (e.g. exterior vs interior role): the roles cannot both hold, never auto-resolved
                 issues.append(
                     Issue(
                         code="overlapping_wall_lines",
                         severity="blocking",
-                        message=f"segments {a.seg.handle} and {b.seg.handle} overlap "
-                        f"by {shared:.1f} mm on the same line; remove the duplicate",
+                        message=f"segments {a.seg.handle} ({a.seg.layer}) and {b.seg.handle} "
+                        f"({b.seg.layer}) overlap by {shared:.1f} mm on the same line but lie on "
+                        "different layers; keep one",
                         sources=[a.seg.ref, b.seg.ref],
                     )
                 )
@@ -133,21 +193,28 @@ def pair_walls(
             cands[a].append(b)
             cands[b].append(a)
 
-    # One long face pairing with several split faces at the same offset is fine.
-    # Partners at different offsets (or on both sides) means we cannot tell which
-    # lines form the wall -> blocking, never a guess.
+    # One long face pairing with several split faces at the same offset is fine, and so are
+    # partners at different offsets along different stretches (the wall changes thickness).
+    # Partners at different offsets that compete for the same stretch (or sit on both sides of
+    # it) mean we cannot tell which lines form the wall -> blocking, never a guess.
     ambiguous = set()
     for a in axial:
         offsets = [b.c - a.c for b in cands[a]]
-        if any(abs(o - offsets[0]) > tol for o in offsets):
+        clash = {
+            b
+            for p, q in combinations(cands[a], 2)
+            if abs(p.c - q.c) > tol and min(a.hi, p.hi, q.hi) - max(a.lo, p.lo, q.lo) > tol
+            for b in (p, q)
+        }
+        if clash:
             ambiguous.add(a)
             issues.append(
                 Issue(
                     code="ambiguous_pairing",
                     severity="blocking",
                     message=f"segment {a.seg.handle} has parallel partners at different "
-                    f"offsets {sorted({round(o, 3) for o in offsets})} mm",
-                    sources=[a.seg.ref] + [b.seg.ref for b in cands[a]],
+                    f"offsets {sorted({round(b.c - a.c, 3) for b in clash})} mm over the same stretch",
+                    sources=[a.seg.ref] + [b.seg.ref for b in cands[a] if b in clash],
                 )
             )
         elif not offsets:

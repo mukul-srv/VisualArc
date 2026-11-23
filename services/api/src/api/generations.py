@@ -84,6 +84,7 @@ class ParamFields(BaseModel):
 class GenerationRequest(ParamFields):
     upload_id: str
     units: Literal[tuple(USER_UNITS)] | None = None  # type: ignore[valid-type]
+    units_override: bool = False  # `units` replace a header the user says is wrong
     door_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     window_height: float | None = Field(None, gt=0, allow_inf_nan=False, description="mm")
     # missing heights are filled from this type's preset (tagged `defaulted`, with a warning)
@@ -115,6 +116,7 @@ def read_project(req: GenerationRequest, user_id: str | None = None, check_uploa
             upload_path(req.upload_id),
             req.wall_height,
             user_units=req.units,
+            units_override=req.units_override,
             door_height=req.door_height,
             window_height=req.window_height,
             window_sill=req.window_sill,

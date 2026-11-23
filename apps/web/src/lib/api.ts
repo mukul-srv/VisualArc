@@ -46,6 +46,7 @@ export type GenerationParams = {
   wall_height?: number;
   ceiling_height?: number;
   units?: string;
+  units_override?: boolean; // the units replace a header the user says is wrong
   door_height?: number;
   window_height?: number;
   window_sill?: number;

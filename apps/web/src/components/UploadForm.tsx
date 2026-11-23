@@ -1,5 +1,5 @@
 import { isGenerationId, type Preflight, type Presets } from "../lib/api";
-import { BUILDING_TYPES, UNITS, type FormValues } from "../lib/params";
+import { BUILDING_TYPES, UNITS, unitsDoubtful, type FormValues } from "../lib/params";
 import { bboxSize, type SplitRow } from "../lib/split";
 import { HELP } from "../lib/help";
 import { Hint } from "./Hint";
@@ -54,11 +54,13 @@ export function UploadForm(p: Props) {
           </label>
         ))}
       </fieldset>
-      {pre.needs.includes("units") && (
+      {(pre.needs.includes("units") || unitsDoubtful(pre)) && (
         <label style={block}>
-          What unit was this drawing made in?{" "}
+          {pre.needs.includes("units")
+            ? "What unit was this drawing made in?"
+            : "The drawing's size looks wrong for the units in its header. If you know the real unit, choose it (it replaces the header):"}{" "}
           <select value={form.units} onChange={(e) => setForm({ ...form, units: e.target.value })}>
-            <option value="">select (required)</option>
+            <option value="">{pre.needs.includes("units") ? "select (required)" : "keep the header's units"}</option>
             {UNITS.map((u) => (
               <option key={u}>{u}</option>
             ))}

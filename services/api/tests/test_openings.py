@@ -329,8 +329,38 @@ def test_9_insert_on_door_layer(tmp_path):
     e = d.msp.add_blockref("DOOR", (1000, 0), dxfattribs={"layer": "A-DOOR"})
     p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     issue = _issue(p, "unsupported_opening_block")
-    assert issue.severity == "blocking" and _handles(issue.sources) == [e.dxf.handle]
-    assert "unmapped_layer" not in _codes(p)
+    # an empty block has no footprint: reported (warning), no opening made, nothing silently dropped
+    assert issue.severity == "warning" and _handles(issue.sources) == [e.dxf.handle]
+    assert "unmapped_layer" not in _codes(p) and not _floor(p).openings
+
+
+def _window_block(d, at, w=600, t=200, name="WIN"):
+    blk = d.doc.blocks.new(name)
+    for a, b in [((0, 0), (w, 0)), ((w, 0), (w, t)), ((w, t), (0, t)), ((0, t), (0, 0))]:
+        blk.add_line(a, b)
+    blk.add_arc((0, 0), 300, 0, 90)  # a swing symbol: not part of the footprint
+    return d.msp.add_blockref(name, at, dxfattribs={"layer": "A-GLAZ"})
+
+
+def test_insert_block_footprint_is_read_as_the_marker(tmp_path):
+    d = worked_example(Drawing(), glaz_marker=False)
+    e = _window_block(d, (3000, 0))  # fills the wall gap (3000..3600) exactly
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    window = [o for o in _floor(p).openings if o.kind == "window"]
+    assert [(o.width.value, o.span.start, o.span.end) for o in window] == [(600, (3000, 100), (3600, 100))]
+    assert _handles(window[0].sources)[0] == e.dxf.handle
+    note = _issue(p, "opening_from_block")
+    assert note.severity == "warning" and _handles(note.sources) == [e.dxf.handle]
+    assert "unsupported_opening_block" not in _codes(p)
+
+
+def test_insert_block_not_fitting_a_gap_is_reported_not_blocking(tmp_path):
+    d = worked_example(Drawing(), glaz_marker=False)
+    _window_block(d, (100, 0))  # over solid wall material
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    assert "opening_marker_without_gap" in _codes(p, "warning")
+    assert not [i for i in p.issues if i.code == "opening_marker_without_gap" and i.severity == "blocking"]
+    assert [o.kind for o in _floor(p).openings] == ["door"]  # no window was made from the block
 
 
 @pytest.mark.parametrize(
