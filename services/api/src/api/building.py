@@ -150,6 +150,11 @@ def _issue(code: str, severity: str, message: str, floors: list[str]) -> dict:
     return {"code": code, "severity": severity, "message": message, "sources": [], "floor_ids": floors}
 
 
+def _flat(bb) -> bool:
+    """No outline, or a zero-area one (a single line): it cannot be compared."""
+    return bb is None or bb[2] <= bb[0] or bb[3] <= bb[1]
+
+
 def check_alignment(floors: list[FloorData]) -> list[dict]:
     """Warn (never shift) when adjacent floors' outlines clearly differ in position."""
     out = []
@@ -157,15 +162,15 @@ def check_alignment(floors: list[FloorData]) -> list[dict]:
         if f.unreadable:
             out.append(_issue("floor_data_unreadable", "warning",
                               f"floor {f.name!r}: its model data is missing or unreadable", [f.id]))
-        elif f.bbox is None:
+        elif _flat(f.bbox):
             out.append(_issue("floor_no_outline", "info", f"floor {f.name!r} has no walls or floor "
-                              "outline, so it cannot be checked for alignment", [f.id]))
+                              "outline (or only a line), so it cannot be checked for alignment", [f.id]))
     for a, b in itertools.pairwise(floors):
-        if a.bbox is None or b.bbox is None:
+        if _flat(a.bbox) or _flat(b.bbox):
             continue
         ba, bb = box(*a.bbox), box(*b.bbox)
         inter = ba.intersection(bb).area
-        contain = inter / min(ba.area, bb.area) if min(ba.area, bb.area) > 0 else 0.0
+        contain = inter / min(ba.area, bb.area)
         wa, ha, wb, hb = a.bbox[2] - a.bbox[0], a.bbox[3] - a.bbox[1], b.bbox[2] - b.bbox[0], b.bbox[3] - b.bbox[1]
         shift = (b.bbox[0] - a.bbox[0], b.bbox[1] - a.bbox[1])
         same = abs(wa - wb) <= ALIGN_SAME_SIZE * max(wa, wb) and abs(ha - hb) <= ALIGN_SAME_SIZE * max(ha, hb)
@@ -282,7 +287,7 @@ def _save(pid: str, user_id: str, req: PairRef, status: str, message: str) -> di
             status == "confirmed" and p["status"] != "rejected" and (
                 (p["lower_floor"], p["lower_stair"]) == (req.lower_floor, req.lower_stair)
                 or (p["upper_floor"], p["upper_stair"]) == (req.upper_floor, req.upper_stair)))]
-        saved = [{k2: p[k2] for k2 in (*_FIELDS, "status")} for p in keep]
+        saved = [{k2: p[k2] for k2 in (*_FIELDS, "status")} for p in keep if p["status"] != "auto"]
         saved.append({**req.model_dump(), "status": status})
         row.data = {**row.data, "pairings": saved}
         _version(db, row, user_id, message)

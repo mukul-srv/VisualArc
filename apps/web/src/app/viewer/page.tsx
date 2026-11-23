@@ -5,6 +5,10 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { canonicalUrl, getProject, glbUrl, isGenerationId } from "@/lib/api";
+import { getBuilding, type Building } from "@/lib/building";
+import { blockedHint, blockedStairAt, blockedStairs, floorAtHeight, floorState, GAP, manifestBuilding, placements, walkableFloors, type View } from "@/lib/building-view";
+import { setGhost } from "@/lib/ghost";
+import { BuildingControls, BuildingStats } from "@/components/BuildingControls";
 import { parseManifest, pickFloor, sortFloors, viewerUrl, type Floor, type Manifest } from "@/lib/project";
 import { resolveStem } from "@/lib/model-stem";
 import { ViewerNav } from "@/components/ViewerNav";
@@ -44,11 +48,20 @@ export default function ViewerPage() {
 
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [viewing, setViewing] = useState<number | null>(null); // past version number, read-only
-  const [floorId, setFloorId] = useState<string | null>(null);
-  const [target, setTarget] = useState<{ url: string; stem: string } | null>(null);
+  // what to load: every floor's GLB of a project (id = floor id), or one model (id null)
+  const [target, setTarget] = useState<{ stem: string; loads: { id: string | null; url: string }[] } | null>(null);
+  const [building, setBuilding] = useState<Building | null>(null); // floors with offsets and stair pairings
+  const [view, setView] = useState<View>({ mode: "whole", activeId: null, gap: GAP.default, ghost: false });
+  const viewRef = useRef(view);
+  const buildingRef = useRef<Building | null>(null);
+  const applyView = useRef<(v: View, reframe: boolean) => void>(() => {});
+  const floorId = view.activeId;
   const share = useRef<string | null>(null); // read-only link token
   const [shared, setShared] = useState<boolean | null>(null); // null until the URL is read; true: opened through a share link (no account pages)
-  const floorTarget = (m: Manifest, f: Floor) => ({ url: glbUrl(f.generation_id, share.current), stem: `${m.name} / ${f.name}` });
+  const projectTarget = (m: Manifest) => ({
+    stem: m.name,
+    loads: sortFloors(m.floors).map((f) => ({ id: f.id, url: glbUrl(f.generation_id, share.current) })),
+  });
 
   // Resolve what to load from the query string. The scene effect below reloads on `target`.
   useEffect(() => {
@@ -64,43 +77,55 @@ export default function ViewerPage() {
       const vq = query.get("version"); // read-only history view of an older version
       const version = vq === null ? undefined : Number(vq);
       if (version !== undefined && !(Number.isInteger(version) && version >= 1)) return queueMicrotask(() => setStatus("error: invalid version"));
-      getProject(project, fetch, version, share.current).then((r) => {
+      // a past version has no building data (it describes the current state): its floors keep their stored offsets
+      Promise.all([getProject(project, fetch, version, share.current), version === undefined ? getBuilding(project, fetch, share.current) : null]).then(([r, br]) => {
         const m = r.ok ? parseManifest(r.manifest) : null;
         if (!r.ok || !m) return setStatus(r.ok ? "error: malformed project manifest" : `error: ${r.message}`);
+        if (br && !br.ok) return setStatus(`error: ${br.message}`);
         setViewing(version ?? null);
         const f = pickFloor(m, query.get("floor"));
         if (!f) return setStatus("error: project has no floors yet");
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
         setManifest(m);
-        setFloorId(f.id);
-        setTarget(floorTarget(m, f));
+        setBuilding(br?.ok ? br.building : manifestBuilding(m));
+        // ?floor= keeps showing just that floor (as before); without it the whole building
+        setView({ mode: query.get("floor") ? "isolate" : "whole", activeId: f.id, gap: GAP.default, ghost: false });
+        setTarget(projectTarget(m));
       });
     } else if (generation !== null) {
       if (!isGenerationId(generation)) return queueMicrotask(() => setStatus("error: invalid generation id"));
-      queueMicrotask(() => setTarget({ url: glbUrl(generation), stem: `generation ${generation.slice(0, 8)}` }));
+      queueMicrotask(() => setTarget({ stem: `generation ${generation.slice(0, 8)}`, loads: [{ id: null, url: glbUrl(generation) }] }));
     } else {
       const name = resolveStem(query.get("model"));
       if (name === null) return queueMicrotask(() => setStatus("error: invalid model name (allowed: letters, digits, _ and -)"));
-      queueMicrotask(() => setTarget({ url: `/models/${name}.glb`, stem: name }));
+      queueMicrotask(() => setTarget({ stem: name, loads: [{ id: null, url: `/models/${name}.glb` }] }));
     }
   }, []);
 
   // Rooms live in the canonical JSON, not the GLB: list them for the loaded model (API models only).
+  const roomsUrl = (target?.loads.find((l) => l.id === floorId) ?? target?.loads[0])?.url;
   useEffect(() => {
-    if (!target || !target.url.includes("/artifacts/glb")) return queueMicrotask(() => setRooms([]));
+    if (!roomsUrl || !roomsUrl.includes("/artifacts/glb")) return queueMicrotask(() => setRooms([]));
     let live = true;
-    fetch(canonicalUrl(target.url), { credentials: "include" })
+    fetch(canonicalUrl(roomsUrl), { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((c) => live && setRooms(c?.buildings?.[0]?.floors?.[0]?.rooms ?? []))
       .catch(() => live && setRooms([]));
     return () => {
       live = false;
     };
-  }, [target]);
+  }, [roomsUrl]);
+
+  // the scene reads the current view and building through refs; changing either re-places the floors
+  useEffect(() => {
+    viewRef.current = view;
+    buildingRef.current = building;
+    applyView.current(view, false);
+  }, [view, building]);
 
   useEffect(() => {
     if (!target) return;
-    const { url, stem } = target;
+    const { loads, stem } = target;
     const el = mount.current!;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e22);
@@ -127,7 +152,15 @@ export default function ViewerPage() {
 
     // --- selection: click (not drag) picks a mesh; a hit inside a wall's aperture picks the opening
     let model: THREE.Object3D | null = null;
-    let doors: Door[] = [];
+    let disposed = false;
+    const roots = new Map<string | null, THREE.Object3D>(); // one model per floor, placed by applyView
+    // floors that can be picked or measured: drawn at full strength
+    const pickable = () => [...roots.values()].filter((r) => r.visible && !r.userData.ghost);
+    const rootOf = (o: THREE.Object3D) => {
+      for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p.userData?.floorRoot) return p;
+      return null;
+    };
+    const doors: Door[] = [];
     let hintTimer: ReturnType<typeof setTimeout> | undefined;
     const notify = (msg: string) => {
       setHint(msg);
@@ -146,12 +179,12 @@ export default function ViewerPage() {
       selected = null;
       overlay = null;
     };
-    const showOpening = (o: OpeningData, thicknessMm: number, baseY: number) => {
+    const showOpening = (o: OpeningData, thicknessMm: number, baseY: number, shift: THREE.Vector2) => {
       overlay = new THREE.Mesh(
         new THREE.BoxGeometry(1, 1, 1),
         new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.45 }),
       );
-      const box = openingBox(o, thicknessMm, baseY);
+      const box = openingBox(o, thicknessMm, baseY, shift);
       box.getCenter(overlay.position);
       box.getSize(overlay.scale);
       scene.add(overlay);
@@ -204,10 +237,10 @@ export default function ViewerPage() {
     };
     const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
     // a door or window under a double click/tap: toggle a door (orbit and walk); say why when it cannot
-    const toggleOpening = (o: OpeningData) => {
-      const why = whyNoToggle(o, doors);
+    const toggleOpening = (o: OpeningData, pool: Door[]) => {
+      const why = whyNoToggle(o, pool);
       if (why) return notify(why);
-      const d = doorFor(doors, o.id)!;
+      const d = doorFor(pool, o.id)!;
       if (walk && distanceToOpening(d, walk.pos) > DOOR.reach) return notify("Too far from the door: walk closer.");
       if (walk && d.open && !canClose(d, walk.pos)) return notify("Step out of the doorway first.");
       toggleDoor(d);
@@ -217,13 +250,13 @@ export default function ViewerPage() {
     const gate = createTapGate();
     const select = (ray: THREE.Ray) => {
       if (!model || walk) return;
-      const pick = pickElement(model, ray);
+      const pick = pickElement(pickable(), ray);
       clearSelection();
       if (!pick) return setPanel(null);
       const ud = pick.mesh.userData as ElementData;
       if (pick.opening) {
         // opening selected: overlay only, so the host wall is not shown as selected too
-        showOpening(pick.opening, ud.thickness?.value ?? 0, pick.baseY);
+        showOpening(pick.opening, ud.thickness?.value ?? 0, pick.baseY, pick.shift);
         return setPanel(describeOpening(pick.opening));
       }
       const mat = (pick.mesh.material as THREE.MeshStandardMaterial).clone();
@@ -242,15 +275,15 @@ export default function ViewerPage() {
       );
       const ray = raycaster.ray.clone();
       if (measureOn) {
-        const pick = pickElement(model, ray);
+        const pick = pickElement(pickable(), ray);
         return pick && measureClick(pick.mesh, pick.point);
       }
       gate.tap(
         { t: performance.now(), x: e.clientX, y: e.clientY },
         () => select(ray),
         () => {
-          const hit = model && pickElement(model, ray);
-          if (hit?.opening) toggleOpening(hit.opening);
+          const hit = model && pickElement(pickable(), ray);
+          if (hit?.opening) toggleOpening(hit.opening, doors.filter((d) => d.root === rootOf(hit.mesh)));
           else select(ray); // a double click elsewhere behaves like a click
         },
       );
@@ -301,12 +334,23 @@ export default function ViewerPage() {
     const enterWalk = () => {
       if (!model) return;
       if (camera === ortho) return setStatus("switch to Perspective to walk");
-      const spawn = spawnPoint(model);
+      const v = viewRef.current;
+      const b = buildingRef.current;
+      if (v.mode === "exploded") return notify("Walking needs the floors stacked: choose Whole building or Isolate floor.");
+      // the floors the walker can reach: shown at full strength and joined by paired stairs (no pairing, no passage)
+      const ids = b && v.activeId ? walkableFloors(b, v) : null;
+      const walkRoots = ids ? [...ids].flatMap((i) => roots.get(i) ?? []) : [...roots.values()];
+      const home = roots.get(v.activeId) ?? walkRoots[0];
+      const spawn = home && spawnPoint(home);
       if (!spawn) return setStatus("walk mode needs a floor boundary in the model");
       setMeasure(false);
       clearSelection();
       setPanel(null);
-      const colliders = collectColliders(model);
+      // an unpaired stair is a solid block: neither climbed nor walked through
+      const blocked = b ? blockedStairs(b) : new Set<string>();
+      const isBlocked = (m: THREE.Mesh) => m.userData?.type === "stair" && blocked.has(`${m.userData.floor_id}/${m.userData.id}`);
+      const surfaces = walkRoots.flatMap(collectSupports);
+      const colliders = [...walkRoots.flatMap(collectColliders), ...surfaces.filter(isBlocked)];
       walk = {
         pos: spawn.pos,
         floorY: spawn.floorY,
@@ -316,9 +360,9 @@ export default function ViewerPage() {
         yaw: 0,
         pitch: 0,
         colliders,
-        supports: collectSupports(model),
+        supports: surfaces.filter((m) => !isBlocked(m)),
         baseY: spawn.floorY,
-        stepUp: stepUpLimit(model),
+        stepUp: Math.max(...walkRoots.map(stepUpLimit)),
         restore: makeDoubleSided([...colliders, ...doors.map((d) => d.leaf)]),
         saved: { position: camera.position.clone(), target: controls.target.clone() },
       };
@@ -329,12 +373,20 @@ export default function ViewerPage() {
       aim();
     };
     toggleWalk.current = () => (walk ? exitWalk() : enterWalk());
+    // doors on the floor the walker is on (opening ids repeat from floor to floor)
+    const doorsHere = () => {
+      const b = buildingRef.current;
+      if (!walk || !b) return doors;
+      const fid = floorAtHeight(b, viewRef.current, walk.floorY);
+      return doors.filter((d) => d.root?.userData.floorId === fid);
+    };
     const onKey = (e: KeyboardEvent, down: boolean) => {
       if (e.key === "Escape" && down) return measureOn ? setMeasure(false) : exitWalk();
       if (down && walk && e.key.toLowerCase() === "e" && !e.repeat) {
-        const d = nearestDoor(doors, walk.pos);
+        const here = doorsHere();
+        const d = nearestDoor(here, walk.pos);
         if (!d) return notify("No door within reach.");
-        return toggleOpening(d.opening);
+        return toggleOpening(d.opening, here);
       }
       if (down && walk) keys.add(e.key.toLowerCase());
       if (!down) keys.delete(e.key.toLowerCase()); // always, or a key released after Esc sticks
@@ -359,6 +411,7 @@ export default function ViewerPage() {
     window.addEventListener("pointerup", onLookUp);
     let lastFrame = performance.now();
     let last = performance.now();
+    let lastBlocked: string | null = null;
     const stepWalk = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -376,6 +429,14 @@ export default function ViewerPage() {
       if (Math.abs(walk.eyeY - goal) > 1e-4) {
         walk.eyeY = dampTo(walk.eyeY, goal, dt);
         aim();
+      }
+      const b = buildingRef.current;
+      const fid = b && floorAtHeight(b, viewRef.current, walk.floorY);
+      const stuck = b && fid ? blockedStairAt(b, fid, walk.pos.x, walk.pos.z) : null;
+      const stuckKey = stuck ? `${fid}/${stuck.stair}` : null;
+      if (stuckKey !== lastBlocked) {
+        lastBlocked = stuckKey;
+        if (stuck) notify(blockedHint(stuck));
       }
       const f = (keys.has("w") || keys.has("arrowup") ? 1 : 0) - (keys.has("s") || keys.has("arrowdown") ? 1 : 0);
       const r = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0);
@@ -433,41 +494,74 @@ export default function ViewerPage() {
     };
     setTop.current = place;
 
-    new GLTFLoader().load(
-      url,
-      (gltf) => {
-        scene.add(gltf.scene);
-        model = gltf.scene;
-        layerCeilings(model);
-        doors = buildDoors(model);
-        applyCeilingVisibility(model, true); // ceilings share the roof's underside plane: the roof shows instead
-        setRoofPresent(hasRoof(model));
+    // every floor's model is loaded once; applyView places, shows and ghosts them without reloading
+    const frame = (reframe: boolean) => {
+      if (!model) return new THREE.Box3();
+      const box = new THREE.Box3();
+      roots.forEach((r) => r.visible && box.union(modelBox(r)));
+      if (box.isEmpty()) box.copy(modelBox(model));
+      const s = box.getSize(new THREE.Vector3());
+      center = box.getCenter(new THREE.Vector3());
+      size = Math.max(s.x, s.z);
+      planBox = box;
+      // grid extends well past the model (3x its larger side, min 20 m, even cell count)
+      const cells = Math.max(20, Math.ceil((size * 3) / 2) * 2);
+      scene.remove(grid);
+      grid.dispose();
+      grid = new THREE.GridHelper(cells, cells);
+      // at the floor level (top of the slab), not the model's lowest point: the slab is below grade
+      grid.position.set(center.x, Math.min(groundLevel(model, lowestMm.current), box.max.y) - 0.002, center.z);
+      scene.add(grid);
+      Object.assign(controls, orbitLimits(box));
+      if (camera === ortho) fitPlan();
+      else if (reframe) place(false);
+      return box;
+    };
+    applyView.current = (v, reframe) => {
+      if (!model) return;
+      const b = buildingRef.current;
+      const lift = b ? placements(b, v) : null;
+      for (const [id, root] of roots) {
+        const at = (id !== null && lift?.get(id)) || { x: 0, y: 0, z: 0 };
+        root.position.set(at.x, at.y, at.z);
+        const state = id !== null && b ? floorState(v, id) : "visible";
+        root.visible = state !== "hidden";
+        setGhost(root, state === "ghost");
+      }
+      model.updateMatrixWorld(true);
+      clearSelection();
+      setPanel(null);
+      frame(reframe);
+    };
+    const loader = new GLTFLoader();
+    Promise.all(loads.map((l) => loader.loadAsync(l.url)))
+      .then((gltfs) => {
+        if (disposed) return;
+        const group = new THREE.Group();
+        scene.add(group);
+        model = group;
+        gltfs.forEach((g, i) => {
+          const root = g.scene;
+          root.userData.floorRoot = true;
+          root.userData.floorId = loads[i].id;
+          group.add(root);
+          roots.set(loads[i].id, root);
+          layerCeilings(root);
+          doors.push(...buildDoors(root));
+          applyCeilingVisibility(root, true); // ceilings share the roof's underside plane: the roof shows instead
+        });
+        setRoofPresent([...roots.values()].some(hasRoof)); // only the top floor has one
         setRoofOn(true);
-        setRoof.current = (on) => {
-          if (!model) return;
-          setRoofVisible(model, on);
-          applyCeilingVisibility(model, on); // roof off: open to the sky, so no ceilings either
-        };
-        const box = modelBox(model);
-        const s = box.getSize(new THREE.Vector3());
-        center = box.getCenter(new THREE.Vector3());
-        size = Math.max(s.x, s.z);
-        planBox = box;
-        // grid extends well past the model (3x its larger side, min 20 m, even cell count)
-        const cells = Math.max(20, Math.ceil((size * 3) / 2) * 2);
-        scene.remove(grid);
-        grid.dispose();
-        grid = new THREE.GridHelper(cells, cells);
-        // at the floor level (top of the slab), not the model's lowest point: the slab is below grade
-        grid.position.set(center.x, Math.min(groundLevel(model, lowestMm.current), box.max.y) - 0.002, center.z);
-        scene.add(grid);
-        Object.assign(controls, orbitLimits(box));
-        place(false);
+        setRoof.current = (on) =>
+          roots.forEach((r) => {
+            setRoofVisible(r, on);
+            applyCeilingVisibility(r, on); // roof off: open to the sky, so no ceilings either
+          });
+        applyView.current(viewRef.current, false);
+        const s = frame(true).getSize(new THREE.Vector3());
         setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
-      },
-      undefined,
-      () => setStatus(`error: could not load ${url} (missing, unreachable or not a valid GLB). For API models check the backend is running; for ?model= build it and copy it to apps/web/public/models/`),
-    );
+      })
+      .catch(() => setStatus(`error: could not load ${loads.map((l) => l.url).join(", ")} (missing, unreachable or not a valid GLB). For API models check the backend is running; for ?model= build it and copy it to apps/web/public/models/`));
 
     renderer.setAnimationLoop(() => {
       const t = performance.now();
@@ -484,6 +578,8 @@ export default function ViewerPage() {
     };
     window.addEventListener("resize", onResize);
     return () => {
+      disposed = true;
+      applyView.current = () => {};
       window.removeEventListener("resize", onResize);
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointerup", onUp);
@@ -512,18 +608,20 @@ export default function ViewerPage() {
   }, [target]);
 
   // The model of a project floor can be regenerated elsewhere (Parameters tab, another tab): when this
-  // tab regains focus, reload the manifest and swap in the new generation if the floor's changed.
+  // tab regains focus, reload the manifest and building, and reload the models if a floor changed.
   useEffect(() => {
     if (!manifest || viewing !== null) return;
+    const key = (m: Manifest) => sortFloors(m.floors).map((f) => `${f.id}:${f.generation_id}`).join();
     const onFocus = () =>
-      getProject(manifest.id, fetch, undefined, share.current).then((r) => {
+      Promise.all([getProject(manifest.id, fetch, undefined, share.current), getBuilding(manifest.id, fetch, share.current)]).then(([r, br]) => {
         const m = r.ok ? parseManifest(r.manifest) : null;
-        const f = m && pickFloor(m, floorId);
-        const now = manifest.floors.find((x) => x.id === floorId);
-        if (!m || !f || !now || f.generation_id === now.generation_id) return;
+        if (!m || !br.ok || m.floors.length === 0) return;
+        setBuilding(br.building); // offsets and pairings may have changed
+        if (key(m) === key(manifest)) return;
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
         setManifest(m);
-        setTarget(floorTarget(m, f));
+        setView((v) => (m.floors.some((f) => f.id === v.activeId) ? v : { ...v, activeId: pickFloor(m, null)!.id }));
+        setTarget(projectTarget(m));
       });
     const onVisible = () => document.visibilityState === "visible" && onFocus();
     window.addEventListener("focus", onFocus);
@@ -532,18 +630,24 @@ export default function ViewerPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [manifest, floorId, viewing]);
+  }, [manifest, viewing]);
 
   const floors = manifest ? sortFloors(manifest.floors) : [];
   const current = floors.find((f) => f.id === floorId);
+  // the floor switcher picks the active floor (the one isolated, spawned in, and described); no reload
   const selectFloor = (f: Floor) => {
     if (!manifest || f.id === floorId) return;
     setPanel(null);
-    setTopState(false);
-    setFloorId(f.id);
-    setTarget(floorTarget(manifest, f));
-    window.history.replaceState(null, "", viewerUrl(manifest.id, f.id, viewing ?? undefined, share.current));
+    setView((v) => ({ ...v, activeId: f.id }));
+    applyView.current({ ...viewRef.current, activeId: f.id }, true);
+    if (viewRef.current.mode === "isolate") window.history.replaceState(null, "", viewerUrl(manifest.id, f.id, viewing ?? undefined, share.current));
   };
+  const changeView = (v: View, reframe: boolean) => {
+    setView(v);
+    applyView.current(v, reframe);
+    if (manifest && v.activeId && v.mode === "isolate") window.history.replaceState(null, "", viewerUrl(manifest.id, v.activeId, viewing ?? undefined, share.current));
+  };
+  const activeFloor = building?.floors.find((f) => f.id === floorId);
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
@@ -569,6 +673,9 @@ export default function ViewerPage() {
         {walking ? "WASD/arrows move, drag to look, E opens a door" : status}
         {hint && <div role="status" style={{ color: "#ffcc66" }}>{hint}</div>}
         <ViewerNav shared={shared} manifest={manifest} viewing={viewing} />
+        {building && building.floors.length > 1 && (
+          <BuildingControls view={view} disabled={walking} onChange={changeView} />
+        )}
         {floors.length > 0 && (
           <div role="group" aria-label="Floors" style={{ marginTop: 6 }}>
             {floors.map((f) => (
@@ -600,6 +707,7 @@ export default function ViewerPage() {
             {PROVENANCE_LABEL[current.elevation.source]}]
           </div>
         )}
+        {building && <BuildingStats building={building} active={activeFloor} />}
         <RoomList rooms={rooms} onSelect={(r) => setPanel(describeRoom(r, current?.id))} />
         <MetadataPanel panel={panel} />
         {measuring && (

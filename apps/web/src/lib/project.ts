@@ -1,7 +1,13 @@
 import type { Measured } from "./selection";
 
 // Pure project helpers (no DOM/three.js). The manifest comes from GET /api/v1/projects/{id}.
-export type Floor = { id: string; name: string; elevation: Measured; generation_id: string };
+export type Floor = {
+  id: string;
+  name: string;
+  elevation: Measured;
+  generation_id: string;
+  offset?: { x: number; y: number; unit: "mm"; source: "user_provided" | "defaulted" }; // manual plan offset (building assembly)
+};
 export type Role = "owner" | "editor" | "viewer";
 export type Manifest = { id: string; name: string; floors: Floor[]; role?: Role };
 
