@@ -271,12 +271,22 @@ def project_from_generation(req: FromGeneration, user: CurrentUser):
             src = canon["buildings"][0]["floors"][0]
             elevation = Measured.model_validate(src["elevation"]).model_dump(mode="json")
             name = src["name"]
+            elevation_assumed = (
+                f"Floor elevation assumed {elevation['value']:g} mm (standalone model)"
+                if elevation["source"] == "defaulted" else None)
         except (OSError, ValueError, KeyError, IndexError) as e:
             raise HTTPException(409, "this model's data is missing or unreadable") from e
         pid = create_project(req.name, user.id, version=False, db=db)
         row = db.get(ProjectRow, pid)
-        floor = {"id": "floor-0", "name": name, "elevation": elevation, "generation_id": g.id}
-        row.data = {**row.data, "floors": [floor]}
+        floor = {"id": "floor-0", "name": name, "elevation": elevation, "generation_id": g.id,
+                 "roof": True}  # the only floor is the top one
+        params = {}
+        if g.request:  # regenerable: the request the model was built from, now as a floor request
+            req_floor = {**g.request, "floor_name": name, "elevation": elevation["value"]}
+            floor.update(request=FloorRequest(**req_floor).model_dump(mode="json"),
+                         elevation_assumed=elevation_assumed, scope=None)
+            params = {"floor-0": _params(FloorRequest(**req_floor))}
+        row.data = {**row.data, "floors": [floor], "params": params}
         _version(db, row, user.id, "Created from a standalone model")
     return {"project_id": pid}
 
@@ -438,6 +448,8 @@ def effective_parameters(manifest: dict) -> dict:
             v = first[name]["value"]
         out[name] = ({"value": v, "unit": unit, "source": "user_provided"} if v is not None else
                      {"value": getattr(preset, name), "unit": unit, "source": "defaulted"})
+    # floors without a stored request (made before requests were kept) cannot be regenerated
+    out["_legacy_floors"] = [f["name"] for f in floors if "request" not in f]
     return out
 
 
@@ -454,7 +466,8 @@ def check_regenerable(db: Session, pid: str, user_id: str) -> None:
     old = [f["name"] for f in row.data["floors"] if "request" not in f]
     if old:
         raise HTTPException(422, "cannot regenerate floors created before parameters were "
-                                 f"editable: {', '.join(old)}. Re-add them from their DXF.")
+                                 f"editable: {', '.join(old)}. Add them again from their DXF (Add floor), "
+                                 "then remove the old ones.")
 
 
 def _replay(db: Session, pid: str, f: dict, overrides: dict, roof: bool, user_id: str, progress=None):

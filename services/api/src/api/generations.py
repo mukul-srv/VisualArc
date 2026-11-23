@@ -152,7 +152,8 @@ def run_generation(
     with session() as q:
         up = q.get(UploadRow, req.upload_id)
         name = up.filename[:100] if up and up.filename else None
-    row = GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id, name=name)
+    row = GenerationRow(id=gid, blob_prefix=_prefix(gid), owner_id=owner_id, name=name,
+                        request=req.model_dump(mode="json"))
     if db is not None:
         db.add(row)
     else:
