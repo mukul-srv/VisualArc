@@ -9,6 +9,7 @@ import { ConventionsPanel } from "./ConventionsPanel";
 import { getProjectConventions, listConventions, putProjectConventions, type ConventionsSpec, type PresetInfo } from "../lib/conventions";
 import { AccessPanel } from "./AccessPanel";
 import { HELP } from "../lib/help";
+import { BuildingPanel } from "./BuildingPanel";
 import { ParametersPanel } from "./ParametersPanel";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
@@ -109,6 +110,12 @@ export function ProjectView({ id }: { id: string }) {
               onRename={(fid, n) => run(() => renameFloor(id, fid, n), load)}
               onRemove={(fid) => run(() => removeFloor(id, fid), load)} />
             <p><small>To change the geometry, fix the DXF and add it as a new floor. Editing walls and openings in the app is planned.</small></p>
+            {manifest.floors.length > 1 && (
+              <details>
+                <summary>Building: floor offsets and stair pairs</summary>
+                <BuildingPanel projectId={id} readOnly={!edit} onChanged={load} />
+              </details>
+            )}
             {conv && convInfo && (
               <details open={convOpen} onToggle={(e) => setConvOpen((e.target as HTMLDetailsElement).open)}>
                 <summary title={HELP.conventions}>Layer conventions (advanced)</summary>

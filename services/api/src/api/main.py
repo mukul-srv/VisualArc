@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
+from api import building as _building  # noqa: F401  (registers its routes on the projects routers)
 from api.auth import router as auth_router
 from api.generations import public_router as generations_public
 from api.generations import router as generations_router
