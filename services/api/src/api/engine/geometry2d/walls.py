@@ -157,6 +157,52 @@ def _merge_overlaps(axial: list[_Axial], tol: float) -> tuple[list[_Axial], list
     return out, issues
 
 
+def _shared(a: _Axial, b: _Axial) -> float:
+    return min(a.hi, b.hi) - max(a.lo, b.lo)
+
+
+def _clash(a: _Axial, partners: list[_Axial], tol: float) -> set[_Axial]:
+    """Partners at different offsets that compete for the same stretch of `a`."""
+    return {
+        b
+        for p, q in combinations(partners, 2)
+        if abs(p.c - q.c) > tol and min(a.hi, p.hi, q.hi) - max(a.lo, p.lo, q.lo) > tol
+        for b in (p, q)
+    }
+
+
+def _describe(a: _Axial, b: _Axial, tol: float) -> str:
+    return f"{b.seg.handle} (offset {b.c - a.c:g} mm, {_shared(a, b):g} mm shared)"
+
+
+def _dominant(
+    a: _Axial, clash: set[_Axial], ratio: float, tol: float, thickness: tuple[float, float]
+) -> tuple[list[_Axial], list[_Axial]] | None:
+    """(kept partners, rejected partners) when one offset's partners share far more of `a` than
+    every other offset's (each at most `ratio` of it); None when no rule picks one."""
+    groups: dict[float, list[_Axial]] = {}
+    for b in sorted(clash, key=lambda b: (b.c, b.lo)):
+        key = next((k for k in groups if abs(k - b.c) <= tol), b.c)
+        groups.setdefault(key, []).append(b)
+    total = {k: sum(_shared(a, b) for b in g) for k, g in groups.items()}
+    best = max(total, key=total.get)
+    others = [k for k in groups if k != best]
+    if any(total[k] > ratio * total[best] for k in others):
+        # no offset dominates `a`: but if its competing partners are themselves a wall (a distance within
+        # the wall thickness range, so they pair with each other) over a far longer stretch, `a` is a
+        # stray line beside that wall and pairs with none (reported). Partners too far apart to be a
+        # wall prove nothing about `a`: that stays blocking.
+        if all(
+            thickness[0] - tol <= abs(p.c - q.c) <= thickness[1] + tol
+            and _shared(p, q) * ratio >= max(_shared(a, p), _shared(a, q))
+            for p, q in combinations(clash, 2)
+            if abs(p.c - q.c) > tol
+        ):
+            return [], sorted(clash, key=lambda b: (b.c, b.lo))
+        return None
+    return groups[best], [b for k in others for b in groups[k]]
+
+
 def pair_walls(
     segments: list[Segment], settings: Settings = DEFAULTS
 ) -> tuple[list[PairedWall], list[Issue]]:
@@ -196,16 +242,35 @@ def pair_walls(
     # One long face pairing with several split faces at the same offset is fine, and so are
     # partners at different offsets along different stretches (the wall changes thickness).
     # Partners at different offsets that compete for the same stretch (or sit on both sides of
-    # it) mean we cannot tell which lines form the wall -> blocking, never a guess.
+    # it) mean we cannot tell which lines form the wall -> blocking, unless one distance clearly
+    # dominates (see _dominant): then that pairing is kept, the others are rejected, and a warning
+    # lists both. No rule picking one stays blocking, never a guess.
     ambiguous = set()
     for a in axial:
+        clash = _clash(a, cands[a], tol)
+        if clash and (pick := _dominant(a, clash, settings.partner_dominance_ratio, tol, (thk_min, thk_max))):
+            keep, rejected = pick
+            for b in rejected:
+                cands[a].remove(b)
+                cands[b].remove(a)
+            how = (
+                f"paired with {', '.join(_describe(a, b, tol) for b in keep)}"
+                if keep
+                else "left unpaired (its partners already form walls with each other over a far longer stretch)"
+            )
+            issues.append(
+                Issue(
+                    code="ambiguous_pairing_resolved",
+                    severity="warning",
+                    message=f"segment {a.seg.handle} had partners at different distances over the same "
+                    f"stretch; {how}; rejected {', '.join(_describe(a, b, tol) for b in rejected)} "
+                    f"(each shares at most {settings.partner_dominance_ratio:.0%} of the other stretch: "
+                    "a corner or stub, not a second wall)",
+                    sources=[a.seg.ref, *(b.seg.ref for b in keep), *(b.seg.ref for b in rejected)],
+                )
+            )
+            clash = _clash(a, cands[a], tol)
         offsets = [b.c - a.c for b in cands[a]]
-        clash = {
-            b
-            for p, q in combinations(cands[a], 2)
-            if abs(p.c - q.c) > tol and min(a.hi, p.hi, q.hi) - max(a.lo, p.lo, q.lo) > tol
-            for b in (p, q)
-        }
         if clash:
             ambiguous.add(a)
             issues.append(

@@ -23,13 +23,24 @@ def _blocking(p):
 
 @pytest.mark.skipif(not LOCAL.is_dir(), reason="fixtures/local not present")
 @pytest.mark.parametrize("name", ["cadcraft-sample-house", "draftcraft-apartment", "villa-gf", "villa-ff"])
-def test_duplicate_lines_and_blocks_no_longer_block(name):
+def test_real_drawings_read_without_blocking_issues(name):
     path = LOCAL / f"{name}.dxf"
     if not path.is_file():
         pytest.skip(f"{path.name} not present")
     p = read_dxf(path, **KW)
-    assert not _blocking(p) & {"overlapping_wall_lines", "unsupported_opening_block"}
+    assert not _blocking(p)
     assert p.buildings and p.buildings[0].floors[0].walls
+
+
+@pytest.mark.parametrize("name", ["cadcraft-sample-house", "draftcraft-apartment"])
+def test_real_drawing_without_a_floor_outline_gets_an_inferred_one_and_its_openings(name):
+    path = LOCAL / f"{name}.dxf"
+    if not path.is_file():
+        pytest.skip(f"{path.name} not present")
+    f = read_dxf(path, building_type="residential", **KW).buildings[0].floors[0]
+    codes = {i.code for i in read_dxf(path, building_type="residential", **KW).issues}
+    assert f.boundaries and f.slabs and f.openings
+    assert {"floor_boundary_inferred", "opening_cut_into_wall"} <= codes
 
 
 @pytest.mark.skipif(not HOUSE.is_file(), reason="house drawing not present")

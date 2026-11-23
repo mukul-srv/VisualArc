@@ -257,6 +257,64 @@ def _analyse(segments, markers, consumed, settings):
     return pair_in, walls, issues, gaps, assoc, confirmed
 
 
+def cut_walls_at_markers(
+    segments: list[Segment], markers: list[Marker], settings: Settings = DEFAULTS
+) -> tuple[list[Segment], list[Issue]]:
+    """A marker lying exactly across a solid wall (its two edges along the wall are the wall's two
+    face lines, which run on past both of its ends) cuts the wall there: each face line is split at the
+    marker bounds, leaving the gap the marker then fills. Reported as a warning with the wall that was cut.
+    A marker that only partly overlaps the wall, sits off the faces, or is at a wall end is left alone
+    (the usual issues apply). Nothing else is changed."""
+    tol, issues, segs = settings.tolerance_mm, [], list(segments)
+    thk_min, thk_max = settings.wall_thickness_min_mm, settings.wall_thickness_max_mm
+    for m in markers:
+        x0, y0, x1, y1 = m.rect
+        hits = []
+        for axis, (c0, c1), (lo, hi) in (("h", (y0, y1), (x0, x1)), ("v", (x0, x1), (y0, y1))):
+            if not thk_min - tol <= c1 - c0 <= thk_max + tol:
+                continue
+            faces = [
+                [
+                    i
+                    for i, s in enumerate(segs)
+                    if (a := _axial(s, tol))
+                    and a.axis == axis
+                    and abs(a.c - c) <= tol
+                    and a.lo < lo - tol
+                    and a.hi > hi + tol
+                ]
+                for c in (c0, c1)
+            ]
+            if all(len(f) == 1 for f in faces):
+                hits.append((axis, lo, hi, [f[0] for f in faces]))
+        if len(hits) != 1:  # none, or a square marker that could cut either way: not guessed
+            continue
+        axis, lo, hi, idx = hits[0]
+        cut = []
+        for i in idx:
+            s, a = segs[i], _axial(segs[i], tol)
+            pieces = [(a.lo, lo), (hi, a.hi)]
+            cut.append((i, [
+                Segment(s.handle, s.layer, (p, a.c) if axis == "h" else (a.c, p),
+                        (q, a.c) if axis == "h" else (a.c, q))
+                for p, q in pieces
+            ]))
+        faces_cut = [segs[i] for i in idx]
+        for i, pieces in sorted(cut, reverse=True):
+            segs[i : i + 1] = pieces
+        issues.append(
+            Issue(
+                code="opening_cut_into_wall",
+                severity="warning",
+                message=f"{m.kind} marker {m.ref.entity_handle} lies across solid wall "
+                f"(faces {faces_cut[0].handle}, {faces_cut[1].handle}); the wall was cut at the "
+                "marker bounds and the opening made from it",
+                sources=[m.ref, *(s.ref for s in faces_cut)],
+            )
+        )
+    return segs, issues
+
+
 def resolve_openings(
     segments: list[Segment], markers: list[Marker], settings: Settings = DEFAULTS
 ) -> Resolution:

@@ -172,3 +172,36 @@ def test_overlapping_lines_on_different_layers_are_not_merged():
     assert [(i.code, i.severity) for i in issues if i.code == "overlapping_wall_lines"] == [
         ("overlapping_wall_lines", "blocking")
     ]
+
+
+def test_dominant_partner_resolves_ambiguity_and_lists_the_rejected():
+    # a 2000 mm face with its wall partner 100 mm away, and a 50 mm stub of another line 550 mm away
+    walls, _, issues = run([((0, 0), (2000, 0)), ((0, 100), (2000, 100)), ((1950, 550), (2000, 550))])
+    assert [(w.thickness, w.start, w.end) for w in walls] == [(100, (0, 50), (2000, 50))]
+    found = [i for i in issues if i.code == "ambiguous_pairing_resolved"]  # one per face that had both
+    assert found and all(i.severity == "warning" and "rejected H2" in i.message for i in found)
+    assert all({s.entity_handle for s in i.sources} >= {"H2"} for i in found)
+    assert not [i for i in issues if i.severity == "blocking"]
+
+
+def test_stray_line_beside_an_existing_wall_is_left_unpaired_not_blocking():
+    # a 50 mm stub 450 and 550 mm from the two faces of a long wall: neither partner dominates, but the faces
+    # already pair with each other over a far longer stretch
+    walls, _, issues = run([((0, -450), (50, -450)), ((0, 0), (2000, 0)), ((0, 100), (2000, 100))])  # the stub is read first
+    assert [(w.thickness, w.start[0], w.end[0]) for w in walls] == [(100, 0, 2000)]
+    found = [i for i in issues if i.code == "ambiguous_pairing_resolved"]
+    assert found and any("left unpaired" in i.message for i in found)
+    assert not [i for i in issues if i.severity == "blocking"]
+
+
+def test_equally_strong_competing_partners_stay_blocking():
+    # existing rule, with partners sharing the same long stretch: no rule picks one
+    _, _, issues = run([((0, 0), (2000, 0)), ((0, 200), (2000, 200)), ((0, 400), (2000, 400))])
+    assert {i.code for i in issues if i.severity == "blocking"} == {"ambiguous_pairing"}
+
+
+def test_stray_line_between_partners_too_far_apart_to_be_a_wall_stays_blocking():
+    # the long lines 800 mm apart cannot pair with each other (max wall thickness 600), so they do not
+    # make the 50 mm stub between them a stray line beside a wall: no rule picks one
+    _, _, issues = run([((0, 0), (50, 0)), ((0, -400), (2000, -400)), ((0, 400), (2000, 400))])
+    assert {i.code for i in issues if i.severity == "blocking"} == {"ambiguous_pairing"}

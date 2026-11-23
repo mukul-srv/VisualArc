@@ -124,6 +124,7 @@ def test_1_worked_example_exact_values(tmp_path):
 
     assert _codes(p) == {
         "no_closed_rooms": 1,  # one wall only
+        "floor_boundary_not_inferred": 1,  # and so no space to infer a floor boundary from
         "room_outline_open": 1,
         "roof_type_unknown": 1,
         "opening_dimension_defaulted": 2,
@@ -230,14 +231,38 @@ def test_3_marker_overlapping_wall_is_blocking(tmp_path, marker):
 # --- 4. association failures --------------------------------------------------
 
 
-def test_4_marker_on_unbroken_wall(tmp_path):
+def test_4_marker_exactly_across_a_solid_wall_cuts_it_and_says_so(tmp_path):
     d = Drawing()
     d.line("b", (0, 0), (5000, 0))
     d.line("t", (0, 200), (5000, 200))
     d.rect("M", 1000, 0, 1900, 200, "A-DOOR")
     p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
-    assert _issue(p, "opening_marker_without_gap").severity == "blocking"
-    assert len(_floor(p).walls) == 1 and not _floor(p).openings
+    cut = _issue(p, "opening_cut_into_wall")
+    assert cut.severity == "warning" and _handles(cut.sources) == [d.h["M"], d.h["b"], d.h["t"]]
+    assert not _codes(p, "blocking")
+    (door,) = _floor(p).openings
+    assert (door.span.start, door.span.end, door.width.value) == ((1000, 100), (1900, 100), 900)
+    (wall,) = _floor(p).walls  # the two cut halves merge back into one host wall around the opening
+    assert (wall.centreline.start, wall.centreline.end) == ((0, 100), (5000, 100))
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        (1000, 0, 1900, 100),  # half the wall thickness: sits off the far face
+        (1000, 50, 1900, 250),  # off the wall axis
+        (0, 0, 900, 200),  # at the wall end: no wall beyond it
+        (4500, 0, 5500, 200),  # runs past the wall end
+    ],
+)
+def test_4_marker_only_partly_over_a_solid_wall_is_not_cut(tmp_path, marker):
+    d = Drawing()
+    d.line("b", (0, 0), (5000, 0))
+    d.line("t", (0, 200), (5000, 200))
+    d.rect("M", *marker, "A-DOOR")
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    assert "opening_cut_into_wall" not in _codes(p)
+    assert _codes(p, "blocking") and len(_floor(p).walls) == 1 and not _floor(p).openings
 
 
 def test_4_marker_in_free_space(tmp_path):
@@ -356,7 +381,7 @@ def test_insert_block_footprint_is_read_as_the_marker(tmp_path):
 
 def test_insert_block_not_fitting_a_gap_is_reported_not_blocking(tmp_path):
     d = worked_example(Drawing(), glaz_marker=False)
-    _window_block(d, (100, 0))  # over solid wall material
+    _window_block(d, (100, 0), t=100)  # half the wall thickness: not across its two faces
     p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert "opening_marker_without_gap" in _codes(p, "warning")
     assert not [i for i in p.issues if i.code == "opening_marker_without_gap" and i.severity == "blocking"]
@@ -529,3 +554,11 @@ def test_13_units_scale_openings(tmp_path):
     assert o.width.value == pytest.approx(900, abs=1e-6)
     assert o.offset.value == pytest.approx(1000, abs=1e-6)
     assert o.width.source == "source_extracted"
+
+
+def test_block_exactly_across_a_solid_wall_cuts_it_like_a_marker(tmp_path):
+    d = worked_example(Drawing(), glaz_marker=False)
+    _window_block(d, (100, 0))  # 600 x 200: exactly across the two faces of the solid wall
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    assert "opening_cut_into_wall" in _codes(p, "warning") and "opening_from_block" in _codes(p)
+    assert sorted(o.kind for o in _floor(p).openings) == ["door", "window"]

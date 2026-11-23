@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.8.0",
+  "schema_version": "0.9.0",
   "id": "fixture_a",
   "units": "mm",
   "source_file": "fixture_a.dxf",
@@ -489,7 +489,8 @@
                   "layer": "A-FLOR",
                   "entity_handle": "3D"
                 }
-              ]
+              ],
+              "source": "source_extracted"
             },
             {
               "id": "fb-002",
@@ -518,7 +519,8 @@
                   "layer": "A-FLOR",
                   "entity_handle": "3E"
                 }
-              ]
+              ],
+              "source": "source_extracted"
             }
           ],
           "openings": [],

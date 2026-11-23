@@ -43,11 +43,12 @@ from api.engine.canonical.model import (
     Wall,
 )
 from api.engine.geometry2d.balconies import find_balconies
-from api.engine.geometry2d.floor import floor_issue
+from api.engine.geometry2d.floor import closed_outer_perimeter, floor_issue
 from api.engine.geometry2d.openings import (
     Marker,
     SwingArc,
     build_openings,
+    cut_walls_at_markers,
     door_swings,
     marker_rect,
     on_marker_boundary,
@@ -74,6 +75,40 @@ USER_UNITS = {
 
 class InputError(ValueError):
     """Expected bad input (not a DXF, corrupt, too large): report, don't traceback."""
+
+
+def _infer_boundaries(paired, pieces, rooms, settings: Settings):
+    """Floor boundaries for a floor whose drawing has no floor outline at all: the interior of each space
+    the walls close (inner wall faces), the same regions the rooms are built from, but only inside the closed
+    OUTER wall loop: closed rooms behind an open outer wall are not a floor. Not closed, nothing is
+    inferred and an issue says so. The boundary's sources are the walls that enclose it."""
+    cap = settings.unmapped_ref_cap
+    out = []
+    inside = closed_outer_perimeter(paired, pieces, settings)
+    for p in rooms if inside is not None else []:
+        ring = Polygon(p.polygon)
+        if not ring.is_valid or ring.area <= settings.tolerance_mm or not inside.buffer(settings.tolerance_mm).covers(ring):
+            continue
+        refs = list(dict.fromkeys(
+            s.ref for w in paired if w.rect().distance(ring) <= settings.tolerance_mm for s in w.sources))
+        out.append(FloorBoundary(id=f"fb-{len(out) + 1:03d}", polygon=p.polygon, sources=refs[:cap],
+                                 source="inferred"))
+    if not out:
+        return [], Issue(
+            code="floor_boundary_not_inferred",
+            severity="warning",
+            message="the drawing has no floor outline and its outer walls do not form a closed loop, so no "
+            "floor boundary could be inferred: there is no slab, ceiling or walking surface. Close the "
+            "outer wall outline, or draw the floor as a closed polyline on the floor layer",
+        )
+    return out, Issue(
+        code="floor_boundary_inferred",
+        severity="warning",
+        message=f"the drawing has no floor outline: {len(out)} floor boundary polygon(s) inferred from the "
+        "closed wall perimeter (the interior faces of the walls around each enclosed space). Check them, "
+        "or draw the floor as a closed polyline on the floor layer to replace them",
+        sources=list(dict.fromkeys(r for b in out for r in b.sources))[:cap],
+    )
 
 
 def _block_rect(e, mm, settings: Settings):
@@ -349,24 +384,6 @@ def read_dxf(
     def mm(p) -> tuple[float, float]:
         return (p[0] * k - ox, p[1] * k - oy)
 
-    if scope is None:  # a consolidated file must be split and confirmed first
-        split = detect_floors(doc, k, settings)
-        if len(split.candidates) > 1:
-            keys = ", ".join(c.key for c in split.candidates)
-            return Project(
-                **project,
-                issues=[
-                    Issue(
-                        code="floor_split_unconfirmed",
-                        severity="blocking",
-                        message=f"drawing holds {len(split.candidates)} floor candidates "
-                        f"({keys}); confirm each floor's name, elevation and offset "
-                        "(POST /api/v1/uploads/{id}/split) before generating",
-                    ),
-                    *split.issues,
-                ],
-            )
-
     issues: list[Issue] = []
     if overridden:
         issues.append(
@@ -386,8 +403,28 @@ def read_dxf(
                 f"--units {user_units}",
             )
         )
+    if scope is None:  # a consolidated file must be split and confirmed first
+        split = detect_floors(doc, k, settings)
+        if len(split.candidates) > 1:
+            keys = ", ".join(c.key for c in split.candidates)
+            return Project(
+                **project,
+                issues=[
+                    *issues,  # the units note too: the form keys the units override on it
+                    Issue(
+                        code="floor_split_unconfirmed",
+                        severity="blocking",
+                        message=f"drawing holds {len(split.candidates)} floor candidates "
+                        f"({keys}); confirm each floor's name, elevation and offset "
+                        "(POST /api/v1/uploads/{id}/split) before generating",
+                    ),
+                    *split.issues,
+                ],
+            )
+
     segments: list[Segment] = []
     boundaries: list[FloorBoundary] = []
+    floor_layer_seen = False  # anything on a floor-outline layer: the user's own outline rules, no autofill
     unmapped: dict[str, list] = {}  # layer -> entities, in drawing order
     opening_kind = {
         **dict.fromkeys(settings.window_layers, "window"),
@@ -470,6 +507,7 @@ def read_dxf(
             if text:
                 at = e.ocs().to_wcs(e.dxf.insert) if kind == "TEXT" else e.dxf.insert
                 labels.append(Label(text, mm(at), _ref(e)))
+        floor_layer_seen |= layer in floor_layers
         if layer not in wall_layers | floor_layers | column_layers | balcony_layers | stair_layers | ramp_layers | settings.roof_layers:
             unmapped.setdefault(e.dxf.layer, []).append(e)
             continue
@@ -657,6 +695,8 @@ def read_dxf(
                 )
             )
 
+    segments, cut_issues = cut_walls_at_markers(segments, markers, settings)
+    issues += cut_issues
     res = resolve_openings(segments, markers, settings)
     paired, pieces = res.walls, res.junctions
     from_block = {r.entity_handle for refs in block_markers.values() for r in refs}
@@ -824,6 +864,11 @@ def read_dxf(
     issues += role_issues
     if scope:
         issues += scope.notes
+    found, room_issues = find_rooms(paired, pieces, labels, settings) if paired else ([], [])
+    if paired and not boundaries and not floor_layer_seen and settings.infer_floor_boundary:
+        inferred, note = _infer_boundaries(paired, pieces, found, settings)
+        boundaries += inferred
+        issues.append(note)
     # Floor convention (model.py): `elevation` is the underside of the slab, the finished floor is the
     # slab thickness higher. Wall, ceiling and roof heights are measured from the finished floor.
     slab_param = given.get("slab_thickness", preset.slab_thickness if preset else None)
@@ -897,14 +942,13 @@ def read_dxf(
                 message="DXF has no ceiling height; supply --ceiling-height (mm)",
             )
         )
-    found, room_issues = find_rooms(paired, pieces, labels, settings) if paired else ([], [])
-    issues += room_issues
     if not paired and labels:
         issues.append(Issue(
             code="rooms_not_built", severity="warning",
             message=f"no walls, so no rooms were built; {len(labels)} text label(s) not used",
             sources=[x.ref for x in labels[: settings.unmapped_ref_cap]],
         ))
+    issues += room_issues
     rooms = [
         Room(
             id=p.id, name=p.name, name_source="source_extracted" if p.name_from_label else "defaulted",

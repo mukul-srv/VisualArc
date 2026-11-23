@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.8.0",
+  "schema_version": "0.9.0",
   "id": "fixture_stairs",
   "units": "mm",
   "source_file": "fixture_stairs.dxf",
@@ -316,7 +316,8 @@
                   "layer": "A-FLOR",
                   "entity_handle": "3B"
                 }
-              ]
+              ],
+              "source": "source_extracted"
             }
           ],
           "openings": [],
