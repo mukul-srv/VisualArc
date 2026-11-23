@@ -209,7 +209,7 @@ export function describeElement(ud: ElementData): Panel {
       rows: [
         ...where,
         { label: "Direction (towards the top)", value: ud.direction ?? "not set (no usable arrow line)" },
-        measured("Total rise (ceiling + slab)", ud.total_rise),
+        measured("Total rise (ceiling + slab, to the next floor)", ud.total_rise),
         measured("Target riser height (parameter)", ud.rise_param),
         measured("Target tread depth (parameter)", ud.run_param),
         ud.riser_count ? { label: "Risers", value: `${ud.riser_count} (${ud.riser_count - 1} treads)` } : { label: "Steps", value: "not built (see issues)" },
@@ -227,7 +227,7 @@ export function describeElement(ud: ElementData): Panel {
       rows: [
         ...where,
         { label: "Direction (towards the top)", value: ud.direction ?? "not set (no usable arrow line)" },
-        measured("Rise (ceiling + slab)", ud.rise),
+        measured("Rise (ceiling + slab, to the next floor)", ud.rise),
         measured("Slab thickness", ud.thickness),
         { label: "Slope", value: ud.slope == null ? "not built (see issues)" : `${(ud.slope * 100).toFixed(1)} % (1:${(1 / ud.slope).toFixed(1)})` },
       ],

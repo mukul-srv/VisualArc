@@ -211,3 +211,58 @@ def test_arrow_inside_two_overlapping_outlines_is_ambiguous(tmp_path):
     p = _read(_plan(tmp_path, extra=overlap))  # the arrow at y=1000 lies in both outlines
     assert len(_floor(p).stairs) == 2 and all(s.direction is None for s in _floor(p).stairs)
     assert _codes(p).count("stair_direction_ambiguous") == 2
+
+
+def test_stairs_rise_to_the_next_finished_floor_which_follows_the_ceiling(tmp_path):
+    # hand case, wall 3600 / ceiling 3000 / slab 200, floor at elevation 0:
+    #   finished floor 200; ceiling plane 200 + 3000 = 3200; the next slab's underside is that plane
+    #   (3200) and the next finished floor 3200 + 200 = 3400. The stair rises 3400 - 200 = 3200 (20 risers
+    #   of 160) however tall the walls are; the walls above the ceiling are a void, reported.
+    tall_walls = read_dxf(STAIRS, 3600, ceiling_height=3000, building_type="residential", params=PARAMS)
+    f = _floor(tall_walls)
+    (s,) = f.stairs
+    assert f.finished_level_mm == 200 and f.ceilings[0].elevation.value == 3200
+    assert s.total_rise.value == 3200 == 3400 - f.finished_level_mm
+    assert s.riser_count == 20 and s.riser_height.value == 160
+    assert "walls_above_ceiling" in _codes(tall_walls)
+    # raising the CEILING raises the storey, the next floor and the stair together
+    higher = read_dxf(STAIRS, 3600, ceiling_height=3300, building_type="residential", params=PARAMS)
+    (s2,) = _floor(higher).stairs
+    assert _floor(higher).ceilings[0].elevation.value == 3500  # the next slab's underside; next finished floor 3700
+    assert s2.total_rise.value == 3500 == 3700 - 200 and s2.riser_count == 22  # 3500 / 160 = 21.9 -> 22
+    assert "walls_above_ceiling" in _codes(higher)  # 3600 walls vs 3300 ceiling: still above
+    level = read_dxf(STAIRS, 3400, ceiling_height=3400, building_type="residential", params=PARAMS)
+    assert "walls_above_ceiling" not in _codes(level)
+
+
+def test_walls_above_ceiling_is_only_reported_for_values_the_user_gave():
+    # the commercial preset itself has walls (3000) above the ceiling (2700): nothing to report
+    assert "walls_above_ceiling" not in _codes(read_dxf(STAIRS, building_type="commercial"))
+    assert "walls_above_ceiling" in _codes(read_dxf(STAIRS, 3300, building_type="commercial"))
+
+
+def test_regenerated_stairs_follow_the_ceiling_not_the_walls_through_the_job_route(client):
+    pid = client.post(P, json={"name": "S"}).json()["project_id"]
+    up = client.post("/api/v1/uploads", content=STAIRS.read_bytes()).json()["upload_id"]
+    r = client.post(f"/api/v1/jobs/projects/{pid}/floors", json={"upload_id": up, "floor_name": "G", "elevation": 0, "ceiling_height": 3000, "wall_height": 3000})
+    jobs.execute(r.json()["job_id"])
+
+    def floor():
+        gid = client.get(f"{P}/{pid}").json()["floors"][0]["generation_id"]
+        return client.get(f"/api/v1/generations/{gid}/artifacts/canonical").json()["buildings"][0]["floors"][0]
+
+    def stair():
+        return floor()["stairs"][0]["total_rise"]["value"]
+
+    assert stair() == 3200
+    # (parameters, total rise = ceiling + 200 slab, walls above the ceiling reported?)
+    for body, want, void in (
+        ({"ceiling_height": 4000}, 4200, False),  # the storey rises: stair, ceiling plane, next floor
+        ({"wall_height": 5000}, 4200, True),  # walls above the 4000 ceiling: the stair stays, and it is said
+        ({"ceiling_height": 3000, "wall_height": 3000}, 3200, False),
+    ):
+        r = client.post(f"/api/v1/jobs/projects/{pid}/parameters", json=body)
+        jobs.execute(r.json()["job_id"])
+        assert stair() == want, body
+        issues = client.get(f"/api/v1/jobs/{r.json()['job_id']}").json()["result"]["issues"]
+        assert ("walls_above_ceiling" in [i["code"] for i in issues]) is void, body

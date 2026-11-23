@@ -55,3 +55,12 @@ test("the step line says reading while the upload is checked, building only whil
   expect(uploadStep(true, true, false)).toMatch(/^Step 3 of 3: building/);
   expect(uploadStep(false, false, true)).toContain("for the new floor");
 });
+
+import { targetAfterCreate } from "./upload-state";
+
+test("once a project was created for the upload, a retry joins it instead of creating a second one", () => {
+  const typed = { on: true, target: "House", floorName: "Ground", elevation: "" };
+  const after = targetAfterCreate(typed, "a".repeat(32));
+  expect(after.target).toBe("a".repeat(32)); // an id now, so the form adds a floor instead of creating a project
+  expect(after.floorName).toBe("Ground");
+});

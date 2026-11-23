@@ -19,8 +19,11 @@ from api.engine.settings import DEFAULTS
 # the slab, and rise to finished floor + wall height. Wall, ceiling, window-sill, lintel and railing
 # heights are measured from the finished floor; the ceiling plane is finished floor + ceiling height;
 # the roof sits on the wall tops. A floor without a slab (no floor boundary or no slab thickness) has
-# its finished floor at `elevation`. Floor-to-floor stacking is unchanged: elevations step by the
-# floor-to-floor value, the next slab's underside following the previous floor's ceiling plus slab.
+# its finished floor at `elevation`. The STOREY is the ceiling height: the next floor's slab underside
+# is the ceiling plane and its finished floor is ceiling plane + slab, which is what a stair rises (ceiling
+# height + slab thickness). Wall height may differ (walls above the ceiling form a void under the roof):
+# stairs and the next floor still follow the ceiling, and `walls_above_ceiling` says so when either
+# was given. Floor-to-floor stacking: elevations step by the floor-to-floor value.
 # 0.7.1 (a slab per building part) was dropped again: a slab per floor boundary, as in 0.7.0; the
 # optional Slab.boundary_ids / holes of 0.7.1 stay readable ("holes" is always empty now).
 SCHEMA_VERSION = "0.8.0"
@@ -212,7 +215,7 @@ class Stair(_Model):
     type: Literal["stair"] = "stair"
     polygon: list[Point2]  # the 4 corners of the drawn flight
     direction: Direction | None = None
-    total_rise: Measured | None = None  # ceiling height + slab thickness (derived: inferred)
+    total_rise: Measured | None = None  # ceiling height + slab thickness: up to the next finished floor (inferred)
     rise_param: Measured | None = None  # target riser height used to count the steps
     run_param: Measured | None = None  # nominal tread depth, compared with the drawing
     riser_count: int | None = None

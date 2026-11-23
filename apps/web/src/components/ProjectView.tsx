@@ -123,7 +123,7 @@ export function ProjectView({ id }: { id: string }) {
             )}
           </>
         )}
-        {shown === "parameters" && <ParametersPanel projectId={id} readOnly={!edit} onChanged={load} />}
+        {shown === "parameters" && <ParametersPanel key={id} projectId={id} readOnly={!edit} onChanged={load} />}
         {shown === "versions" && (
           <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} readOnly={!edit} />
         )}

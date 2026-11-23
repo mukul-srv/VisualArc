@@ -43,12 +43,16 @@ export function modelBox(model: THREE.Object3D): THREE.Box3 {
   return box;
 }
 
-/** Solid meshes the player collides with: walls and junctions (never the floor plane). */
+/** Types the player cannot walk through. Stairs and ramps are not here: their treads and slope are
+ *  walked ON (lib/ground.ts), and their sides are edges (a raised walker cannot step off them). */
+export const OBSTRUCTIONS = ["wall", "junction", "column", "balcony_railing"];
+
+/** Solid meshes the player collides with: walls, junctions, columns and balcony railings (never the
+ *  floor plane or a walkable surface). */
 export function collectColliders(model: THREE.Object3D): THREE.Mesh[] {
   const out: THREE.Mesh[] = [];
   model.traverse((o) => {
-    const t = o.userData?.type;
-    if ((t === "wall" || t === "junction") && (o as THREE.Mesh).isMesh) out.push(o as THREE.Mesh);
+    if (OBSTRUCTIONS.includes(o.userData?.type) && (o as THREE.Mesh).isMesh) out.push(o as THREE.Mesh);
   });
   return out;
 }

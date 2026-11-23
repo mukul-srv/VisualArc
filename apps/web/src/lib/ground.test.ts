@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
-import { collectSupports, dampTo, groundLevel, maxRiser, resolveHeight, stepUpLimit } from "./ground";
+import { collectSupports, dampTo, groundLevel, maxRiser, resolveHeight, settle, stepUpLimit } from "./ground";
 
 const box = (type: string, x0: number, x1: number, y0: number, y1: number, z0 = 0, z1 = 1, extra: object = {}) => {
   const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), new THREE.MeshBasicMaterial());
@@ -132,4 +132,42 @@ test("climbing tread by tread, the eased eye never jumps more than a small step 
   }
   expect(feet).toBeGreaterThan(2.5);
   expect(maxJump).toBeLessThan(0.16 * 0.3); // under a third of a riser per frame (unsmoothed it is the whole riser); the ground stays exact
+});
+
+test("a raised walker cannot step off the side of a stair or ramp, but the first tread steps down to the floor", () => {
+  const g = new THREE.Group();
+  g.add(box("stair", 0, 1, 0, 1.0, 0, 1, { riser_height: { value: 160 } })); // a tall block, top at 1.0 m
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  expect(resolveHeight(0.5, 5, 1.0, 0.05, supports, 0, 0.18)).toBeNull(); // from 1 m up: an edge, blocked
+  expect(resolveHeight(0.5, 5, 0.16, 0.05, supports, 0, 0.18)).toBe(0); // from the first tread: down to the floor
+  expect(resolveHeight(0.5, 0.5, 1.0, 0.05, supports, 0, 0.18)).toBeCloseTo(1.0); // still on the surface: fine
+});
+
+test("trap: a walker left at a raised height with no support under them falls to the floor instead of floating stuck", () => {
+  const g = new THREE.Group();
+  g.add(box("stair", 0, 1, 0, 1.0, 0, 1, { riser_height: { value: 160 } }));
+  g.add(box("floor_boundary", 3, 8, -0.01, 0, -2, 2)); // the floor elsewhere
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  // stale state: feet at 1.0 m but standing at x = 5, where only the floor (0) exists, 1 m below
+  const feet = 1.0;
+  // without settling, every step reads as stepping off an edge (the floor is further down than a drop):
+  // the walker could never move, in any direction
+  for (const [dx, dz] of [[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05]]) {
+    expect(resolveHeight(5 + dx, dz, feet, 0.05, supports, 0, 0.18)).toBeNull();
+  }
+  const settled = settle(5, 0, feet, supports, 0, 0.18);
+  expect(settled).toBe(0); // falls to the baseline
+  for (const [dx, dz] of [[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05]]) {
+    expect(resolveHeight(5 + dx, dz, settled, 0.05, supports, 0, 0.18)).toBeCloseTo(0); // free to move again
+  }
+  // and with no surface at all below, the same: back to the baseline
+  expect(settle(5, 0, feet, collectSupports(new THREE.Group()), 0, 0.18)).toBe(0);
+});
+
+test("settle keeps a walker on the surface they stand on, stairs and ramps included", () => {
+  const g = stairModel();
+  const supports = collectSupports(g);
+  expect(settle(0.6, 0.5, 0.48, supports, 0, 0.18)).toBeCloseTo(0.48); // tread 3 (x 0.5..0.75), top 3 x 0.16
 });
