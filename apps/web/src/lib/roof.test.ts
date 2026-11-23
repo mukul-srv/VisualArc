@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
-import { ceilingMeetsRoof, hasRoof, separateCoplanar, setRoofVisible } from "./roof";
+import { applyCeilingVisibility, ceilingMeetsRoof, hasRoof, setRoofVisible } from "./roof";
 
 const slab = (type: string, y: number) => {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshBasicMaterial());
@@ -21,17 +21,20 @@ test("a ceiling at the wall height shares a plane with the roof underside (the w
   expect(ceilingMeetsRoof(model(2.4))).toBe(false);
 });
 
-test("separateCoplanar offsets only the ceiling's depth", () => {
-  const g = model(2.7);
-  separateCoplanar(g);
-  const mat = (t: string) => {
-    let out: THREE.Material | null = null;
-    g.traverse((o) => o.userData.type === t && (out = (o as THREE.Mesh).material as THREE.Material));
-    return out as unknown as THREE.Material;
+test("ceilings follow the roof toggle: hidden when they share the roof plane or the roof is off, shown when lower", () => {
+  const vis = (g: THREE.Object3D) => {
+    let v = false;
+    g.traverse((o) => o.userData.type === "ceiling" && (v = o.visible));
+    return v;
   };
-  expect(mat("ceiling").polygonOffset).toBe(true);
-  expect(mat("ceiling").polygonOffsetFactor).toBeLessThan(0);
-  expect(mat("roof").polygonOffset).toBe(false);
+  const same = model(2.7);
+  applyCeilingVisibility(same, true);
+  expect(vis(same)).toBe(false); // same plane as the roof underside: the roof is the ceiling
+  const lower = model(2.4);
+  applyCeilingVisibility(lower, true);
+  expect(vis(lower)).toBe(true); // a real lid under the roof
+  applyCeilingVisibility(lower, false);
+  expect(vis(lower)).toBe(false); // roof off: open to the sky
 });
 
 test("the roof toggle hides and shows only roof meshes", () => {

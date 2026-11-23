@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { changeParametersJob, STAGE_LABEL } from "../lib/jobs";
-import { diffParameters, PARAM_LABEL, ROOF_TYPES } from "../lib/parameters";
+import { diffParameters, legacyNotice, PARAM_LABEL, ROOF_TYPES } from "../lib/parameters";
 import { HELP, PARAM_HELP } from "../lib/help";
 import { Hint } from "./Hint";
 import { getParameters, type ProjectParam } from "../lib/projects";
@@ -56,12 +57,14 @@ export function ParametersPanel({ projectId, readOnly, onChanged }: { projectId:
   const [busy, setBusy] = useState(false);
   const [issues, setIssues] = useState<Issue[]>([]); // what the last regeneration reported
   const [saved, setSaved] = useState<number | null>(null); // version it produced
+  const [legacy, setLegacy] = useState<string[]>([]); // floors that predate stored settings: cannot be rebuilt
 
   const load = useCallback(async () => {
     const r = await getParameters(projectId);
     if (!r.ok) return setErrors([r.message]);
     const params: Record<string, ProjectParam> = {};
-    for (const [k, v] of Object.entries(r)) if (k !== "ok") params[k] = v as ProjectParam;
+    for (const [k, v] of Object.entries(r)) if (k !== "ok" && !k.startsWith("_")) params[k] = v as ProjectParam;
+    setLegacy(((r as Record<string, unknown>)._legacy_floors as string[] | undefined) ?? []);
     setLoaded(params);
     setText(Object.fromEntries(Object.entries(params).map(([k, p]) => [k, String(p.value)])));
   }, [projectId]);
@@ -87,10 +90,16 @@ export function ParametersPanel({ projectId, readOnly, onChanged }: { projectId:
     onChanged();
   }
 
+  const notice = legacyNotice(legacy, projectId);
   if (!loaded) return errors.length ? <p role="alert" className={styles.error}>{errors[0]}</p> : <p role="status">Loading…</p>;
   return (
     <section aria-label="Project parameters">
       <h3>Project parameters</h3>
+      {notice && (
+        <p role="alert" className={styles.error}>
+          {notice.text} <Link href={notice.href}>{notice.action}</Link>
+        </p>
+      )}
       <p><small>Values you have not set are defaults for the building type. Change a value and save: every floor is rebuilt as a new version. Clear a field to go back to the default.</small></p>
       {errors.map((e) => <p key={e} role="alert" className={styles.error}>{e}</p>)}
       <ParamTable names={ESSENTIAL} loaded={loaded} text={text} setText={setText} disabled={readOnly || busy} />
@@ -100,7 +109,7 @@ export function ParametersPanel({ projectId, readOnly, onChanged }: { projectId:
           <ParamTable names={OTHER(loaded)} loaded={loaded} text={text} setText={setText} disabled={readOnly || busy} />
         </details>
       )}
-      {readOnly ? <p>Only editors and the owner can change parameters.</p> : <button type="button" disabled={busy} onClick={save}>Save and regenerate</button>}
+      {readOnly ? <p>Only editors and the owner can change parameters.</p> : <button type="button" disabled={busy || legacy.length > 0} title={legacy.length > 0 ? "Add the older floors again first (see the note above)" : undefined} onClick={save}>Save and regenerate</button>}
       {status && <p role="status">{status}…</p>}
       {saved !== null && <p role="status">Regenerated every floor as version {saved}. Open the viewer to see the new model.</p>}
       {issues.length > 0 && <IssueList issues={issues} />}

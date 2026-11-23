@@ -14,9 +14,9 @@ import { ViewerToolbar } from "@/components/ViewerToolbar";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distanceToOpening, doorFor, nearestDoor, toggle as toggleDoor, whyNoToggle, type Door } from "@/lib/doors";
-import { collectSupports, groundLevel, resolveHeight, stepUpLimit } from "@/lib/ground";
-import { ceilingMeetsRoof, hasRoof, separateCoplanar, setRoofVisible } from "@/lib/roof";
-import { isDoubleTap, type Tap } from "@/lib/tap";
+import { collectSupports, dampTo, groundLevel, resolveHeight, stepUpLimit } from "@/lib/ground";
+import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
+import { createTapGate } from "@/lib/tap";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, describeRoom, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel, type RoomData } from "@/lib/selection";
@@ -209,24 +209,12 @@ export default function ViewerPage() {
       if (walk && d.open && !canClose(d, walk.pos)) return notify("Step out of the doorway first.");
       toggleDoor(d);
     };
-    let lastTap: Tap | null = null;
-    const onUp = (e: PointerEvent) => {
-      if (!down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
-      const r = canvas.getBoundingClientRect();
-      raycaster.setFromCamera(
-        new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
-        camera,
-      );
-      const tap = { t: performance.now(), x: e.clientX, y: e.clientY };
-      const double = isDoubleTap(lastTap, tap);
-      lastTap = double ? null : tap;
-      if (double && !measureOn) {
-        const hit = pickElement(model, raycaster.ray);
-        if (hit?.opening) return toggleOpening(hit.opening);
-      }
-      if (walk) return;
-      const pick = pickElement(model, raycaster.ray);
-      if (measureOn) return pick && measureClick(pick.mesh, pick.point);
+    // A single click selects after a short wait (cancelled by a second click); a double click on a door
+    // only toggles it: it neither selects nor opens the properties. Measuring needs no wait.
+    const gate = createTapGate();
+    const select = (ray: THREE.Ray) => {
+      if (!model || walk) return;
+      const pick = pickElement(model, ray);
       clearSelection();
       if (!pick) return setPanel(null);
       const ud = pick.mesh.userData as ElementData;
@@ -242,6 +230,28 @@ export default function ViewerPage() {
       pick.mesh.material = mat;
       setPanel(describeElement(ud));
     };
+    const onUp = (e: PointerEvent) => {
+      if (!down || !model || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+      const r = canvas.getBoundingClientRect();
+      raycaster.setFromCamera(
+        new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
+        camera,
+      );
+      const ray = raycaster.ray.clone();
+      if (measureOn) {
+        const pick = pickElement(model, ray);
+        return pick && measureClick(pick.mesh, pick.point);
+      }
+      gate.tap(
+        { t: performance.now(), x: e.clientX, y: e.clientY },
+        () => select(ray),
+        () => {
+          const hit = model && pickElement(model, ray);
+          if (hit?.opening) toggleOpening(hit.opening);
+          else select(ray); // a double click elsewhere behaves like a click
+        },
+      );
+    };
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointerup", onUp);
 
@@ -249,7 +259,8 @@ export default function ViewerPage() {
     const keys = new Set<string>();
     let walk: {
       pos: THREE.Vector3;
-      floorY: number;
+      floorY: number; // the exact ground height under the walker
+      eyeY: number; // the smoothed height of the eye above that ground (stairs and ramps glide)
       yaw: number;
       pitch: number;
       colliders: THREE.Mesh[];
@@ -262,7 +273,7 @@ export default function ViewerPage() {
     let look: { x: number; y: number } | null = null;
     const aim = () => {
       if (!walk) return;
-      camera.position.set(walk.pos.x, walk.floorY + WALK.eye, walk.pos.z);
+      camera.position.set(walk.pos.x, walk.eyeY, walk.pos.z);
       camera.lookAt(
         camera.position.x - Math.sin(walk.yaw) * Math.cos(walk.pitch),
         camera.position.y + Math.sin(walk.pitch),
@@ -293,6 +304,7 @@ export default function ViewerPage() {
       walk = {
         pos: spawn.pos,
         floorY: spawn.floorY,
+        eyeY: spawn.floorY + WALK.eye,
         yaw: 0,
         pitch: 0,
         colliders,
@@ -343,6 +355,12 @@ export default function ViewerPage() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!walk) return;
+      // the eye eases to the exact ground height every frame (also when standing still or falling)
+      const goal = walk.floorY + WALK.eye;
+      if (Math.abs(walk.eyeY - goal) > 1e-4) {
+        walk.eyeY = dampTo(walk.eyeY, goal, dt);
+        aim();
+      }
       const f = (keys.has("w") || keys.has("arrowup") ? 1 : 0) - (keys.has("s") || keys.has("arrowdown") ? 1 : 0);
       const r = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0);
       if (!f && !r) return;
@@ -403,10 +421,14 @@ export default function ViewerPage() {
         model = gltf.scene;
         layerCeilings(model);
         doors = buildDoors(model);
-        if (ceilingMeetsRoof(model)) separateCoplanar(model); // wall height = ceiling height: same plane
+        applyCeilingVisibility(model, true); // ceilings share the roof's underside plane: the roof shows instead
         setRoofPresent(hasRoof(model));
         setRoofOn(true);
-        setRoof.current = (on) => model && setRoofVisible(model, on);
+        setRoof.current = (on) => {
+          if (!model) return;
+          setRoofVisible(model, on);
+          applyCeilingVisibility(model, on); // roof off: open to the sky, so no ceilings either
+        };
         const box = modelBox(model);
         const s = box.getSize(new THREE.Vector3());
         center = box.getCenter(new THREE.Vector3());

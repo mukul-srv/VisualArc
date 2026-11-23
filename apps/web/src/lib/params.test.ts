@@ -61,3 +61,14 @@ test("diffParameters sets changes, resets emptied user values, keeps untouched d
   expect(r).toEqual({ ok: true, values: { ceiling_height: 2400, slab_thickness: null } });
   expect(diffParameters({ ...loaded }, { ceiling_height: "-1", slab_thickness: "300", roof_pitch: "90" }).ok).toBe(false);
 });
+
+import { legacyNotice } from "./parameters";
+
+test("floors without stored settings get a clear message with an action, not a dead end", () => {
+  expect(legacyNotice([], "p")).toBeNull();
+  const one = legacyNotice(["Level 0"], "abc")!;
+  expect(one.text).toContain("Level 0");
+  expect(one.action).toMatch(/Add it again from the DXF/);
+  expect(one.href).toBe("/new?project=abc");
+  expect(legacyNotice(["A", "B"], "abc")!.text).toMatch(/These floors A, B .* they were/);
+});

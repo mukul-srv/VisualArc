@@ -84,3 +84,12 @@ export function resolveHeight(
   if (s.type === "ramp" && travel > 0 && Math.abs(s.y - feetY) / travel > STEP.maxSlope) return null;
   return s.y;
 }
+
+/** Move `current` towards `target` with an exponential approach that does not depend on the frame
+ *  rate: after any total time the result is the same however it was cut into frames. Used for the
+ *  eye height, so stairs and ramps glide while the ground height itself stays exact. */
+export function dampTo(current: number, target: number, dt: number, rate = EYE_RATE): number {
+  return target + (current - target) * Math.exp(-rate * Math.max(0, dt));
+}
+
+export const EYE_RATE = 14; // 1/s: about 0.2 s to settle
