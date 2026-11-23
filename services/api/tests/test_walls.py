@@ -205,3 +205,38 @@ def test_stray_line_between_partners_too_far_apart_to_be_a_wall_stays_blocking()
     # make the 50 mm stub between them a stray line beside a wall: no rule picks one
     _, _, issues = run([((0, 0), (50, 0)), ((0, -400), (2000, -400)), ((0, 400), (2000, 400))])
     assert {i.code for i in issues if i.severity == "blocking"} == {"ambiguous_pairing"}
+
+
+def _walls_and_codes(lines):
+    walls, _, issues = run(lines)
+    return walls, [i.code for i in issues if i.severity == "blocking"], [i for i in issues if i.code == "short_cross_pair_ignored"]
+
+
+def test_end_cap_pair_over_a_real_wall_is_not_a_chunky_second_wall():
+    # a wall (faces y=0 and y=150, x 150..550) with a 150 mm cap line at both ends of a 550 mm stretch: the two
+    # caps are 550 apart but only 150 long, and would make a 550 x 150 block that swallows the real wall
+    walls, blocking, notes = _walls_and_codes([
+        ((0, 0), (550, 0)), ((150, 150), (550, 150)), ((0, 0), (0, 150)), ((550, 0), (550, 150)),
+    ])
+    assert [(w.thickness, w.start, w.end) for w in walls] == [(150, (150, 75), (550, 75))]
+    assert not blocking and len(notes) == 1 and notes[0].severity == "warning"
+    assert {s.entity_handle for s in notes[0].sources} == {"H0", "H1", "H2", "H3"}
+
+
+def test_closed_box_is_one_wall_along_its_longer_side():
+    # 300 x 200 box drawn as four lines (a pier on the wall layer): it paired both ways before, two walls on one footprint
+    walls, blocking, notes = _walls_and_codes([
+        ((0, 0), (300, 0)), ((0, 200), (300, 200)), ((0, 0), (0, 200)), ((300, 0), (300, 200)),
+    ])
+    assert [(w.thickness, w.start, w.end) for w in walls] == [(200, (0, 100), (300, 100))]
+    assert not blocking and len(notes) == 1
+
+
+def test_square_box_keeps_one_pair_and_a_short_legit_wall_is_kept():
+    walls, _, notes = _walls_and_codes([
+        ((0, 0), (200, 0)), ((0, 200), (200, 200)), ((0, 0), (0, 200)), ((200, 0), (200, 200)),
+    ])
+    assert len(walls) == 1 and len(notes) == 1  # a square has no longer side: one footprint, once
+    # a short wall that swallows nothing is still a wall (100 mm of wall beside a window, say)
+    walls, _, notes = _walls_and_codes([((0, 0), (100, 0)), ((0, 200), (100, 200))])
+    assert [(w.thickness, w.start, w.end) for w in walls] == [(200, (0, 100), (100, 100))] and not notes

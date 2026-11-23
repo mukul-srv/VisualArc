@@ -307,9 +307,43 @@ def pair_walls(
             lower, upper = sorted((a, b), key=lambda s: s.c)
             raw.append((start, end, abs(a.c - b.c), (lower.seg, upper.seg)))
 
+    raw, box_issues = _one_wall_per_box(raw, tol)
+    issues += box_issues
     raw.sort(key=lambda r: wall_order(r[0], r[1]))
     walls = [PairedWall(f"wall-{n:03d}", *r) for n, r in enumerate(raw, 1)]
     return walls, issues
+
+
+def _one_wall_per_box(raw: list, tol: float) -> tuple[list, list[Issue]]:
+    """Two pairings of the same material: a pair of lines further apart than they are long (the end caps of
+    something, a wall drawn as a closed box, the jamb lines of a short stub) swallows the footprint of a real
+    wall (a pair at least as long as it is thick) as well. A wall is longer than it is thick, so the cross
+    pair is dropped and reported, the real wall kept. Two equal square footprints keep the first pair."""
+    rects = [PairedWall("-", *r).rect() for r in raw]
+    drop, issues = set(), []
+    for i, r in enumerate(raw):
+        thick, length = r[2], math.dist(r[0], r[1])
+        cross = length < thick - tol
+        for j, other in enumerate(raw):
+            if i == j or j in drop or not rects[i].buffer(tol).covers(rects[j]):
+                continue
+            real = math.dist(other[0], other[1]) >= other[2] - tol
+            same = rects[j].buffer(tol).covers(rects[i])
+            if (cross and real) or (same and not cross and j < i):
+                drop.add(i)
+                issues.append(
+                    Issue(
+                        code="short_cross_pair_ignored",
+                        severity="warning",
+                        message=f"lines {r[3][0].handle} and {r[3][1].handle} are {thick:g} mm apart but only "
+                        f"{length:g} mm long and cover the same material as {other[3][0].handle}/"
+                        f"{other[3][1].handle}: read as that wall's end caps (a wall is longer than it is "
+                        "thick), not as a second wall; not built",
+                        sources=[s.ref for s in (*r[3], *other[3])],
+                    )
+                )
+                break
+    return [r for i, r in enumerate(raw) if i not in drop], issues
 
 
 def _ring(p: Polygon) -> list[Point2]:
