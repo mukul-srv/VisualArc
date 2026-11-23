@@ -307,9 +307,63 @@ def pair_walls(
             lower, upper = sorted((a, b), key=lambda s: s.c)
             raw.append((start, end, abs(a.c - b.c), (lower.seg, upper.seg)))
 
+    raw, box_issues = _one_wall_per_box(raw, tol)
+    issues += box_issues
     raw.sort(key=lambda r: wall_order(r[0], r[1]))
     walls = [PairedWall(f"wall-{n:03d}", *r) for n, r in enumerate(raw, 1)]
     return walls, issues
+
+
+def _one_wall_per_box(raw: list, tol: float) -> tuple[list, list[Issue]]:
+    """Two pairings of the same material: a pair of lines further apart than they are long (the end caps of
+    something, a wall drawn as a closed box, the jamb lines of a short stub) next to real walls (pairs at least
+    as long as they are thick). A wall is longer than it is thick, so a cross pair whose material the real
+    walls already cover is dropped and reported (its lines are their end caps). One that covers material
+    nothing else does stays a wall (a pier drawn only by its two short sides) with a warning. Identical
+    footprints are kept once."""
+    rects = [PairedWall("-", *r).rect() for r in raw]
+    cross = [math.dist(r[0], r[1]) < r[2] - tol for r in raw]
+    drop, issues = set(), []
+
+    def same(i: int, j: int) -> bool:
+        return rects[i].buffer(tol).covers(rects[j]) and rects[j].buffer(tol).covers(rects[i])
+
+    def note(code: str, i: int, others: list[int], why: str) -> Issue:
+        r = raw[i]
+        return Issue(
+            code=code,
+            severity="warning",
+            message=f"lines {r[3][0].handle} and {r[3][1].handle} are {r[2]:g} mm apart but only "
+            f"{math.dist(r[0], r[1]):g} mm long: {why}",
+            sources=[s.ref for k in (i, *others) for s in raw[k][3]],
+        )
+
+    for i in range(len(raw)):  # equal footprints of real walls (a square box): the first stays
+        if not cross[i] and any(j < i and not cross[j] and j not in drop and same(i, j) for j in range(i)):
+            drop.add(i)
+            twin = next(j for j in range(i) if not cross[j] and j not in drop and same(i, j))
+            issues.append(note("short_cross_pair_ignored", i, [twin], "the same footprint as another pair, kept once"))
+    real = [i for i in range(len(raw)) if not cross[i] and i not in drop]
+    covered = unary_union([rects[i] for i in real]).buffer(tol) if real else Polygon()
+    for i in range(len(raw)):
+        if not cross[i]:
+            continue
+        under = [j for j in real if rects[j].intersects(rects[i]) and rects[j].intersection(rects[i]).area > tol]
+        twin = next((j for j in range(i) if cross[j] and j not in drop and same(i, j)), None)
+        left = rects[i].difference(covered)  # what no wall covers: nothing, or at most one corner square of
+        # the walls' own thickness (the cross pair's length), which junction detection fills
+        gap = left.is_empty or max(left.bounds[2] - left.bounds[0], left.bounds[3] - left.bounds[1]) <= math.dist(raw[i][0], raw[i][1]) + tol
+        if gap and rects[i].area - left.area > tol:
+            drop.add(i)
+            issues.append(note("short_cross_pair_ignored", i, under, "its material is covered by walls "
+                               "that are longer than thick: read as their end caps, not a second wall; not built"))
+        elif twin is not None:
+            drop.add(i)
+            issues.append(note("short_cross_pair_ignored", i, [twin], "the same footprint as another pair, kept once"))
+        else:
+            issues.append(note("short_cross_pair_unexplained", i, under, "no wall covers this material, so "
+                               "it is built as a wall (a pier drawn by its two short sides?); check it"))
+    return [r for i, r in enumerate(raw) if i not in drop], issues
 
 
 def _ring(p: Polygon) -> list[Point2]:
