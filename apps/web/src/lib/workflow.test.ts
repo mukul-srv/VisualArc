@@ -304,34 +304,54 @@ test("a ceiling lower than the roof is drawn under it", async () => {
   expect(ceiling).toBe(true);
 });
 
-test("walking up the real stair of fixture_stairs climbs to the top tread", async () => {
-  const { collectSupports, resolveHeight, stepUpLimit } = await import("./ground");
+test("real stair and ramp of fixture_stairs: solid from the floor, climbable from their start, walk off and fall", async () => {
+  const { collectSupports, fall, stepOnto, stepUpLimit } = await import("./ground");
   const scene = await generated("fixture_stairs.dxf", { ceiling_height: 3000, wall_height: 3000, building_type: "residential", stair_rise: 160, stair_run: 250 });
   const supports = collectSupports(scene);
   const limit = stepUpLimit(scene);
   expect(limit).toBeCloseTo(0.16 + 0.02); // from the stair's own riser
   const floor = 0.2; // finished floor: base 0 + the 200 mm slab
+  const into = (x: number, z: number, feet: number, from: [number, number]) => stepOnto(x, z, feet, Math.hypot(x - from[0], z - from[1]), supports, floor, limit);
+  // the stair occupies x 0.45..5.2, z -1.5..-0.5 (plan y 500..1500); the ramp z -3.5..-2.5; the lane between is free floor
+  expect(into(2.5, -0.55, floor, [2.5, -0.4]).ok).toBe(false); // the side of tread 9, from the floor
+  expect(into(2.5, -1.45, floor, [2.5, -1.6]).ok).toBe(false); // the other side
+  expect(into(0.75, -1.0, floor, [0.6, -1.0]).ok).toBe(false); // the second riser from the floor: too high a step
+  expect(into(0.5, -1.0, floor, [0.35, -1.0])).toMatchObject({ ok: true }); // the first tread: allowed (a step)
+  expect(into(3.0, -2.55, floor, [3.0, -2.4]).ok).toBe(false); // the side of the ramp (2 m up there)
+  expect(into(3.0, -3.0, floor, [3.0, -3.6]).ok).toBe(false); // under the ramp: not passable from below
+  // climbing the flight works: tread by tread to the top tread
   let x = 0.3, feet = floor;
-  while (x < 5.1) { // stays on the stair (x 0.45 .. 5.2)
+  while (x < 5.1) {
     const nx = x + 0.05;
-    const y = resolveHeight(nx, -1.0, feet, 0.05, supports, floor, limit);
-    // plan y 1000 mm = three z -1.0, along the arrow
-    expect(y).not.toBeNull();
+    const st = stepOnto(nx, -1.0, feet, 0.05, supports, floor, limit);
+    expect(st.ok).toBe(true);
     x = nx;
-    feet = y as number;
+    if (st.ok && st.ground > feet) feet = st.ground;
   }
   expect(feet).toBeCloseTo(floor + 19 * 0.16, 3);
-  // and the ramp slab (3200 over 4750 mm) is walkable too
-  let rx = 0.35, rf = floor; // from the floor in front, where the ramp starts at x = 0.45
-  while (rx < 5.1) { // the ramp spans x 0.45 .. 5.2
+  // ...and so does the ramp from its start
+  let rx = 0.35, rf = floor;
+  while (rx < 5.1) {
     const nx = rx + 0.05;
-    const y = resolveHeight(nx, -3.0, rf, 0.05, supports, floor, limit);
-    expect(y).not.toBeNull();
+    const st = stepOnto(nx, -3.0, rf, 0.05, supports, floor, limit);
+    expect(st.ok).toBe(true);
     rx = nx;
-    rf = y as number;
+    if (st.ok && st.ground > rf) rf = st.ground;
   }
   expect(rf).toBeGreaterThan(2.5);
-});
+  // from the high end of the stair, stepping off its side: allowed, the ground is the floor, and gravity
+  // brings the feet down smoothly
+  const off = stepOnto(2.5, -0.45, floor + 1.0, 0.05, supports, floor, limit);
+  expect(off.ok).toBe(true);
+  expect(off.ok && off.ground).toBeCloseTo(floor, 3);
+  let y = floor + 1.0, vy = 0, frames = 0;
+  while (y > floor && frames < 600) {
+    ({ feet: y, vy } = fall(y, floor, vy, 1 / 60));
+    frames++;
+  }
+  expect(y).toBeCloseTo(floor, 6);
+  expect(frames).toBeGreaterThan(15); // eased fall, not a jump
+}, 120_000);
 
 test("a door of fixture_openings opens about its hinge and becomes passable", async () => {
   const { blocking, animate, buildDoors, toggle } = await import("./doors");
@@ -383,4 +403,33 @@ test("raising the ceiling regenerates the stair at the new height in the served 
     if (!r.ok) throw new Error(r.message);
     expect(await top()).toBeCloseTo(tread(total, risers), 3);
   }
+}, 120_000);
+
+
+test("a tall ceiling alone no longer leaves the walls and roof short: everything is there from the first frame", async () => {
+  // ceiling 9000 with the default wall height used to give walls and a roof at 2.9 m with the ceiling and the
+  // stair continuing above (hidden under the roof until the walker climbed up through it)
+  const scene = await generated("fixture_stairs.dxf", { building_type: "residential", ceiling_height: 9000, wall_height: undefined, stair_rise: 160, stair_run: 250 });
+  const top = (type: string) => {
+    let y = -Infinity, low = Infinity;
+    scene.traverse((o) => {
+      if (o.userData?.type !== type) return;
+      const b = new THREE.Box3().setFromObject(o);
+      y = Math.max(y, b.max.y);
+      low = Math.min(low, b.min.y);
+    });
+    return { top: y, bottom: low };
+  };
+  const ceilingPlane = top("ceiling").top; // finished floor 0.2 + 9.0
+  expect(ceilingPlane).toBeCloseTo(9.2, 3);
+  expect(top("wall").top).toBeGreaterThanOrEqual(ceilingPlane - 1e-6); // walls reach the ceiling
+  expect(top("roof").bottom).toBeGreaterThanOrEqual(ceilingPlane - 1e-6); // the roof sits on top of them, not below the ceiling
+  // and every mesh the walking camera should draw is visible on its layers (nothing is hidden by a rule)
+  const camera = new THREE.PerspectiveCamera();
+  camera.layers.enable(1);
+  const { applyCeilingVisibility } = await import("./roof");
+  applyCeilingVisibility(scene, true);
+  const hidden: string[] = [];
+  scene.traverse((o) => (o as THREE.Mesh).isMesh && !(o.visible && camera.layers.test(o.layers)) && hidden.push(o.userData.type));
+  expect(hidden.sort()).toEqual(["ceiling"]); // only the ceiling, which shares the roof's underside plane
 }, 120_000);

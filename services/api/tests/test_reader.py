@@ -419,3 +419,19 @@ def test_ceiling_above_walls_warns_but_equal_or_lower_does_not():
 def test_ceiling_height_must_be_positive():
     with pytest.raises(ValueError, match="ceiling height"):
         read_dxf(FIXTURE_A, 3000, ceiling_height=0)
+
+
+def test_a_ceiling_higher_than_the_walls_raises_the_walls_to_it_and_says_so():
+    # the preset's walls are 2700; a 9000 ceiling must not float above them (roof and stair poked through)
+    p = read_dxf(FIXTURE_A, building_type="residential", ceiling_height=9000)
+    f = p.buildings[0].floors[0]
+    assert {(w.height.value, w.height.source) for w in f.walls} == {(9000.0, "inferred")}
+    (issue,) = _by_code(p, "ceiling_above_walls")
+    assert "2700" in issue.message and "raised" in issue.message
+    assert f.ceilings[0].elevation.value == f.finished_level_mm + 9000  # the ceiling plane: finished floor (200 slab) + 9000
+    assert f.roofs[0].base_elevation.value == f.ceilings[0].elevation.value  # the roof sits on the raised walls, above it
+    # a user-given wall height is raised too, and an equal or lower ceiling leaves the walls alone
+    q = read_dxf(FIXTURE_A, 3000, ceiling_height=3500)
+    assert {w.height.value for w in q.buildings[0].floors[0].walls} == {3500.0}
+    r = read_dxf(FIXTURE_A, 3000, ceiling_height=2500)
+    assert {(w.height.value, w.height.source) for w in r.buildings[0].floors[0].walls} == {(3000.0, "user_provided")}
