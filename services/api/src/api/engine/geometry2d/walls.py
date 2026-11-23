@@ -157,6 +157,18 @@ def _merge_overlaps(axial: list[_Axial], tol: float) -> tuple[list[_Axial], list
     return out, issues
 
 
+def _is_end_cap(a: _Axial, w: "PairedWall", tol: float) -> bool:
+    """`a` is a line across the end of wall `w`: perpendicular to it, at its start or end, spanning exactly
+    its thickness."""
+    (x0, y0), (x1, y1) = w.start, w.end
+    h = w.thickness / 2
+    if y0 == y1:  # horizontal wall: a cap is a vertical line at an end
+        c, ends = y0, sorted((x0, x1))
+        return a.axis == "v" and any(abs(a.c - e) <= tol for e in ends) and abs(a.lo - (c - h)) <= tol and abs(a.hi - (c + h)) <= tol
+    c, ends = x0, sorted((y0, y1))
+    return a.axis == "h" and any(abs(a.c - e) <= tol for e in ends) and abs(a.lo - (c - h)) <= tol and abs(a.hi - (c + h)) <= tol
+
+
 def _shared(a: _Axial, b: _Axial) -> float:
     return min(a.hi, b.hi) - max(a.lo, b.lo)
 
@@ -246,6 +258,7 @@ def pair_walls(
     # dominates (see _dominant): then that pairing is kept, the others are rejected, and a warning
     # lists both. No rule picking one stays blocking, never a guess.
     ambiguous = set()
+    unpaired: list[_Axial] = []
     for a in axial:
         clash = _clash(a, cands[a], tol)
         if clash and (pick := _dominant(a, clash, settings.partner_dominance_ratio, tol, (thk_min, thk_max))):
@@ -283,15 +296,7 @@ def pair_walls(
                 )
             )
         elif not offsets:
-            issues.append(
-                Issue(
-                    code="unpaired_segment",
-                    severity="warning",
-                    message=f"segment {a.seg.handle} has no parallel partner "
-                    f"within {thk_min}-{thk_max} mm",
-                    sources=[a.seg.ref],
-                )
-            )
+            unpaired.append(a)
 
     idx = {a: i for i, a in enumerate(axial)}
     raw = []
@@ -311,6 +316,30 @@ def pair_walls(
     issues += box_issues
     raw.sort(key=lambda r: wall_order(r[0], r[1]))
     walls = [PairedWall(f"wall-{n:03d}", *r) for n, r in enumerate(raw, 1)]
+    caps = [a for a in unpaired if any(_is_end_cap(a, w, tol) for w in walls)]
+    for a in unpaired:
+        if a not in caps:
+            issues.append(
+                Issue(
+                    code="unpaired_segment",
+                    severity="warning",
+                    message=f"segment {a.seg.handle} has no parallel partner "
+                    f"within {thk_min}-{thk_max} mm",
+                    sources=[a.seg.ref],
+                )
+            )
+    if caps:
+        cap = settings.unmapped_ref_cap
+        issues.append(
+            Issue(
+                code="wall_end_caps_consumed",
+                severity="warning",
+                message=f"{len(caps)} loose line(s) close the end of a wall across its full thickness and "
+                "were taken as that wall's end cap, not as unpaired wall lines: "
+                + ", ".join(a.seg.handle for a in caps[:cap]) + ("; ..." if len(caps) > cap else ""),
+                sources=[a.seg.ref for a in caps[:cap]],
+            )
+        )
     return walls, issues
 
 

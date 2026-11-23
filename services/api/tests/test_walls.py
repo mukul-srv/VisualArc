@@ -41,8 +41,9 @@ def test_l_corner_gets_one_junction():
     assert len(walls) == 2
     assert [j.polygon for j in junctions] == [[(0, 0), (200, 0), (200, 200), (0, 200)]]
     assert sorted(junctions[0].wall_ids) == sorted(w.id for w in walls)
-    # shortcut-documenting: end caps have no partner, reported not hidden
-    assert codes(issues) == ["unpaired_segment"] * 2
+    # end caps have no partner: since the cap rule they are consumed as the walls' ends, in one report
+    assert codes(issues) == ["wall_end_caps_consumed"]
+    assert len(next(i for i in issues if i.code == "wall_end_caps_consumed").sources) == 2
 
 
 def test_t_junction_fills_gap_under_stem():
@@ -67,7 +68,7 @@ def test_t_junction_fills_gap_under_stem():
         [(900, 0), (1100, 0), (1100, 200), (900, 200)]
     ]
     assert len(junctions[0].wall_ids) == 3
-    assert codes(issues) == ["unpaired_segment"] * 3
+    assert codes(issues) == ["wall_end_caps_consumed"]  # the three end caps, one report
 
 
 def test_closed_room_four_walls_four_corners_area_conserved():
@@ -259,3 +260,16 @@ def test_identical_cross_pairs_are_kept_once():
     raw = [((150.0, 0.0), (150.0, 200.0), 300.0, (s[0], s[1])), ((150.0, 0.0), (150.0, 200.0), 300.0, (s[2], s[3]))]
     kept, issues = _one_wall_per_box(raw, 1e-6)
     assert kept == raw[:1] and [i.code for i in issues] == ["short_cross_pair_unexplained", "short_cross_pair_ignored"]
+
+
+def test_loose_line_that_is_not_a_wall_end_cap_stays_unpaired():
+    # a 200 mm cap at the wall's end is consumed; a 150 mm line there (not the full thickness) and a line far from any wall are not
+    walls, _, issues = run([
+        ((0, 0), (1000, 0)), ((0, 200), (1000, 200)),
+        ((1000, 0), (1000, 200)),  # full-thickness cap at the end
+        ((0, 0), (0, 150)),  # at the end but not the thickness
+        ((5000, 5000), (5000, 5200)),  # across a thickness but nowhere near a wall
+    ])
+    assert len(walls) == 1
+    assert [i.code for i in issues] == ["unpaired_segment", "unpaired_segment", "wall_end_caps_consumed"]
+    assert [s.entity_handle for s in next(i for i in issues if i.code == "wall_end_caps_consumed").sources] == ["H2"]

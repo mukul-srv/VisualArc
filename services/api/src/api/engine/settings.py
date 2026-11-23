@@ -132,6 +132,24 @@ class Settings:
     # (the interior faces of the walls around each enclosed space), reported as a warning.
     infer_floor_boundary: bool = True
 
+    # The plan overlay (source linework under the model) sends at most this many segments; a longer drawing is
+    # cut, wall layers kept first, and the response says it was cut.
+    plan_overlay_max_segments: int = 6000
+
+    # Words that suggest what an unmapped layer holds (upper case substring -> role text). Only ever shown as a
+    # suggestion next to the unmapped layer, never applied. Kept short on purpose.
+    layer_name_hints: tuple[tuple[str, str], ...] = (
+        ("PUERYVENTA", "door or window"), ("PUERTA", "door"), ("VENTANA", "window"), ("MURO", "wall"),
+        ("DOOR", "door"), ("WINDOW", "window"), ("FENSTER", "window"), ("DØR", "door"),
+        ("VINDUE", "window"), ("TÜR", "door"),
+    )
+
+    # An unmarked gap in a wall run (no opening marker) becomes an opening when its width is within this
+    # range (doors and windows; narrower is a slot, wider is a missing wall or an open front). Reported per
+    # gap, kind decided by a documented rule, never silent. PROVISIONAL: round numbers, not a standard.
+    bridge_unmarked_gaps: bool = True
+    bridged_opening_width_mm: tuple[float, float] = (400.0, 2400.0)
+
     # Plausible size of a building plan (its longest side). A plan outside this is more likely
     # read in the wrong units (a metre drawing flagged as inches is ~25x too small) than real;
     # it is reported, never corrected. PROVISIONAL: a round range, not from a standard.

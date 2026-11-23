@@ -6,7 +6,7 @@ import type { FloorCandidate } from "./split";
 export type ConventionsSpec = { preset: string; mapping: Record<string, string> };
 export const DEFAULT_CONVENTIONS: ConventionsSpec = { preset: "aia", mapping: {} };
 export type PresetInfo = { id: string; label: string; source: string; layers: Record<string, string> };
-export type LayerRole = { layer: string; role: string | null; entities: number };
+export type LayerRole = { layer: string; role: string | null; entities: number; hint?: string | null }; // hint: a suggestion from the name, never applied
 export type LayerInfo = { layers: LayerRole[]; issues: Issue[]; needs: "units"[]; floor_candidates: FloorCandidate[] };
 type Fetch = typeof fetch;
 

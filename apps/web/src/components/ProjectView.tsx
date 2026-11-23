@@ -10,6 +10,7 @@ import { getProjectConventions, listConventions, putProjectConventions, type Con
 import { AccessPanel } from "./AccessPanel";
 import { HELP } from "../lib/help";
 import { BuildingPanel } from "./BuildingPanel";
+import { PlanOverlay } from "./PlanOverlay";
 import { ParametersPanel } from "./ParametersPanel";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
@@ -110,6 +111,10 @@ export function ProjectView({ id }: { id: string }) {
               onRename={(fid, n) => run(() => renameFloor(id, fid, n), load)}
               onRemove={(fid) => run(() => removeFloor(id, fid), load)} />
             <p><small>To change the geometry, fix the DXF and add it as a new floor. Editing walls and openings in the app is planned.</small></p>
+            <details>
+              <summary>Plan vs model (the drawing under what was built)</summary>
+              <PlanOverlay projectId={id} floors={manifest.floors} />
+            </details>
             {manifest.floors.length > 1 && (
               <details>
                 <summary>Building: floor offsets and stair pairs</summary>

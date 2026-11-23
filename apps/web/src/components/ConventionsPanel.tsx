@@ -37,6 +37,7 @@ export function ConventionsPanel(p: {
     .filter((n) => !known.has(n.toUpperCase()))
     .sort();
   const count = (n: string) => layers.find((l) => l.layer === n)?.entities;
+  const hint = (n: string) => (n in spec.mapping ? null : layers.find((l) => l.layer === n)?.hint); // only while unmapped
   const setRole = (layer: string, role: string) => {
     const mapping = { ...spec.mapping };
     if (role === "") delete mapping[layer];
@@ -66,6 +67,7 @@ export function ConventionsPanel(p: {
                   <option value="">unmapped</option>
                   {roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r] ?? r}</option>)}
                 </select>
+                {hint(n) && <small> Suggestion (not applied): {hint(n)}</small>}
               </li>
             ))}
           </ul>
