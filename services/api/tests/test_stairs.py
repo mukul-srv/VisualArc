@@ -136,7 +136,7 @@ def test_incompatible_run_and_too_low_a_rise_are_warned(tmp_path):
     p = _read(path, params={"stair_rise": 160, "stair_run": 400})
     (s,) = _floor(p).stairs
     assert s.riser_count == 20 and "stair_run_mismatch" in _codes(p)  # built as drawn, 250 != 400
-    low = read_dxf(path, 3000, ceiling_height=100, building_type="residential", params={"slab_thickness": 100})
+    low = read_dxf(path, 100, ceiling_height=100, building_type="residential", params={"slab_thickness": 100})
     assert "stair_too_low" in _codes(low) and _floor(low).stairs[0].riser_count is None
 
 
@@ -211,3 +211,33 @@ def test_arrow_inside_two_overlapping_outlines_is_ambiguous(tmp_path):
     p = _read(_plan(tmp_path, extra=overlap))  # the arrow at y=1000 lies in both outlines
     assert len(_floor(p).stairs) == 2 and all(s.direction is None for s in _floor(p).stairs)
     assert _codes(p).count("stair_direction_ambiguous") == 2
+
+
+def test_stairs_follow_either_the_wall_or_the_ceiling_height(tmp_path):
+    # raising only the wall height used to leave the stair at the old height (it read the ceiling alone)
+    base = _read(STAIRS)
+    taller_walls = read_dxf(STAIRS, 3600, ceiling_height=3000, building_type="residential", params=PARAMS)
+    (s0,), (s1,) = _floor(base).stairs, _floor(taller_walls).stairs
+    assert s0.total_rise.value == 3200  # max(3000, 3000) + 200
+    assert s1.total_rise.value == 3800  # max(wall 3600, ceiling 3000) + 200
+    assert (s0.riser_count, s1.riser_count) == (20, 24)  # 3800 / 160 = 23.75 -> 24 risers
+    taller_ceiling = read_dxf(STAIRS, 3000, ceiling_height=3400, building_type="residential", params=PARAMS)
+    assert _floor(taller_ceiling).stairs[0].total_rise.value == 3600
+
+
+def test_regenerated_stairs_follow_the_parameters_through_the_job_route(client):
+    pid = client.post(P, json={"name": "S"}).json()["project_id"]
+    up = client.post("/api/v1/uploads", content=STAIRS.read_bytes()).json()["upload_id"]
+    r = client.post(f"/api/v1/jobs/projects/{pid}/floors", json={"upload_id": up, "floor_name": "G", "elevation": 0, "ceiling_height": 3000, "wall_height": 3000})
+    jobs.execute(r.json()["job_id"])
+
+    def stair():
+        gid = client.get(f"{P}/{pid}").json()["floors"][0]["generation_id"]
+        f = client.get(f"/api/v1/generations/{gid}/artifacts/canonical").json()["buildings"][0]["floors"][0]
+        return f["stairs"][0]["total_rise"]["value"]
+
+    assert stair() == 3200
+    for body, want in (({"wall_height": 3600}, 3800), ({"ceiling_height": 4000}, 4200), ({"ceiling_height": 3000, "wall_height": 3000}, 3200)):
+        r = client.post(f"/api/v1/jobs/projects/{pid}/parameters", json=body)
+        jobs.execute(r.json()["job_id"])
+        assert stair() == want, body

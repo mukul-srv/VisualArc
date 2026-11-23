@@ -816,11 +816,14 @@ def read_dxf(
         run_p = given.get("stair_run", preset.stair_run if preset else None)
         total = None
         if ceil_h is not None and slab_t is not None:  # derived sum, so inferred
-            total = Measured(value=ceil_h.value + slab_t, source="inferred")
+            # the storey height is the taller of the ceiling and the walls (a stair has to reach what is
+            # above the room, so raising either parameter raises the stair), plus the slab above
+            storey = max(ceil_h.value, height.value if height is not None else 0.0)
+            total = Measured(value=storey + slab_t, source="inferred")
         elif flights:
             issues.append(Issue(
                 code="stair_rise_unknown", severity="warning",
-                message="total rise (ceiling height + slab thickness) is unknown "
+                message="total rise (storey height + slab thickness) is unknown "
                 f"({'no ceiling height' if ceil_h is None else 'no slab thickness'}); no steps or "
                 "ramp slope built", sources=[f.ref for f in flights[: settings.unmapped_ref_cap]]))
         for f in flights:

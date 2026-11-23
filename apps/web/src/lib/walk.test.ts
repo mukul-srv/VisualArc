@@ -214,3 +214,39 @@ test("ceilings: hidden layer is not picked, does not move the spawn, and does no
   expect(ceilings.every((c) => cam.layers.test(c.layers))).toBe(true);
   expect(modelBox(f.scene).max.y).toBeLessThanOrEqual(3.0 + 1e-9);
 });
+
+
+// ---- stairs, columns and railings are solid (synthetic meshes: no engine run needed)
+const solid = (type: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  m.userData = { type };
+  m.updateMatrixWorld(true);
+  return m;
+};
+
+test("columns and balcony railings collide; stairs and floors are walked on, not collided with", () => {
+  const g = new THREE.Group();
+  g.add(
+    solid("column", 2, 2.3, 0, 3, 2, 2.3),
+    solid("balcony_railing", -1, 5, 0, 1.0, 6, 6.05),
+    solid("stair", 0, 1, 0, 1.0, 0, 1),
+    solid("floor_boundary", -5, 5, -0.01, 0, -5, 5),
+  );
+  const types = collectColliders(g).map((m) => m.userData.type).sort();
+  expect(types).toEqual(["balcony_railing", "column"]);
+});
+
+test("the walker is stopped by a column and by a railing", () => {
+  const g = new THREE.Group();
+  const column = solid("column", 2, 2.3, 0, 3, -0.15, 0.15);
+  const rail = solid("balcony_railing", 4, 4.05, 0, 1.0, -3, 3);
+  g.add(column, rail);
+  const colliders = collectColliders(g);
+  const pos = new THREE.Vector3(0, 0, 0);
+  for (let i = 0; i < 200; i++) moveWithCollision(pos, new THREE.Vector2(0.03, 0), 0, colliders);
+  expect(pos.x).toBeLessThan(2 - WALK.radius * 0.5); // stopped before the column (x = 2)
+  const p2 = new THREE.Vector3(3, 0, 2);
+  for (let i = 0; i < 200; i++) moveWithCollision(p2, new THREE.Vector2(0.03, 0), 0, colliders);
+  expect(p2.x).toBeLessThan(4); // stopped before the railing (x = 4)
+});

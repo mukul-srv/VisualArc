@@ -71,15 +71,19 @@ export function supportAt(x: number, z: number, fromY: number, supports: THREE.M
 
 /** New feet height after moving horizontally by `travel` (m) to (x, z), or null when the move is
  *  not allowed (a step higher than the limit, a ramp steeper than the slope limit).
- *  No support under the new point: the walker drops to the baseline (`baseY`), e.g. off the side of
- *  a ramp or through a doorway, so a lifted position never lingers in mid-air. */
+ *  No support under the new point: from at most a step above the baseline (`baseY`) the walker lands
+ *  on it (a doorway, the first tread); from higher up it is an edge (the side of a stair or ramp) and
+ *  the move is refused, so nobody walks off into thin air or through a stair's side. */
 export function resolveHeight(
   x: number, z: number, feetY: number, travel: number, supports: THREE.Mesh[], baseY: number, stepUp: number,
 ): number | null {
   const s = supportAt(x, z, feetY, supports, stepUp);
   if (!s) {
     const high = supportAt(x, z, feetY, supports, stepUp + 10); // anything taller than a step blocks
-    return high && high.y > feetY + stepUp ? null : baseY;
+    if (high && high.y > feetY + stepUp) return null;
+    // nothing within a step down: from the first tread the walker steps down to the floor, but from higher
+    // up the side of a stair or ramp is an edge, not a doorway: blocked (a stair has sides)
+    return feetY - baseY > stepUp + 1e-6 ? null : baseY;
   }
   if (s.type === "ramp" && travel > 0 && Math.abs(s.y - feetY) / travel > STEP.maxSlope) return null;
   return s.y;

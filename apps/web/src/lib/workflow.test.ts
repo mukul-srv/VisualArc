@@ -350,3 +350,30 @@ test("a door of fixture_openings opens about its hinge and becomes passable", as
   expect(closed.max.x - closed.min.x).toBeGreaterThan(0.7);
   expect(open.min.z).toBeLessThan(-0.7);
 });
+
+
+test("raising the ceiling or the wall height regenerates the stair at the new height, in the served GLB", async () => {
+  const jobs = await import("./jobs");
+  const created = await api.createProject("Stairs params");
+  if (!created.ok) throw new Error(created.message);
+  const pid = (created as unknown as { project_id: string }).project_id;
+  const up = await api.uploadDxf(fixture("fixture_stairs.dxf"));
+  if (!up.ok) throw new Error(up.message);
+  const add = await jobs.addFloorJob(pid, { upload_id: up.upload_id, floor_name: "G", elevation: 0, ceiling_height: 3000, wall_height: 3000, stair_rise: 160, stair_run: 250 } as never);
+  if (!add.ok) throw new Error(add.message);
+  const top = async () => {
+    const m = await api.getProject(pid);
+    if (!m.ok) throw new Error(m.message);
+    const gid = (m.manifest as { floors: { generation_id: string }[] }).floors[0].generation_id;
+    const scene = (await loadGlb(api.glbUrl(gid))).scene;
+    let y = NaN;
+    scene.traverse((o) => o.userData?.type === "stair" && (y = new THREE.Box3().setFromObject(o).max.y));
+    return y;
+  };
+  expect(await top()).toBeCloseTo(0.2 + 19 * 0.16, 3); // 20 risers: the top tread, a riser below the floor above
+  for (const [body, risers] of [[{ wall_height: 3600 }, 24], [{ ceiling_height: 4000 }, 26], [{ ceiling_height: 3000, wall_height: 3000 }, 20]] as const) {
+    const r = await jobs.changeParametersJob(pid, body);
+    if (!r.ok) throw new Error(r.message);
+    expect(await top()).toBeCloseTo(0.2 + (risers - 1) * 0.16, 2); // follows the parameters at once, no walking needed
+  }
+}, 120_000);

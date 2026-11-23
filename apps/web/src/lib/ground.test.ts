@@ -133,3 +133,13 @@ test("climbing tread by tread, the eased eye never jumps more than a small step 
   expect(feet).toBeGreaterThan(2.5);
   expect(maxJump).toBeLessThan(0.16 * 0.3); // under a third of a riser per frame (unsmoothed it is the whole riser); the ground stays exact
 });
+
+test("a raised walker cannot step off the side of a stair or ramp, but the first tread steps down to the floor", () => {
+  const g = new THREE.Group();
+  g.add(box("stair", 0, 1, 0, 1.0, 0, 1, { riser_height: { value: 160 } })); // a tall block, top at 1.0 m
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  expect(resolveHeight(0.5, 5, 1.0, 0.05, supports, 0, 0.18)).toBeNull(); // from 1 m up: an edge, blocked
+  expect(resolveHeight(0.5, 5, 0.16, 0.05, supports, 0, 0.18)).toBe(0); // from the first tread: down to the floor
+  expect(resolveHeight(0.5, 0.5, 1.0, 0.05, supports, 0, 0.18)).toBeCloseTo(1.0); // still on the surface: fine
+});

@@ -7,7 +7,7 @@ import { createProject, getPresets, getProject, isGenerationId, splitUpload, upl
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
-import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache, uploadStep } from "@/lib/upload-state";
+import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache, targetAfterCreate, uploadStep } from "@/lib/upload-state";
 import { HELP } from "@/lib/help";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
 import { AppNav } from "./AppNav";
@@ -162,6 +162,7 @@ export function UploadFlow() {
           return setFailure(c);
         }
         pid = c.project_id;
+        setProj((p) => targetAfterCreate(p, pid)); // a retry joins this project, it does not create another
       }
       target = pid;
       // always saved on the project (a reset to AIA included), so this and later floors use them

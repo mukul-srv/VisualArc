@@ -8,7 +8,7 @@ export default function ProjectPage() {
   const { id } = useParams<{ id: string }>();
   return (
     <RequireAuth>
-      <ProjectView id={id} />
+      <ProjectView key={id} id={id} />
     </RequireAuth>
   );
 }

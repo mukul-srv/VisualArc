@@ -17,6 +17,7 @@ import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distance
 import { collectSupports, dampTo, groundLevel, resolveHeight, stepUpLimit } from "@/lib/ground";
 import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
 import { createTapGate } from "@/lib/tap";
+import { BASE_LIGHTS, WALK_FILL } from "@/lib/lighting";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, describeRoom, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel, type RoomData } from "@/lib/selection";
@@ -114,10 +115,13 @@ export default function ViewerPage() {
     el.appendChild(renderer.domElement);
     const controls = new OrbitControls(persp as THREE.Camera, renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.2));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(5, 10, 5);
+    // the lights are data (lib/lighting.ts); walk mode adds a fill so the roof underside and ceilings show
+    const [sky, sunLight] = BASE_LIGHTS as [Extract<(typeof BASE_LIGHTS)[number], { kind: "hemisphere" }>, Extract<(typeof BASE_LIGHTS)[number], { kind: "directional" }>];
+    scene.add(new THREE.HemisphereLight(sky.sky, sky.ground, sky.intensity));
+    const sun = new THREE.DirectionalLight(sunLight.color, sunLight.intensity);
+    sun.position.set(...sunLight.dir);
     scene.add(sun);
+    const fill = new THREE.AmbientLight(WALK_FILL.kind === "ambient" ? WALK_FILL.color : 0xffffff, WALK_FILL.intensity);
     let grid = new THREE.GridHelper(20, 20); // 1 cell = 1 m; resized to the model once loaded
     scene.add(grid);
     scene.add(new THREE.AxesHelper(2)); // R=X, G=Y(up), B=Z
@@ -284,6 +288,7 @@ export default function ViewerPage() {
       if (!walk) return;
       walk.restore();
       persp.layers.disable(CEILING_LAYER);
+      scene.remove(fill);
       keys.clear();
       camera.position.copy(walk.saved.position);
       controls.target.copy(walk.saved.target);
@@ -315,6 +320,7 @@ export default function ViewerPage() {
         saved: { position: camera.position.clone(), target: controls.target.clone() },
       };
       persp.layers.enable(CEILING_LAYER); // ceilings are drawn only while walking
+      scene.add(fill); // inside, down-facing surfaces get no sun or sky
       controls.enabled = false;
       setWalking(true);
       aim();
@@ -506,8 +512,13 @@ export default function ViewerPage() {
         setManifest(m);
         setTarget(floorTarget(m, f));
       });
+    const onVisible = () => document.visibilityState === "visible" && onFocus();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible); // coming back to this browser tab
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [manifest, floorId, viewing]);
 
   const floors = manifest ? sortFloors(manifest.floors) : [];

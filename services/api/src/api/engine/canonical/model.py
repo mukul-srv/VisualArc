@@ -212,7 +212,7 @@ class Stair(_Model):
     type: Literal["stair"] = "stair"
     polygon: list[Point2]  # the 4 corners of the drawn flight
     direction: Direction | None = None
-    total_rise: Measured | None = None  # ceiling height + slab thickness (derived: inferred)
+    total_rise: Measured | None = None  # max(ceiling, wall height) + slab thickness (derived: inferred)
     rise_param: Measured | None = None  # target riser height used to count the steps
     run_param: Measured | None = None  # nominal tread depth, compared with the drawing
     riser_count: int | None = None

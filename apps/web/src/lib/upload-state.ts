@@ -40,6 +40,11 @@ export const uploadKey = (search: string) => `new:${search}`;
  *  input's file name; the flow must start over then. */
 export const restoredFromCache = (e: { persisted?: boolean }) => e.persisted === true;
 
+/** After a new project was created for this upload, the form's target is that project: a retry (for
+ *  instance after a blocking issue was fixed) adds the floor to it instead of creating a second,
+ *  empty project of the same name from the same file. */
+export const targetAfterCreate = (proj: ProjectTarget, projectId: string): ProjectTarget => ({ ...proj, target: projectId });
+
 const HEX32 = /^[0-9a-f]{32}$/;
 const existing = (t: ProjectTarget) => t.on && HEX32.test(t.target.trim());
 
