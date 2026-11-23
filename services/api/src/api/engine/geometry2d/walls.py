@@ -176,7 +176,7 @@ def _describe(a: _Axial, b: _Axial, tol: float) -> str:
 
 
 def _dominant(
-    a: _Axial, clash: set[_Axial], ratio: float, tol: float
+    a: _Axial, clash: set[_Axial], ratio: float, tol: float, thickness: tuple[float, float]
 ) -> tuple[list[_Axial], list[_Axial]] | None:
     """(kept partners, rejected partners) when one offset's partners share far more of `a` than
     every other offset's (each at most `ratio` of it); None when no rule picks one."""
@@ -188,10 +188,13 @@ def _dominant(
     best = max(total, key=total.get)
     others = [k for k in groups if k != best]
     if any(total[k] > ratio * total[best] for k in others):
-        # no offset dominates `a`: but if its competing partners already form walls with each other over
-        # a far longer stretch, `a` is a stray line beside them and pairs with none (reported)
+        # no offset dominates `a`: but if its competing partners are themselves a wall (a distance within
+        # the wall thickness range, so they pair with each other) over a far longer stretch, `a` is a
+        # stray line beside that wall and pairs with none (reported). Partners too far apart to be a
+        # wall prove nothing about `a`: that stays blocking.
         if all(
-            _shared(p, q) * ratio >= max(_shared(a, p), _shared(a, q))
+            thickness[0] - tol <= abs(p.c - q.c) <= thickness[1] + tol
+            and _shared(p, q) * ratio >= max(_shared(a, p), _shared(a, q))
             for p, q in combinations(clash, 2)
             if abs(p.c - q.c) > tol
         ):
@@ -245,7 +248,7 @@ def pair_walls(
     ambiguous = set()
     for a in axial:
         clash = _clash(a, cands[a], tol)
-        if clash and (pick := _dominant(a, clash, settings.partner_dominance_ratio, tol)):
+        if clash and (pick := _dominant(a, clash, settings.partner_dominance_ratio, tol, (thk_min, thk_max))):
             keep, rejected = pick
             for b in rejected:
                 cands[a].remove(b)

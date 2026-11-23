@@ -198,3 +198,10 @@ def test_equally_strong_competing_partners_stay_blocking():
     # existing rule, with partners sharing the same long stretch: no rule picks one
     _, _, issues = run([((0, 0), (2000, 0)), ((0, 200), (2000, 200)), ((0, 400), (2000, 400))])
     assert {i.code for i in issues if i.severity == "blocking"} == {"ambiguous_pairing"}
+
+
+def test_stray_line_between_partners_too_far_apart_to_be_a_wall_stays_blocking():
+    # the long lines 800 mm apart cannot pair with each other (max wall thickness 600), so they do not
+    # make the 50 mm stub between them a stray line beside a wall: no rule picks one
+    _, _, issues = run([((0, 0), (50, 0)), ((0, -400), (2000, -400)), ((0, 400), (2000, 400))])
+    assert {i.code for i in issues if i.severity == "blocking"} == {"ambiguous_pairing"}

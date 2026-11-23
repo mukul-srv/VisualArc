@@ -26,7 +26,9 @@ from api.engine.settings import DEFAULTS
 # was given. Floor-to-floor stacking: elevations step by the floor-to-floor value.
 # 0.7.1 (a slab per building part) was dropped again: a slab per floor boundary, as in 0.7.0; the
 # optional Slab.boundary_ids / holes of 0.7.1 stay readable ("holes" is always empty now).
-SCHEMA_VERSION = "0.8.0"
+# 0.9.0: a floor boundary carries its provenance (`source_extracted` = drawn on the floor layer, `inferred` =
+# derived from the closed outer wall perimeter when the drawing has no floor outline). Older files read as drawn.
+SCHEMA_VERSION = "0.9.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -106,7 +108,8 @@ class FloorBoundary(_Model):
     id: str
     type: Literal["floor_boundary"] = "floor_boundary"
     polygon: list[Point2]  # closed ring, first point not repeated
-    sources: list[SourceRef]
+    sources: list[SourceRef]  # the polyline drawn; for an inferred boundary, the walls around it
+    source: Literal["source_extracted", "inferred"] = "source_extracted"
 
 
 class Param(_Model):

@@ -43,7 +43,7 @@ from api.engine.canonical.model import (
     Wall,
 )
 from api.engine.geometry2d.balconies import find_balconies
-from api.engine.geometry2d.floor import floor_issue
+from api.engine.geometry2d.floor import closed_outer_perimeter, floor_issue
 from api.engine.geometry2d.openings import (
     Marker,
     SwingArc,
@@ -77,26 +77,29 @@ class InputError(ValueError):
     """Expected bad input (not a DXF, corrupt, too large): report, don't traceback."""
 
 
-def _infer_boundaries(paired, rooms, settings: Settings):
+def _infer_boundaries(paired, pieces, rooms, settings: Settings):
     """Floor boundaries for a floor whose drawing has no floor outline at all: the interior of each space
-    the walls close (inner wall faces), the same regions the rooms are built from. Not closed, nothing is
+    the walls close (inner wall faces), the same regions the rooms are built from, but only inside the closed
+    OUTER wall loop: closed rooms behind an open outer wall are not a floor. Not closed, nothing is
     inferred and an issue says so. The boundary's sources are the walls that enclose it."""
     cap = settings.unmapped_ref_cap
     out = []
-    for p in rooms:
+    inside = closed_outer_perimeter(paired, pieces, settings)
+    for p in rooms if inside is not None else []:
         ring = Polygon(p.polygon)
-        if not ring.is_valid or ring.area <= settings.tolerance_mm:
+        if not ring.is_valid or ring.area <= settings.tolerance_mm or not inside.buffer(settings.tolerance_mm).covers(ring):
             continue
         refs = list(dict.fromkeys(
             s.ref for w in paired if w.rect().distance(ring) <= settings.tolerance_mm for s in w.sources))
-        out.append(FloorBoundary(id=f"fb-{len(out) + 1:03d}", polygon=p.polygon, sources=refs[:cap]))
+        out.append(FloorBoundary(id=f"fb-{len(out) + 1:03d}", polygon=p.polygon, sources=refs[:cap],
+                                 source="inferred"))
     if not out:
         return [], Issue(
             code="floor_boundary_not_inferred",
             severity="warning",
-            message="the drawing has no floor outline and its walls enclose no closed region, so no floor "
-            "boundary could be inferred: there is no slab, ceiling or walking surface. Close the wall "
-            "outline, or draw the floor as a closed polyline on the floor layer",
+            message="the drawing has no floor outline and its outer walls do not form a closed loop, so no "
+            "floor boundary could be inferred: there is no slab, ceiling or walking surface. Close the "
+            "outer wall outline, or draw the floor as a closed polyline on the floor layer",
         )
     return out, Issue(
         code="floor_boundary_inferred",
@@ -863,7 +866,7 @@ def read_dxf(
         issues += scope.notes
     found, room_issues = find_rooms(paired, pieces, labels, settings) if paired else ([], [])
     if paired and not boundaries and not floor_layer_seen and settings.infer_floor_boundary:
-        inferred, note = _infer_boundaries(paired, found, settings)
+        inferred, note = _infer_boundaries(paired, pieces, found, settings)
         boundaries += inferred
         issues.append(note)
     # Floor convention (model.py): `elevation` is the underside of the slab, the finished floor is the

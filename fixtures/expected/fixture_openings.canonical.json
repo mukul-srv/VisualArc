@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.8.0",
+  "schema_version": "0.9.0",
   "id": "fixture_openings",
   "units": "mm",
   "source_file": "fixture_openings.dxf",
@@ -732,7 +732,8 @@
                   "layer": "A-FLOR",
                   "entity_handle": "64"
                 }
-              ]
+              ],
+              "source": "source_extracted"
             },
             {
               "id": "fb-002",
@@ -761,7 +762,8 @@
                   "layer": "A-FLOR",
                   "entity_handle": "65"
                 }
-              ]
+              ],
+              "source": "source_extracted"
             },
             {
               "id": "fb-003",
@@ -790,7 +792,8 @@
                   "layer": "A-FLOR",
                   "entity_handle": "66"
                 }
-              ]
+              ],
+              "source": "source_extracted"
             }
           ],
           "openings": [

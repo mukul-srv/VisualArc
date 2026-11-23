@@ -7,7 +7,7 @@ import ezdxf
 import pytest
 
 from api.engine.adapters.dxf.reader import read_dxf
-from api.engine.canonical.model import Project, Slab
+from api.engine.canonical.model import FloorBoundary, Project, Slab
 from api.engine.geometry3d.extrude import build_meshes, build_opening_parts
 from api.engine.settings import DEFAULTS
 
@@ -96,8 +96,10 @@ def test_older_slab_shapes_still_validate():
     assert Slab.model_validate(base).boundary_ids == []
     assert Slab.model_validate({**base, "boundary_id": None, "boundary_ids": ["fb-001"], "holes": []}).holes == []
     legacy = (FIXTURES / "expected" / "fixture_b.canonical.json").read_text(encoding="utf-8")
-    old = Project.model_validate_json(legacy.replace('"schema_version": "0.8.0"', '"schema_version": "0.7.0"'))
+    old = Project.model_validate_json(legacy.replace('"schema_version": "0.9.0"', '"schema_version": "0.7.0"'))
     assert old.schema_version == "0.7.0"  # the version is data; an older file reads fine
+    # a boundary written before 0.9.0 has no provenance field: it was drawn
+    assert FloorBoundary.model_validate({"id": "fb-001", "polygon": [[0, 0], [1, 0], [1, 1]], "sources": []}).source == "source_extracted"
 
 
 def test_a_space_without_a_floor_outline_is_reported(tmp_path):
@@ -112,6 +114,8 @@ def test_floor_boundary_is_inferred_from_the_closed_wall_perimeter(tmp_path):
     p = _building(tmp_path, with_floor=False)
     f = p.buildings[0].floors[0]
     (b,) = f.boundaries  # the inside of the walls: what the drawing's own A-FLOR polygon would have been
+    assert b.source == "inferred"
+    assert {x.source for x in _building(tmp_path, with_floor=True).buildings[0].floors[0].boundaries} == {"source_extracted"}
     assert sorted(b.polygon) == sorted([(200, 200), (4200, 200), (4200, 3200), (200, 3200)])
     assert b.sources and {s.layer for s in b.sources} == {"A-WALL"}  # traceable to the walls around it
     (note,) = [i for i in p.issues if i.code == "floor_boundary_inferred"]
@@ -145,3 +149,32 @@ def test_an_unusable_floor_outline_is_not_replaced_by_an_inferred_one(tmp_path):
     codes = [i.code for i in p.issues]
     assert "open_floor_boundary" in codes and "floor_boundary_inferred" not in codes
     assert not p.buildings[0].floors[0].boundaries
+
+
+@pytest.mark.parametrize(
+    "room",
+    [
+        [(2000, 1000), (4000, 1000), (4000, 3000), (2000, 3000)],  # free-standing in the middle
+        [(2000, 2200), (4000, 2200), (4000, 4200), (2000, 4200)],  # built against the north outer wall
+    ],
+)
+def test_open_outer_wall_with_a_closed_interior_room_infers_nothing(tmp_path, room):
+    # the outer wall has a gap (its west side is missing) but a partition room inside is closed: a closed
+    # hole in the wall mass is not a closed outer perimeter, so no floor is inferred
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    for loop in ([(0, 0), (6400, 0), (6400, 4400), (0, 4400)], [(200, 200), (6200, 200), (6200, 4200), (200, 4200)]):
+        for i, a in enumerate(loop[:3]):  # west side missing
+            msp.add_line(a, loop[i + 1], dxfattribs={"layer": "A-WALL"})
+    inner = [(x + 200 if x == room[0][0] else x - 200, y + 200 if y == room[0][1] else y - 200) for x, y in room]
+    for loop in (room, inner):
+        for i, a in enumerate(loop):  # a closed room inside, with 200 mm walls
+            msp.add_line(a, loop[(i + 1) % 4], dxfattribs={"layer": "A-WALL"})
+    doc.saveas(tmp_path / "o.dxf")
+    p = read_dxf(tmp_path / "o.dxf", 3000, ceiling_height=2600, building_type="residential")
+    f = p.buildings[0].floors[0]
+    assert f.rooms  # the interior room does close (rooms are a separate question)
+    assert not f.boundaries and not f.slabs
+    codes = [i.code for i in p.issues]
+    assert "floor_boundary_not_inferred" in codes and "floor_boundary_inferred" not in codes
