@@ -78,7 +78,8 @@ def _version(db: Session, row: ProjectRow, user_id: str | None, message: str) ->
     v = ProjectVersionRow(
         id=new_id(), project_id=row.id, number=number, created_by=user_id, message=message,
         snapshot={"floors": floors, "generation_ids": [f["generation_id"] for f in floors],
-                  "params": row.data.get("params", {}), "parameters": row.data.get("parameters", {})},
+                  "params": row.data.get("params", {}), "parameters": row.data.get("parameters", {}),
+                  "pairings": row.data.get("pairings", [])},
     )
     db.add(v)
     db.flush()
@@ -226,6 +227,7 @@ def _manifest(row: ProjectRow, v: ProjectVersionRow, role: str) -> dict:
     return {"role": role,
         "id": row.id, "name": row.data["name"], "floors": v.snapshot["floors"],
         "params": v.snapshot.get("params", {}), "parameters": v.snapshot.get("parameters", {}),
+        "pairings": v.snapshot.get("pairings", []),
         "version": v.number,
         "updated_at": v.created_at.isoformat(),
     }
@@ -383,7 +385,9 @@ def remove_floor(pid: str, floor_id: str, user: CurrentUser):
                     "code": "roof_on_lower_floor", "severity": "warning", "sources": [],
                     "message": f"the roof of the removed floor could not move to {new_top['name']!r} "
                     "(it cannot be regenerated); that floor has no roof"})
-        row.data = {**row.data, "params": params, "floors": left}
+        pairings = [p for p in row.data.get("pairings", []) if floor_id not in (
+            p["lower_floor"], p["upper_floor"])]
+        row.data = {**row.data, "params": params, "floors": left, "pairings": pairings}
         _version(db, row, user.id, f"Removed floor {gone['name']}")
     if issues:  # nothing is lost silently: the removal went through, the roof did not move
         return JSONResponse({"issues": issues})
@@ -423,7 +427,8 @@ def restore_version(pid: str, number: int, user: CurrentUser):
         old = _version_row(db, pid, number)
         row.data = {**row.data, "floors": old.snapshot["floors"],
                     "params": old.snapshot.get("params", {}),
-                    "parameters": old.snapshot.get("parameters", {})}
+                    "parameters": old.snapshot.get("parameters", {}),
+                    "pairings": old.snapshot.get("pairings", [])}
         return _info(_version(db, row, user.id, f"Restored version {number}"))
 
 
