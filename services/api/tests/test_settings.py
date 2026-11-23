@@ -72,6 +72,7 @@ def test_defaults_match_document_08():
         ),
         "wall_thickness_min_mm": 50.0,
         "wall_thickness_max_mm": 600.0,
+        "plausible_footprint_mm": (1000.0, 500_000.0),
         "role_face_tolerance_mm": 1.0,
         "tolerance_mm": 1e-6,
         "extrusion_tolerance": 1e-6,

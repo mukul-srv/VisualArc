@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Preflight } from "./api";
-import { buildRequest, type FormValues } from "./params";
+import { buildRequest, unitsDoubtful, unresolvable, type FormValues } from "./params";
 
 const pre = (needs: Preflight["needs"]): Preflight => ({
   upload_id: "u",
@@ -71,4 +71,17 @@ test("floors without stored settings get a clear message with an action, not a d
   expect(one.action).toMatch(/Add it again from the DXF/);
   expect(one.href).toBe("/new?project=abc");
   expect(legacyNotice(["A", "B"], "abc")!.text).toMatch(/These floors A, B .* they were/);
+});
+
+test("a doubtful size offers the units override and unlocks the form", () => {
+  const issue = (code: string, severity: "blocking" | "warning" = "warning") => ({ code, severity, message: "", sources: [] });
+  const pre = { upload_id: "u", issues: [issue("units_implausible"), issue("no_walls", "blocking")], needs: [], inventory: { layers: [], entity_counts: {} } } as Preflight;
+  expect(unitsDoubtful(pre)).toBe(true);
+  expect(unresolvable(pre.issues, true)).toEqual([]);
+  expect(unresolvable(pre.issues, false).map((i) => i.code)).toEqual(["no_walls"]);
+  const f = { buildingType: "residential", wallHeight: "", ceilingHeight: "", units: "m", doorHeight: "", windowHeight: "", windowSill: "" } as FormValues;
+  const r = buildRequest(pre, f);
+  expect(r.ok && r.params.units_override).toBe(true);
+  const plain = buildRequest({ ...pre, issues: [] }, f);
+  expect(plain.ok && "units_override" in plain.params).toBe(false); // no override unless the size was doubtful
 });

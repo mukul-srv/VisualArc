@@ -116,7 +116,7 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
     except InputError as e:
         raise HTTPException(422, str(e).replace(str(path), "the uploaded file")) from e
     settings = request_settings(req)
-    k = resolve_scale(doc, req.units)
+    k = resolve_scale(doc, req.units, req.units_override)
     if k is None:
         raise HTTPException(422, "units missing, conflicting or unsupported; supply units")
     split = detect_floors(doc, k, settings)

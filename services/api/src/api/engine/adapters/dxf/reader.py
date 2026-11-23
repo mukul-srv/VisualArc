@@ -13,6 +13,7 @@ from itertools import pairwise
 from pathlib import Path
 
 import ezdxf
+from ezdxf import bbox as ezbbox
 from ezdxf import units
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
@@ -75,6 +76,23 @@ class InputError(ValueError):
     """Expected bad input (not a DXF, corrupt, too large): report, don't traceback."""
 
 
+def _block_rect(e, mm, settings: Settings):
+    """Footprint of an INSERT as a plan rectangle (mm): the extents of its geometry without ARCs
+    (swing symbols). None when empty, flat (a line), or the block is rotated off the axes."""
+    rot = getattr(e.dxf, "rotation", 0.0) % 90
+    if min(rot, 90 - rot) > 1e-6 or _extrusion_issue(e, settings):
+        return None
+    try:
+        box = ezbbox.extents(v for v in e.virtual_entities() if v.dxftype() != "ARC")
+    except (ValueError, TypeError, AttributeError, ezdxf.DXFError):
+        return None
+    if not box.has_data:
+        return None
+    (x0, y0), (x1, y1) = mm(box.extmin), mm(box.extmax)
+    tol = settings.tolerance_mm
+    return (x0, y0, x1, y1) if x1 - x0 > tol and y1 - y0 > tol else None
+
+
 def load_doc(path: Path, max_bytes: int = DEFAULTS.max_dxf_bytes):
     if not path.is_file():
         raise InputError(f"not a readable file: {path}")
@@ -131,15 +149,16 @@ def check_complexity(doc, settings: Settings = DEFAULTS) -> None:
             )
 
 
-def resolve_scale(doc, user_units: str | None = None) -> float | None:
+def resolve_scale(doc, user_units: str | None = None, override: bool = False) -> float | None:
     """Drawing units -> mm, or None when the units are missing, conflicting or
-    unsupported (read_dxf reports those as blocking issues)."""
+    unsupported (read_dxf reports those as blocking issues). `override`: the user's units
+    replace a header they say is wrong."""
     code = doc.header.get("$INSUNITS", 0)
     user = USER_UNITS[user_units] if user_units else None
-    if isinstance(code, bool) or not isinstance(code, int) or (code and user and code != user):
+    if isinstance(code, bool) or not isinstance(code, int) or (code and user and code != user and not override):
         return None
     try:
-        return units.conversion_factor(code or user, units.MM) if code or user else None
+        return units.conversion_factor((user if override and user else code or user), units.MM) if code or user else None
     except (TypeError, ValueError):
         return None
 
@@ -195,6 +214,23 @@ def _unit_label(code: int) -> str:
         return "unknown"
 
 
+def _no_plan_geometry(doc, settings: Settings) -> list[Issue]:
+    """Blocking issue when nothing in the file lies on a layer the reader builds a plan from: a title
+    sheet, a detail or a differently layered drawing. Nothing is interpreted."""
+    plan = settings.wall_layers | settings.floor_layers
+    if any(e.dxf.layer.upper() in plan for e in doc.modelspace()):
+        return []
+    return [
+        Issue(
+            code="no_plan_geometry",
+            severity="blocking",
+            message="the drawing has no geometry on a wall or floor layer, so it does not look like a "
+            f"floor plan (expected layers: {settings.wall_label}); if it is one, map its layers "
+            "under Layer conventions",
+        )
+    ]
+
+
 def _units_unsupported(project: dict, value) -> Project:
     return Project(
         **project,
@@ -215,6 +251,7 @@ def read_dxf(
     wall_height: float | None = None,
     max_bytes: int | None = None,
     user_units: str | None = None,
+    units_override: bool = False,  # the user says the header's units are wrong: theirs are used
     door_height: float | None = None,
     window_height: float | None = None,
     window_sill: float | None = None,
@@ -267,7 +304,8 @@ def read_dxf(
     if isinstance(insunits, bool) or not isinstance(insunits, int):
         return _units_unsupported(project, insunits)
     user_code = USER_UNITS[user_units] if user_units else None
-    if user_code and insunits and insunits != user_code:
+    overridden = bool(user_code and insunits and insunits != user_code and units_override)
+    if user_code and insunits and insunits != user_code and not units_override:
         return Project(
             **project,
             issues=[
@@ -275,8 +313,8 @@ def read_dxf(
                     code="units_conflict",
                     severity="blocking",
                     message=f"--units {user_units} conflicts with header $INSUNITS="
-                    f"{insunits} ({_unit_label(insunits)}); no override, "
-                    "fix the drawing or drop --units",
+                    f"{insunits} ({_unit_label(insunits)}); fix the drawing or drop --units. "
+                    "If the header is wrong, say so explicitly (--units-override) and your units are used",
                 )
             ],
         )
@@ -284,6 +322,7 @@ def read_dxf(
         return Project(
             **project,
             issues=[
+                *_no_plan_geometry(doc, settings),
                 Issue(
                     code="units_missing",
                     severity="blocking",
@@ -293,7 +332,7 @@ def read_dxf(
         )
     # header agrees with --units: stays source_extracted; only a missing header
     # makes the scale depend on the user
-    from_user = not insunits
+    from_user = not insunits or overridden
     try:
         k = units.conversion_factor(user_code if from_user else insunits, units.MM)
     except (
@@ -329,7 +368,16 @@ def read_dxf(
             )
 
     issues: list[Issue] = []
-    if from_user:
+    if overridden:
+        issues.append(
+            Issue(
+                code="units_overridden",
+                severity="warning",
+                message=f"header $INSUNITS={insunits} ({_unit_label(insunits)}) was overridden: "
+                f"scaled to mm using the units you gave ({user_units}, user_provided)",
+            )
+        )
+    elif from_user:
         issues.append(
             Issue(
                 code="units_user_provided",
@@ -347,6 +395,7 @@ def read_dxf(
     }
     user_ignored: dict[str, list] = {}  # layer -> entities the user mapped to "ignore"
     markers: list[Marker] = []
+    block_markers: dict[str, list[SourceRef]] = {}  # block name -> its INSERTs used as markers
     decorative: dict[str, list] = {}  # opening layer -> ignored symbol entities
     swings = []  # ARCs on the door layer (orphan check)
     labels: list[Label] = []  # TEXT/MTEXT: room-name candidates, placed later
@@ -363,16 +412,25 @@ def read_dxf(
         layer, kind = strip_floor_prefix(e.dxf.layer, settings).upper(), e.dxftype()
         if layer in opening_kind:  # ADR-002 §2
             if kind == "INSERT":
-                issues.append(
-                    Issue(
-                        code="unsupported_opening_block",
-                        severity="blocking",
-                        message=f"INSERT {e.dxf.handle} (block {e.dxf.name}) on "
-                        f"{e.dxf.layer}: opening blocks are not read; draw a closed "
-                        "rectangular LWPOLYLINE marker filling the wall gap",
-                        sources=[_ref(e)],
+                # a block: its footprint (bounding box of the geometry, swing arcs left out) is the marker
+                # when it is a rectangle; anything else is reported and not placed (source = block)
+                rect = _block_rect(e, mm, settings)
+                if rect is None:
+                    issues.append(
+                        Issue(
+                            code="unsupported_opening_block",
+                            severity="warning",
+                            message=f"INSERT {e.dxf.handle} (block {e.dxf.name}) on "
+                            f"{e.dxf.layer}: the block has no rectangular footprint (a flat leaf "
+                            "line, a rotation that is not a quarter turn or no geometry), so no "
+                            "opening was made from it; draw a closed rectangular LWPOLYLINE "
+                            "marker filling the wall gap",
+                            sources=[_ref(e)],
+                        )
                     )
-                )
+                else:
+                    markers.append(Marker(opening_kind[layer], _ref(e), rect))
+                    block_markers.setdefault(e.dxf.name, []).append(_ref(e))
             elif kind == "LWPOLYLINE" and _is_closed(e, settings.tolerance_mm):
                 pts = [mm(p) for p in _wcs_xy(e)]
                 if math.dist(pts[0], pts[-1]) <= settings.tolerance_mm:
@@ -601,9 +659,42 @@ def read_dxf(
 
     res = resolve_openings(segments, markers, settings)
     paired, pieces = res.walls, res.junctions
-    issues += res.issues
+    from_block = {r.entity_handle for refs in block_markers.values() for r in refs}
+    for name, refs in block_markers.items():
+        issues.append(
+            Issue(
+                code="opening_from_block",
+                severity="warning",
+                message=f"{len(refs)} opening(s) read from the bounding box of block {name!r} "
+                "(source = block, not a drawn marker); check the sizes",
+                sources=refs[:ref_cap],
+            )
+        )
+    for i in res.issues:  # a block that does not fit its wall gap is not placed: reported, not blocking
+        if i.severity == "blocking" and i.sources and i.sources[0].entity_handle in from_block:
+            i = i.model_copy(update={
+                "severity": "warning",
+                "message": f"{i.message} (the marker is a block's bounding box: no opening made from it)"})
+        issues.append(i)
     roles, role_issues = resolve_roles(paired, pieces, settings)
+    if segments:  # the extent of every wall line, so a drawing whose walls could not be paired is checked too
+        xs = [v for s in segments for v in (s.start[0], s.end[0])]
+        ys = [v for s in segments for v in (s.start[1], s.end[1])]
+        longest, lo, hi = max(max(xs) - min(xs), max(ys) - min(ys)), *settings.plausible_footprint_mm
+        if not lo <= longest <= hi:
+            where = f"header $INSUNITS={insunits} ({_unit_label(insunits)})" if insunits else f"--units {user_units}"
+            issues.append(
+                Issue(
+                    code="units_implausible",
+                    severity="warning",
+                    message=f"the wall lines span {longest:g} mm at their longest, outside the plausible "
+                    f"{lo:g}-{hi:g} mm for a building plan, using {where}. The drawing may be in other "
+                    "units; nothing was changed. If so, choose the real units (override the header) "
+                    "and generate again",
+                )
+            )
     if not paired:
+        issues += _no_plan_geometry(doc, settings)
         issues.append(
             Issue(
                 code="no_walls",

@@ -122,6 +122,11 @@ class Settings:
     wall_thickness_min_mm: float = 50.0
     wall_thickness_max_mm: float = 600.0
 
+    # Plausible size of a building plan (its longest side). A plan outside this is more likely
+    # read in the wrong units (a metre drawing flagged as inches is ~25x too small) than real;
+    # it is reported, never corrected. PROVISIONAL: a round range, not from a standard.
+    plausible_footprint_mm: tuple[float, float] = (1000.0, 500_000.0)
+
     # Geometric equality tolerance. Deliberately tiny (1e-6 mm): it only absorbs
     # float round-off from unit scaling, not drafting error. A 0.01 mm drafting
     # error is therefore NOT tolerated (line reported non-orthogonal / not

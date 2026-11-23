@@ -21,8 +21,9 @@ const req = <T,>(method: string, path: string, f: Fetch, body?: unknown) =>
   );
 
 export const listConventions = (f: Fetch = fetch) => req<{ roles: string[]; presets: PresetInfo[] }>("GET", "/conventions", f);
-export const inspectLayers = (uploadId: string, spec: ConventionsSpec, f: Fetch = fetch) =>
-  req<LayerInfo>("POST", `/uploads/${uploadId}/layers`, f, spec);
+// `units`: the unit the user chose for the drawing (it replaces a wrong header), so the preflight reads it that way
+export const inspectLayers = (uploadId: string, spec: ConventionsSpec, f: Fetch = fetch, units?: string) =>
+  req<LayerInfo>("POST", `/uploads/${uploadId}/layers${units ? `?units=${encodeURIComponent(units)}&units_override=true` : ""}`, f, spec);
 export const getProjectConventions = (pid: string, f: Fetch = fetch) => req<ConventionsSpec>("GET", `/projects/${pid}/conventions`, f);
 export const putProjectConventions = (pid: string, spec: ConventionsSpec, f: Fetch = fetch) =>
   req<ConventionsSpec>("PUT", `/projects/${pid}/conventions`, f, spec);

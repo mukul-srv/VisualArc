@@ -37,3 +37,8 @@ docs/
 # local runtime data (uploads, generations)
 var/
 .impeccable/
+
+# real-world drawings tried against the engine: third-party, never committed (see fixtures/LICENCES.md)
+fixtures/local/
+fixtures/input/Two-story-house-410202.*
+fixtures/input/fp1344-1535.*

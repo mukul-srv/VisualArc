@@ -194,3 +194,21 @@ def test_presets_listing():
     d = c.get("/api/v1/conventions").json()
     assert "ignore" in d["roles"] and [p["id"] for p in d["presets"]] == ["aia", "iso13567", "custom"]
     assert d["presets"][1]["layers"]["A-G322--E-"] == "door"
+
+
+def test_layers_endpoint_reads_the_drawing_in_the_units_the_user_chose(tmp_path):
+    import ezdxf
+
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 1  # inches, but drawn in metres: 8 "inches" is a 203 mm building
+    for y in (0, 0.15, 4, 4.15):
+        doc.modelspace().add_line((0, y), (8, y), dxfattribs={"layer": "A-WALL"})
+    path = tmp_path / "m.dxf"
+    doc.saveas(path)
+    c = TestClient(app)
+    up = c.post("/api/v1/uploads", content=path.read_bytes()).json()
+    assert "units_implausible" in {i["code"] for i in up["issues"]}  # warned, nothing changed
+    r = c.post(f"/api/v1/uploads/{up['upload_id']}/layers?units=m&units_override=true", json={}).json()
+    codes = {i["code"] for i in r["issues"]}
+    assert "units_overridden" in codes and "units_implausible" not in codes
+    assert c.post(f"/api/v1/uploads/{up['upload_id']}/layers?units=km", json={}).status_code == 422

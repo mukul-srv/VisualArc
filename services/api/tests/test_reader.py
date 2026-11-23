@@ -444,3 +444,42 @@ def test_a_ceiling_higher_than_the_walls_raises_the_walls_to_it_and_says_so():
     # an equal or lower ceiling leaves the walls alone
     r = read_dxf(FIXTURE_A, 3000, ceiling_height=2500)
     assert {(w.height.value, w.height.source) for w in r.buildings[0].floors[0].walls} == {(3000.0, "user_provided")}
+
+
+def _metre_house(tmp_path: Path, insunits: int):
+    walls = [((0, 0), (8, 0)), ((0, 0.15), (8, 0.15)), ((0, 4), (8, 4)), ((0, 4.15), (8, 4.15))]
+    return _dxf(tmp_path, insunits, walls)
+
+
+def test_implausible_size_for_the_header_units_is_warned_not_changed(tmp_path: Path):
+    # a drawing made in metres but flagged as inches: 8 "inches" is a 203 mm building
+    p = read_dxf(_metre_house(tmp_path, 1), 3000, ceiling_height=3000)
+    (i,) = [i for i in p.issues if i.code == "units_implausible"]
+    assert i.severity == "warning" and "203.2 mm" in i.message and "INSUNITS=1" in i.message
+    assert p.buildings and not p.buildings[0].floors[0].walls  # read as drawn, not rescaled
+    ok = read_dxf(_metre_house(tmp_path, 6), 3000, ceiling_height=3000)
+    assert "units_implausible" not in [i.code for i in ok.issues]
+
+
+def test_units_override_replaces_a_wrong_header_and_says_so(tmp_path: Path):
+    path = _metre_house(tmp_path, 1)
+    assert [i.code for i in read_dxf(path, 3000, ceiling_height=3000, user_units="m").issues] == ["units_conflict"]
+    p = read_dxf(path, 3000, ceiling_height=3000, user_units="m", units_override=True)
+    codes = [i.code for i in p.issues]
+    assert "units_overridden" in codes and "units_implausible" not in codes and "units_conflict" not in codes
+    walls = p.buildings[0].floors[0].walls
+    assert sorted(w.thickness.value for w in walls) == [150, 150]
+    assert {w.thickness.source for w in walls} == {"user_provided"}
+    assert sorted(w.centreline.end[0] for w in walls) == [8000, 8000]
+
+
+def test_drawing_without_plan_layers_says_so(tmp_path: Path):
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 0
+    doc.modelspace().add_lwpolyline([(0, 0), (10, 0), (10, 5), (0, 5)], close=True, dxfattribs={"layer": "0"})
+    path = tmp_path / "sheet.dxf"
+    doc.saveas(path)
+    p = read_dxf(path, 3000, ceiling_height=3000)  # no units either
+    assert [(i.code, i.severity) for i in p.issues] == [("no_plan_geometry", "blocking"), ("units_missing", "blocking")]
+    p = read_dxf(path, 3000, ceiling_height=3000, user_units="m")
+    assert "no_plan_geometry" in [i.code for i in p.issues] and "no_walls" in [i.code for i in p.issues]

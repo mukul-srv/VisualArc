@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createProject, getPresets, getProject, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
-import { buildRequest, splitIssues, type FormValues } from "@/lib/params";
+import { buildRequest, unitsDoubtful, unresolvable, type FormValues } from "@/lib/params";
 import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache, targetAfterCreate, uploadStep } from "@/lib/upload-state";
 import { HELP } from "@/lib/help";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
@@ -15,9 +15,6 @@ import { Breadcrumbs } from "./Breadcrumbs";
 import { ConventionsPanel } from "./ConventionsPanel";
 import { IssueList } from "./IssueList";
 import { UploadForm } from "./UploadForm";
-
-// Blocking issues the parameter form itself resolves; they must not lock the button.
-const FORM_RESOLVABLE = ["units_missing", "floor_split_unconfirmed"];
 
 export function UploadFlow() {
   const router = useRouter();
@@ -71,6 +68,12 @@ export function UploadFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the target or file changes
   }, [proj.on, proj.target, uploadId]);
 
+  // The chosen unit changes how the drawing is read (its size, the floors found): read it again.
+  useEffect(() => {
+    if (uploadId) applyConventions(conv, uploadId, form.units);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the unit changes
+  }, [form.units]);
+
   // Changing the target clears what depended on the old one (elevation default, conventions).
   function changeProj(next: typeof proj) {
     const r = changeTarget(proj, next);
@@ -79,10 +82,10 @@ export function UploadFlow() {
     if (r.resetConventions) applyConventions(DEFAULT_CONVENTIONS);
   }
   // Re-run the preflight under the chosen conventions: the mapping can resolve blocking issues.
-  async function applyConventions(spec: ConventionsSpec, uploadId = pre?.upload_id) {
+  async function applyConventions(spec: ConventionsSpec, uploadId = pre?.upload_id, units = form.units) {
     setConv(spec);
     if (!uploadId) return;
-    const r = await inspectLayers(uploadId, spec);
+    const r = await inspectLayers(uploadId, spec, fetch, units || undefined);
     if (!r.ok) return setFailure(r);
     setFailure(null);
     setBlockedIssues(null); // a 409 from an earlier attempt no longer applies under new conventions
@@ -184,7 +187,7 @@ export function UploadFlow() {
   const splitting = (pre?.floor_candidates?.length ?? 0) >= 2;
   const setRow = (i: number, patch: Partial<SplitRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const shown = blockedIssues ?? pre?.issues ?? [];
-  const unresolvable = splitIssues(shown).blocking.filter((i) => !FORM_RESOLVABLE.includes(i.code));
+  const blocked = unresolvable(shown, unitsDoubtful({ issues: shown }));
 
   return (
     <main style={{ maxWidth: 760, margin: "32px auto", padding: "0 16px", font: "15px system-ui" }}>
@@ -231,10 +234,10 @@ export function UploadFlow() {
             proj={proj}
             setProj={changeProj}
             errors={errors}
-            disabled={busy || unresolvable.length > 0}
+            disabled={busy || blocked.length > 0}
             onSubmit={splitting ? onSplit : onGenerate}
           />
-          {unresolvable.length > 0 && <p>Fix the blocking issues in the drawing and upload it again.</p>}
+          {blocked.length > 0 && <p>Fix the blocking issues in the drawing and upload it again.</p>}
         </>
       )}
     </main>

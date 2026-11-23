@@ -117,9 +117,19 @@ def _overlaps(issues):
         ((200, 0), (700, 0)),  # contained
     ],
 )
-def test_overlapping_collinear_lines_block(dup):
-    _, _, issues = run([((0, 0), (1000, 0)), ((0, 200), (1000, 200)), dup])
-    assert _overlaps(issues) == [("blocking", ["H0", "H2"])]
+def test_overlapping_collinear_lines_are_merged_and_reported(dup):
+    # the same line drawn twice: merged (same points, nothing measured changes), warning not blocking
+    walls, _, issues = run([((0, 0), (1000, 0)), ((0, 200), (1000, 200)), dup])
+    assert _overlaps(issues) == [("warning", ["H0", "H2"])]
+    assert [(w.thickness, w.start, w.end) for w in walls] == [(200, (0, 100), (1000, 100))]
+    assert not [i for i in issues if i.severity == "blocking"]
+
+
+def test_wall_changing_thickness_is_not_ambiguous():
+    # one long face, partners at different offsets along different stretches: each pairs its own stretch
+    walls, _, issues = run([((0, 0), (2000, 0)), ((0, 100), (1000, 100)), ((1000, 550), (2000, 550))])
+    assert sorted((w.thickness, w.start[0], w.end[0]) for w in walls) == [(100, 0, 1000), (550, 1000, 2000)]
+    assert not [i for i in issues if i.severity == "blocking"]
 
 
 def test_end_to_end_collinear_lines_not_overlap():
