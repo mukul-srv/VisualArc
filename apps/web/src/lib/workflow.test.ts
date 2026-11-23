@@ -371,9 +371,11 @@ test("raising the ceiling or the wall height regenerates the stair at the new he
     return y;
   };
   expect(await top()).toBeCloseTo(0.2 + 19 * 0.16, 3); // 20 risers: the top tread, a riser below the floor above
-  for (const [body, risers] of [[{ wall_height: 3600 }, 24], [{ ceiling_height: 4000 }, 26], [{ ceiling_height: 3000, wall_height: 3000 }, 20]] as const) {
+  // [parameters, total rise = taller of wall/ceiling + 200 mm slab, risers = round(total / 160)]
+  for (const [body, total, risers] of [[{ wall_height: 3600 }, 3800, 24], [{ ceiling_height: 4000 }, 4200, 26], [{ ceiling_height: 3000, wall_height: 3000 }, 3200, 20]] as const) {
     const r = await jobs.changeParametersJob(pid, body);
     if (!r.ok) throw new Error(r.message);
-    expect(await top()).toBeCloseTo(0.2 + (risers - 1) * 0.16, 2); // follows the parameters at once, no walking needed
+    // the top tread is one riser (total / risers) below the floor above; no walking needed to see it
+    expect(await top()).toBeCloseTo(0.2 + ((risers - 1) * total) / risers / 1000, 3);
   }
 }, 120_000);
