@@ -51,51 +51,61 @@ export const STEP = {
   slack: 0.02,
   fallback: 0.2,
   maxSlope: 1.0, // rise per metre of travel on a ramp (45 degrees)
-  maxDrop: 0.6, // m: deeper than this is a ledge, not a step down
 };
+export const GRAVITY = 9.8; // m/s2
 
 export const stepUpLimit = (model: THREE.Object3D) => (maxRiser(model) ?? STEP.fallback) + STEP.slack;
-
-/** The height to stand at where the walker already is, before any move. A stale height (the surface
- *  under the walker is gone: a model swapped, a floor changed) with nothing within a step down would
- *  otherwise trap them: every move reads as stepping off an edge. No support in reach: fall to the
- *  baseline. Support in reach: stand on it. */
-export function settle(x: number, z: number, feetY: number, supports: THREE.Mesh[], baseY: number, stepUp: number): number {
-  const s = supportAt(x, z, feetY, supports, stepUp);
-  return s ? s.y : baseY;
-}
 
 const down = new THREE.Vector3(0, -1, 0);
 const caster = new THREE.Raycaster();
 
-/** Highest supported surface at (x, z) that is at most `reach` above `fromY` and at most `maxDrop`
- *  below it; null when none. Ray starts just above the reach so a surface at exactly `reach` hits. */
+/** Highest supported surface at (x, z) that is at most `reach` above `fromY` (any depth below); null
+ *  when none. The ray starts just above the reach so a surface at exactly `reach` is hit. */
 export function supportAt(x: number, z: number, fromY: number, supports: THREE.Mesh[], reach: number): { y: number; type: string } | null {
   caster.set(new THREE.Vector3(x, fromY + reach + 0.01, z), down);
   caster.near = 0;
-  caster.far = reach + 0.01 + STEP.maxDrop;
+  caster.far = 1e5;
   const hit = caster.intersectObjects(supports, false)[0];
   return hit ? { y: hit.point.y, type: hit.object.userData?.type } : null;
 }
 
-/** New feet height after moving horizontally by `travel` (m) to (x, z), or null when the move is
- *  not allowed (a step higher than the limit, a ramp steeper than the slope limit).
- *  No support under the new point: from at most a step above the baseline (`baseY`) the walker lands
- *  on it (a doorway, the first tread); from higher up it is an edge (the side of a stair or ramp) and
- *  the move is refused, so nobody walks off into thin air or through a stair's side. */
-export function resolveHeight(
+export type Step = { ok: true; ground: number } | { ok: false };
+
+/** Surfaces that are solid BODIES (down to the floor): a stair is a solid mass, a ramp a wedge. A floor
+ *  slab or balcony is a surface, not a body: the one overhead (an upper floor, a balcony above) must not
+ *  stop someone walking beneath it. */
+const BODY_TYPES = ["stair", "ramp"];
+
+/** Can the walker, with feet at `feetY`, be at (x, z) after moving `travel` metres, and what is the
+ *  ground there? Flights and other raised surfaces are SOLID bodies (a stair is a solid mass, a ramp a
+ *  wedge down to the floor), whatever lies beneath:
+ *   - the highest stair or ramp surface there is more than a step above the feet: blocked. That is the
+ *     side or riser of a stair, the side of a ramp, or the space under a ramp (you cannot walk in from
+ *     below). Slabs and balconies overhead are not bodies and never block;
+ *   - otherwise the ground is the highest surface within a step above the feet, or the baseline `baseY`
+ *     when there is none. It may be far below: the walker then falls (see `fall`), nothing stops them
+ *     walking off an edge;
+ *   - a ramp steeper than the slope limit is refused.
+ *  Only the move is judged, so a walker already inside a solid (a stale position) is never stuck: any
+ *  move out of it is allowed (the surface is not above them there). */
+export function stepOnto(
   x: number, z: number, feetY: number, travel: number, supports: THREE.Mesh[], baseY: number, stepUp: number,
-): number | null {
+): Step {
+  const top = supportAt(x, z, feetY, supports.filter((m) => BODY_TYPES.includes(m.userData?.type)), 1000);
+  if (top && top.y > feetY + stepUp) return { ok: false };
   const s = supportAt(x, z, feetY, supports, stepUp);
-  if (!s) {
-    const high = supportAt(x, z, feetY, supports, stepUp + 10); // anything taller than a step blocks
-    if (high && high.y > feetY + stepUp) return null;
-    // nothing within a step down: from the first tread the walker steps down to the floor, but from higher
-    // up the side of a stair or ramp is an edge, not a doorway: blocked (a stair has sides)
-    return feetY - baseY > stepUp + 1e-6 ? null : baseY;
-  }
-  if (s.type === "ramp" && travel > 0 && Math.abs(s.y - feetY) / travel > STEP.maxSlope) return null;
-  return s.y;
+  if (s && s.type === "ramp" && s.y > feetY && travel > 0 && (s.y - feetY) / travel > STEP.maxSlope) return { ok: false };
+  return { ok: true, ground: s ? s.y : baseY };
+}
+
+/** One step of gravity towards the ground height: the feet fall (accelerating) and stop on landing; a
+ *  ground higher than the feet (a step up) is taken at once, within the step limit already checked.
+ *  Pure and frame-rate independent enough for a walker (small `dt`). The eye eases the landing. */
+export function fall(feet: number, ground: number, vy: number, dt: number): { feet: number; vy: number } {
+  if (feet <= ground) return { feet: ground, vy: 0 };
+  const v = vy - GRAVITY * Math.max(0, dt);
+  const next = feet + v * Math.max(0, dt);
+  return next <= ground ? { feet: ground, vy: 0 } : { feet: next, vy: v };
 }
 
 /** Move `current` towards `target` with an exponential approach that does not depend on the frame

@@ -14,7 +14,7 @@ const CATALOG: Record<string, Entry> = {
   ambiguous_pairing: { title: "Wall line has partners at different distances", help: "A wall line pairs with more than one parallel line. Check the wall lines are drawn once, as clean pairs." },
   balcony_detached: { title: "Balcony not attached to a wall", help: "A balcony outline touches no wall. It was built as drawn; check the outline and its layer." },
   balcony_overlaps_room: { title: "Balcony overlaps a room", help: "A balcony outline lies over a room, so it is not outside the walls. It was built as drawn; check the layer." },
-  ceiling_above_walls: { title: "Ceiling is higher than the walls", help: "There would be a gap above the walls. Check the ceiling and wall heights." },
+  ceiling_above_walls: { title: "Ceiling is higher than the walls", help: "Assumed walls were raised to the ceiling so the model stays whole. If you gave the wall height, it was kept and there is a gap above the walls: raise the wall height or lower the ceiling." },
   ceiling_height_defaulted: { title: "Ceiling height assumed", help: "The drawing gives none, so the preset value was used. Enter your own to replace it.", info: true },
   ceiling_height_missing: { title: "Ceiling height needed", help: "Enter the ceiling height in the form before generating." },
   ceiling_not_built: { title: "No ceiling built", help: "A ceiling height was given but there is no floor boundary to build it from." },

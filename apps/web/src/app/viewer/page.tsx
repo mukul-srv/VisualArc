@@ -14,7 +14,7 @@ import { ViewerToolbar } from "@/components/ViewerToolbar";
 import { orbitLimits, planFrustum } from "@/lib/camera";
 import { openingBox, pickElement } from "@/lib/pick";
 import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distanceToOpening, doorFor, nearestDoor, toggle as toggleDoor, whyNoToggle, type Door } from "@/lib/doors";
-import { collectSupports, dampTo, groundLevel, resolveHeight, settle, stepUpLimit } from "@/lib/ground";
+import { collectSupports, dampTo, fall, groundLevel, stepOnto, stepUpLimit } from "@/lib/ground";
 import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
 import { createTapGate } from "@/lib/tap";
 import { setWalkFill, SKY_LIGHT, SUN_LIGHT, WALK_FILL } from "@/lib/lighting";
@@ -262,7 +262,9 @@ export default function ViewerPage() {
     const keys = new Set<string>();
     let walk: {
       pos: THREE.Vector3;
-      floorY: number; // the exact ground height under the walker
+      floorY: number; // the walker's feet: on the ground, or falling towards it
+      groundY: number; // the ground height under the walker (what the feet fall or step to)
+      vy: number; // fall speed
       eyeY: number; // the smoothed height of the eye above that ground (stairs and ramps glide)
       yaw: number;
       pitch: number;
@@ -308,6 +310,8 @@ export default function ViewerPage() {
       walk = {
         pos: spawn.pos,
         floorY: spawn.floorY,
+        groundY: spawn.floorY,
+        vy: 0,
         eyeY: spawn.floorY + WALK.eye,
         yaw: 0,
         pitch: 0,
@@ -361,7 +365,13 @@ export default function ViewerPage() {
       last = now;
       if (!walk) return;
       // the eye eases to the exact ground height every frame (also when standing still or falling)
-      walk.floorY = settle(walk.pos.x, walk.pos.z, walk.floorY, walk.supports, walk.baseY, walk.stepUp); // never floating
+      // gravity: the feet fall to the ground under them (off a stair's side, a ramp's edge...) and land;
+      // the eye eases below, so the landing is soft and nothing teleports
+      // the ground is looked up again where the walker stands, every frame: a stale one (a swapped model, a
+      // floor that changed) cannot leave them floating, they fall to what is really below
+      const here = stepOnto(walk.pos.x, walk.pos.z, walk.floorY, 0, walk.supports, walk.baseY, walk.stepUp);
+      if (here.ok) walk.groundY = here.ground;
+      ({ feet: walk.floorY, vy: walk.vy } = fall(walk.floorY, walk.groundY, walk.vy, dt));
       const goal = walk.floorY + WALK.eye;
       if (Math.abs(walk.eyeY - goal) > 1e-4) {
         walk.eyeY = dampTo(walk.eyeY, goal, dt);
@@ -376,9 +386,12 @@ export default function ViewerPage() {
       const from = walk.pos.clone();
       // walls and every door that is closed; an open door is passable at once
       moveWithCollision(walk.pos, d, walk.floorY, [...walk.colliders, ...blocking(doors)]);
-      const y = resolveHeight(walk.pos.x, walk.pos.z, walk.floorY, from.distanceTo(walk.pos), walk.supports, walk.baseY, walk.stepUp);
-      if (y === null) walk.pos.copy(from); // too high a step or too steep a ramp: not taken
-      else walk.floorY = y;
+      const step = stepOnto(walk.pos.x, walk.pos.z, walk.floorY, from.distanceTo(walk.pos), walk.supports, walk.baseY, walk.stepUp);
+      if (!step.ok) walk.pos.copy(from); // a stair's side or riser, a ramp's side or underside, a too steep ramp
+      else {
+        walk.groundY = step.ground;
+        if (step.ground > walk.floorY) walk.floorY = step.ground; // a step up is taken at once (the eye eases it)
+      }
       aim();
     };
 

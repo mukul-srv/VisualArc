@@ -1,6 +1,12 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
-import { collectSupports, dampTo, groundLevel, maxRiser, resolveHeight, settle, stepUpLimit } from "./ground";
+import { collectSupports, dampTo, fall, groundLevel, maxRiser, stepOnto, stepUpLimit } from "./ground";
+
+/** The ground at a point, or null when the move is blocked (the tests below judge both). */
+const resolveHeight = (x: number, z: number, feet: number, travel: number, supports: THREE.Mesh[], base: number, stepUp: number) => {
+  const r = stepOnto(x, z, feet, travel, supports, base, stepUp);
+  return r.ok ? r.ground : null;
+};
 
 const box = (type: string, x0: number, x1: number, y0: number, y1: number, z0 = 0, z1 = 1, extra: object = {}) => {
   const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), new THREE.MeshBasicMaterial());
@@ -134,40 +140,116 @@ test("climbing tread by tread, the eased eye never jumps more than a small step 
   expect(maxJump).toBeLessThan(0.16 * 0.3); // under a third of a riser per frame (unsmoothed it is the whole riser); the ground stays exact
 });
 
-test("a raised walker cannot step off the side of a stair or ramp, but the first tread steps down to the floor", () => {
+test("a stair is a solid mass: from the floor its side, its riser and the space under a ramp are blocked", () => {
   const g = new THREE.Group();
-  g.add(box("stair", 0, 1, 0, 1.0, 0, 1, { riser_height: { value: 160 } })); // a tall block, top at 1.0 m
+  // a flight of 19 treads (x 0..4.75, z 0..1) and a ramp wedge beside it (z 2..3) rising to 3 m at x = 4
+  for (let k = 1; k <= 19; k++) g.add(box("stair", (k - 1) * 0.25, k * 0.25, 0, k * 0.16, 0, 1, k === 1 ? { riser_height: { value: 160 } } : {}));
+  const ramp = box("ramp", 0, 4, -0.2, 0, 2, 3);
+  const a = ramp.geometry.attributes.position;
+  for (let i = 0; i < a.count; i++) a.setY(i, a.getY(i) + (3 * (a.getX(i) + 2)) / 4);
+  ramp.updateMatrixWorld(true);
+  g.add(ramp, box("floor_boundary", -5, 8, -0.001, 0, -3, 6));
   g.updateMatrixWorld(true);
   const supports = collectSupports(g);
-  expect(resolveHeight(0.5, 5, 1.0, 0.05, supports, 0, 0.18)).toBeNull(); // from 1 m up: an edge, blocked
-  expect(resolveHeight(0.5, 5, 0.16, 0.05, supports, 0, 0.18)).toBe(0); // from the first tread: down to the floor
-  expect(resolveHeight(0.5, 0.5, 1.0, 0.05, supports, 0, 0.18)).toBeCloseTo(1.0); // still on the surface: fine
+  const limit = stepUpLimit(g);
+  const moveIn = (from: [number, number], to: [number, number], feet = 0) => resolveHeight(to[0], to[1], feet, Math.hypot(to[0] - from[0], to[1] - from[1]), supports, 0, limit);
+  expect(moveIn([2.0, -0.1], [2.0, 0.05])).toBeNull(); // the side of tread 8 (top 1.28 m)
+  expect(moveIn([4.0, -0.1], [4.0, 0.05])).toBeNull(); // the side, further up
+  expect(moveIn([-0.1, 0.5], [0.2, 0.5], 0)).toBeCloseTo(0.16); // the front: onto the first tread
+  expect(moveIn([0.2, 0.5], [0.3, 0.5], 0)).toBeNull(); // the second riser from the floor: too high a step
+  expect(moveIn([2.0, 3.1], [2.0, 2.9])).toBeNull(); // the side of the ramp (2 m up there)
+  expect(moveIn([3.0, 1.9], [3.0, 2.1])).toBeNull(); // under the ramp: the floor is there, the ramp is not passable from below
 });
 
-test("trap: a walker left at a raised height with no support under them falls to the floor instead of floating stuck", () => {
+test("walking off the side of a stair or ramp is allowed; the walker FALLS to the floor, eased, without teleporting", () => {
   const g = new THREE.Group();
+  for (let k = 1; k <= 19; k++) g.add(box("stair", (k - 1) * 0.25, k * 0.25, 0, k * 0.16, 0, 1, k === 1 ? { riser_height: { value: 160 } } : {}));
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6));
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  const limit = stepUpLimit(g);
+  // standing on tread 12 (top 1.92 m), stepping sideways off the stair at z = 1.05
+  const r = stepOnto(2.9, 1.05, 1.92, 0.05, supports, 0, limit);
+  expect(r).toEqual({ ok: true, ground: expect.closeTo(0, 6) }); // allowed; the ground is the floor, 1.92 m below
+  let feet = 1.92, vy = 0, prev = feet, maxStep = 0, frames = 0;
+  while (feet > 0 && frames < 600) {
+    ({ feet, vy } = fall(feet, 0, vy, 1 / 60));
+    expect(feet).toBeLessThanOrEqual(prev); // monotonic
+    maxStep = Math.max(maxStep, prev - feet);
+    prev = feet;
+    frames++;
+  }
+  expect(feet).toBe(0); // landed
+  expect(vy).toBe(0);
+  expect(frames).toBeGreaterThan(20); // not a teleport: about 0.6 s of falling
+  expect(maxStep).toBeLessThan(0.4); // fastest frame: well under half a metre
+  // a step up is taken at once, and a walker already on the ground stays
+  expect(fall(0, 0.16, 0, 1 / 60)).toEqual({ feet: 0.16, vy: 0 });
+  expect(fall(0.5, 0.5, 0, 1 / 60)).toEqual({ feet: 0.5, vy: 0 });
+});
+
+test("no tunnelling: a falling walker beside the stair still cannot enter its body", () => {
+  const g = new THREE.Group();
+  for (let k = 1; k <= 19; k++) g.add(box("stair", (k - 1) * 0.25, k * 0.25, 0, k * 0.16, 0, 1, k === 1 ? { riser_height: { value: 160 } } : {}));
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6));
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  // at 0.7 m above the floor (mid-fall) walking back into tread 12's side (top 1.92): blocked
+  expect(resolveHeight(2.9, 0.95, 0.7, 0.05, supports, 0, 0.18)).toBeNull();
+});
+
+test("slabs and balconies overhead are not bodies: a walker beneath an upper floor is not blocked", () => {
+  const g = new THREE.Group();
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6)); // the ground floor
+  g.add(box("floor_boundary", -5, 8, 3.199, 3.2, -3, 6)); // an upper floor's surface at 3.2 m, overhead
+  g.add(box("balcony", 2, 4, 2.9, 3.1, 2, 4)); // a balcony slab above head height
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  for (const [x, z] of [[0, 0], [3, 3], [5, 1]]) {
+    expect(stepOnto(x, z, 0, 0.05, supports, 0, 0.18)).toEqual({ ok: true, ground: expect.closeTo(0, 6) }); // walks, stands on the floor
+  }
+  // while a stair on the same floor still blocks from the side
   g.add(box("stair", 0, 1, 0, 1.0, 0, 1, { riser_height: { value: 160 } }));
-  g.add(box("floor_boundary", 3, 8, -0.01, 0, -2, 2)); // the floor elsewhere
   g.updateMatrixWorld(true);
-  const supports = collectSupports(g);
-  // stale state: feet at 1.0 m but standing at x = 5, where only the floor (0) exists, 1 m below
-  const feet = 1.0;
-  // without settling, every step reads as stepping off an edge (the floor is further down than a drop):
-  // the walker could never move, in any direction
-  for (const [dx, dz] of [[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05]]) {
-    expect(resolveHeight(5 + dx, dz, feet, 0.05, supports, 0, 0.18)).toBeNull();
-  }
-  const settled = settle(5, 0, feet, supports, 0, 0.18);
-  expect(settled).toBe(0); // falls to the baseline
-  for (const [dx, dz] of [[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05]]) {
-    expect(resolveHeight(5 + dx, dz, settled, 0.05, supports, 0, 0.18)).toBeCloseTo(0); // free to move again
-  }
-  // and with no surface at all below, the same: back to the baseline
-  expect(settle(5, 0, feet, collectSupports(new THREE.Group()), 0, 0.18)).toBe(0);
+  expect(stepOnto(0.5, 0.5, 0, 0.05, collectSupports(g), 0, 0.18).ok).toBe(false);
 });
 
-test("settle keeps a walker on the surface they stand on, stairs and ramps included", () => {
-  const g = stairModel();
+test("no tunnelling at the largest frame step: 0.1 m moves into a solid are blocked at every position", () => {
+  const g = new THREE.Group();
+  for (let k = 1; k <= 19; k++) g.add(box("stair", (k - 1) * 0.25, k * 0.25, 0, k * 0.16, 0, 1, k === 1 ? { riser_height: { value: 160 } } : {}));
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6));
+  g.updateMatrixWorld(true);
   const supports = collectSupports(g);
-  expect(settle(0.6, 0.5, 0.48, supports, 0, 0.18)).toBeCloseTo(0.48); // tread 3 (x 0.5..0.75), top 3 x 0.16
+  // the viewer clamps dt to 0.05 s at 2 m/s: a move is at most 0.1 m, less than the thinnest solid (a 0.25 m tread)
+  for (const z of [-0.5, -0.3, -0.1, 0.05, 0.15, 0.25, 0.35]) {
+    const inside = z > 0; // z 0..1 is the stair's side (tread 9, top 1.44 m)
+    expect(stepOnto(2.3, z, 0, 0.1, supports, 0, 0.18).ok).toBe(!inside);
+  }
+  // and a fall with the largest dt never undershoots the ground, stays monotonic and lands at rest
+  let feet = 1.92, vy = 0, prev = feet;
+  for (let i = 0; i < 100 && feet > 0; i++) {
+    ({ feet, vy } = fall(feet, 0, vy, 0.05));
+    expect(feet).toBeGreaterThanOrEqual(0);
+    expect(feet).toBeLessThanOrEqual(prev);
+    prev = feet;
+  }
+  expect(feet).toBe(0);
+  expect(vy).toBe(0);
+});
+
+test("a stale ground height cannot leave the walker floating: looking the ground up again where they stand drops them", () => {
+  const g = new THREE.Group();
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6)); // only the floor is left; the surface they stood on is gone
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  let feet = 1.0, ground = 1.0, vy = 0; // stale: both still at 1 m
+  const here = stepOnto(2, 2, feet, 0, supports, 0, 0.18); // the per-frame lookup (no travel)
+  expect(here.ok).toBe(true);
+  if (here.ok) ground = here.ground;
+  expect(ground).toBeCloseTo(0, 6);
+  for (let i = 0; i < 200 && feet > ground; i++) ({ feet, vy } = fall(feet, ground, vy, 1 / 60));
+  expect(feet).toBeCloseTo(0, 6); // fell to the floor, and can move again from there
+  expect(stepOnto(2.05, 2, feet, 0.05, supports, 0, 0.18).ok).toBe(true);
+  // with no surface at all, the baseline is the ground
+  expect(stepOnto(2, 2, 1.0, 0, collectSupports(new THREE.Group()), 0, 0.18)).toEqual({ ok: true, ground: 0 });
 });
