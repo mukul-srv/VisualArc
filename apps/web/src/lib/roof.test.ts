@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
-import { applyCeilingVisibility, ceilingMeetsRoof, hasRoof, setRoofVisible } from "./roof";
+import { applyCeilingVisibility, hasRoof, setRoofVisible } from "./roof";
 
 const slab = (type: string, y: number) => {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshBasicMaterial());
@@ -15,11 +15,6 @@ const model = (ceilingY: number) => {
   g.updateMatrixWorld(true);
   return g;
 };
-
-test("a ceiling at the wall height shares a plane with the roof underside (the walk-mode z-fight)", () => {
-  expect(ceilingMeetsRoof(model(2.7))).toBe(true); // default presets: wall height = ceiling height
-  expect(ceilingMeetsRoof(model(2.4))).toBe(false);
-});
 
 test("ceilings follow the roof toggle: hidden when they share the roof plane or the roof is off, shown when lower", () => {
   const vis = (g: THREE.Object3D) => {

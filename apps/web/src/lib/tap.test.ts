@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createTapGate, isDoubleTap } from "./tap";
+import { createTapGate, DOUBLE_TAP, isDoubleTap, SINGLE_DELAY_MS } from "./tap";
 
 test("two quick, close taps are a double tap; slow, far or lone ones are not", () => {
   const a = { t: 1000, x: 100, y: 100 };
@@ -30,11 +30,11 @@ function clock() {
 
 test("a single click runs after the delay; a double click runs only the double action", () => {
   const c = clock();
-  const gate = createTapGate(250, c);
+  const gate = createTapGate(SINGLE_DELAY_MS, c);
   const log: string[] = [];
   gate.tap({ t: c.now(), x: 10, y: 10 }, () => log.push("single"), () => log.push("double"));
   expect(log).toEqual([]); // waiting
-  c.advance(249);
+  c.advance(SINGLE_DELAY_MS - 1);
   expect(log).toEqual([]);
   c.advance(2);
   expect(log).toEqual(["single"]); // responsive enough: fires at the delay
@@ -50,7 +50,7 @@ test("a single click runs after the delay; a double click runs only the double a
 
 test("a second tap far away or too late is a new click, and the pending one runs first", () => {
   const c = clock();
-  const gate = createTapGate(250, c);
+  const gate = createTapGate(SINGLE_DELAY_MS, c);
   const log: string[] = [];
   gate.tap({ t: 0, x: 10, y: 10 }, () => log.push("a"), () => log.push("double"));
   c.advance(100);
@@ -62,4 +62,17 @@ test("a second tap far away or too late is a new click, and the pending one runs
   gate.cancel();
   c.advance(1000);
   expect(log).toEqual(["a", "b"]); // cancelled: nothing fires
+});
+
+test("the single-click wait is never shorter than the double-click window, so no second click falls in the gap", () => {
+  expect(SINGLE_DELAY_MS).toBeGreaterThanOrEqual(DOUBLE_TAP.ms);
+  const c = clock();
+  const gate = createTapGate(SINGLE_DELAY_MS, c);
+  const log: string[] = [];
+  gate.tap({ t: 0, x: 10, y: 10 }, () => log.push("single"), () => log.push("double"));
+  c.advance(DOUBLE_TAP.ms - 20); // a slow second click, just inside the window
+  const r = gate.tap({ t: c.now(), x: 11, y: 10 }, () => log.push("single2"), () => log.push("double"));
+  expect(r).toBe("double");
+  c.advance(2000);
+  expect(log).toEqual(["double"]); // the door toggles; the first click did not select
 });

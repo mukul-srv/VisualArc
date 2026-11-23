@@ -90,3 +90,14 @@ def test_a_legacy_model_without_a_stored_request_gets_a_clear_message_with_the_w
     assert r.status_code == 422
     assert "Level 0" in r.json()["detail"] and "Add floor" in r.json()["detail"]
     assert client.get(f"{P}/{pid}").json()["version"] == 1  # nothing changed
+
+
+def test_defaults_of_a_converted_model_are_not_recorded_as_user_input(client):
+    pid = _project_from(client, _standalone(client))  # nothing but the upload given
+    params = client.get(f"{P}/{pid}").json()["params"]["floor-0"]
+    assert params["building_type"]["source"] == "defaulted"
+    assert params["wall_height"] == {"value": None, "source": "defaulted"}
+    pid2 = _project_from(client, _standalone(client, building_type="commercial", wall_height=3100))
+    params2 = client.get(f"{P}/{pid2}").json()["params"]["floor-0"]
+    assert params2["building_type"] == {"value": "commercial", "source": "user_provided"}
+    assert params2["wall_height"] == {"value": 3100.0, "source": "user_provided"}

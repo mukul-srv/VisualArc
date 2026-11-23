@@ -2,7 +2,7 @@
 // the pointer, so two quick, close taps are detected by hand.
 export type Tap = { t: number; x: number; y: number };
 
-export const DOUBLE_TAP = { ms: 350, px: 24 };
+export const DOUBLE_TAP = { ms: 300, px: 24 };
 
 export function isDoubleTap(prev: Tap | null, cur: Tap): boolean {
   return !!prev && cur.t - prev.t <= DOUBLE_TAP.ms && Math.hypot(cur.x - prev.x, cur.y - prev.y) <= DOUBLE_TAP.px;
@@ -11,7 +11,9 @@ export function isDoubleTap(prev: Tap | null, cur: Tap): boolean {
 type Timers = { set: (f: () => void, ms: number) => unknown; clear: (id: unknown) => void };
 const REAL: Timers = { set: (f, ms) => setTimeout(f, ms), clear: (id) => clearTimeout(id as ReturnType<typeof setTimeout>) };
 
-export const SINGLE_DELAY_MS = 250;
+// A pending single click waits exactly as long as a second tap may still make it a double: any shorter
+// and a second click inside the double window would arrive after the single already ran.
+export const SINGLE_DELAY_MS = DOUBLE_TAP.ms;
 
 /** Single click vs double click on the same target. A single click runs after `delay` ms unless a
  *  second quick, close tap arrives first: then only `onDouble` runs, so a double click on a door

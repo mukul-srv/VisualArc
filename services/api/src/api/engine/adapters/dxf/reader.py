@@ -15,6 +15,7 @@ from pathlib import Path
 import ezdxf
 from ezdxf import units
 from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
@@ -989,6 +990,18 @@ def read_dxf(
             )
             for b in boundaries
         ]
+    if paired:  # spaces the walls enclose that no floor outline covers get no slab and no walking surface
+        floors_union = unary_union([Polygon(b.polygon) for b in boundaries]) if boundaries else Polygon()
+        bare = [
+            h for o in wall_outlines([w.rect() for w in paired] + [Polygon(j.polygon) for j in pieces], settings)
+            for h in o.holes if Polygon(h).difference(floors_union).area > 1.0  # mm2: below that is float noise
+        ]
+        if bare:
+            issues.append(Issue(
+                code="slab_hole_without_floor", severity="warning",
+                message=f"{len(bare)} enclosed space(s) have no closed polyline on {settings.floor_label}, so "
+                "they get no floor slab and no walking surface (a courtyard is fine; a room needs its outline)",
+                sources=[s for b in boundaries for s in b.sources[:1]][: settings.unmapped_ref_cap]))
     # one report for the default, whichever of slabs, balconies, stairs or ramps use it
     slab_default = given.get("slab_thickness") is None and preset is not None
     if slab_default and (

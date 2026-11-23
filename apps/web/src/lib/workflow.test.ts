@@ -274,9 +274,8 @@ test("a wall's aperture box starts at the finished floor, not at the wall's base
 });
 
 test("roof toggle: with default presets the roof underside is the ceiling, so the roof shows from inside and outside", async () => {
-  const { applyCeilingVisibility, ceilingMeetsRoof, setRoofVisible } = await import("./roof");
+  const { applyCeilingVisibility, setRoofVisible } = await import("./roof");
   const scene = await generated("fixture_roofs.dxf", { building_type: "residential" });
-  expect(ceilingMeetsRoof(scene)).toBe(true); // wall height = ceiling height: the same plane
   const camera = new THREE.PerspectiveCamera();
   camera.layers.enable(1); // walk mode also draws the ceiling layer
   const drawn = () => {

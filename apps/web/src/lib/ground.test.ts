@@ -83,12 +83,13 @@ test("off the side of a raised surface the walker drops to the baseline", () => 
   expect(resolveHeight(5, 0.5, 0.16, 0.05, collectSupports(g), 0, 0.18)).toBe(0); // no support there
 });
 
-test("the ground level is the floor level, not the slab underside", () => {
+test("the ground level is the common base of slab and walls", () => {
   const g = new THREE.Group();
-  g.add(box("slab", 0, 5, -0.2, 0, 0, 5), box("wall", 0, 5, 0, 3, 0, 0.2), box("wall", 0, 5, 0, 3, 4.8, 5));
+  // slab 0..0.2 inside walls 0..3.2: both start at the base (y = 0), the finished floor is 0.2
+  g.add(box("slab", 0.2, 4.8, 0, 0.2, 0.2, 4.8), box("wall", 0, 5, 0, 3.2, 0, 0.2), box("wall", 0, 5, 0, 3.2, 4.8, 5));
   g.updateMatrixWorld(true);
-  expect(groundLevel(g)).toBeCloseTo(0); // walls start at the floor, the slab is below grade
-  expect(groundLevel(g, 3200)).toBeCloseTo(3.2); // a project's lowest floor wins when known
+  expect(groundLevel(g)).toBeCloseTo(0); // the grid: where the walls (and the slab) start
+  expect(groundLevel(g, 3200)).toBeCloseTo(3.2); // a project's lowest floor base wins when known
   expect(groundLevel(new THREE.Group())).toBe(0);
 });
 

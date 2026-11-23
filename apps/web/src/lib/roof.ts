@@ -16,20 +16,9 @@ export function setRoofVisible(model: THREE.Object3D, visible: boolean): void {
   for (const r of roofs(model)) r.visible = visible;
 }
 
-/** With the default presets wall height = ceiling height, so the ceiling (zero-thickness, facing
- *  down) and the roof's eaves plane (also facing down) are the SAME plane: drawn together they
- *  z-fight, and a ceiling drawn on top hides the roof from inside altogether. True when a ceiling
- *  shares a plane with a roof's underside (within 1 mm). */
-export function ceilingMeetsRoof(model: THREE.Object3D): boolean {
-  model.updateWorldMatrix(true, true);
-  const under = roofs(model).map((r) => new THREE.Box3().setFromObject(r).min.y);
-  return meshesOf(model, "ceiling").some((c) => {
-    const y = new THREE.Box3().setFromObject(c).min.y;
-    return under.some((u) => Math.abs(u - y) < 0.001);
-  });
-}
-
-/** Which ceilings are drawn (in walk mode, the only mode that draws them) for the roof toggle.
+/** Which ceilings are drawn (in walk mode, the only mode that draws them) for the roof toggle. With the
+ *  default presets wall height = ceiling height, so the ceiling and the roof's underside are the same
+ *  plane (within 1 mm): drawn together they would z-fight and the ceiling would hide the roof.
  *  - roof ON and the ceiling shares the roof's underside plane (the default presets): the ceiling is
  *    hidden, the roof's own underside is what you see overhead: no second surface in that plane, so
  *    no z-fighting, and the roof is visible from inside;

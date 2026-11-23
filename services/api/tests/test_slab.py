@@ -94,3 +94,11 @@ def test_older_slab_shapes_still_validate():
     legacy = (FIXTURES / "expected" / "fixture_b.canonical.json").read_text(encoding="utf-8")
     old = Project.model_validate_json(legacy.replace('"schema_version": "0.8.0"', '"schema_version": "0.7.0"'))
     assert old.schema_version == "0.7.0"  # the version is data; an older file reads fine
+
+
+def test_a_space_without_a_floor_outline_is_reported(tmp_path):
+    p = _building(tmp_path, with_floor=False)
+    (issue,) = [i for i in p.issues if i.code == "slab_hole_without_floor"]
+    assert issue.severity == "warning" and "A-FLOR" in issue.message
+    assert not p.buildings[0].floors[0].slabs  # no outline, no slab: said, not silent
+    assert "slab_hole_without_floor" not in [i.code for i in _building(tmp_path, with_floor=True).issues]

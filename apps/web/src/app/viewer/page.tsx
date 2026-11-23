@@ -475,6 +475,7 @@ export default function ViewerPage() {
       canvas.removeEventListener("pointermove", onLookMove);
       window.removeEventListener("pointerup", onLookUp);
       exitWalk();
+      gate.cancel(); // a pending single click must not run on a disposed scene
       clearTimeout(hintTimer);
       clearSelection();
       clearMeasure();
