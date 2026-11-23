@@ -73,3 +73,6 @@ export function unpairedStairs(b: Building, floorId: string): string[] {
   const paired = new Set(b.pairings.filter((p) => p.status !== "rejected" && p.lower_floor === floorId).map((p) => p.lower_stair));
   return f ? f.stairs.map((s) => s.id).filter((s) => !paired.has(s)) : [];
 }
+
+/** True when two building payloads are equal (a refresh that changed nothing must not re-place the floors). */
+export const sameBuilding = (a: Building | null, b: Building) => a !== null && JSON.stringify(a) === JSON.stringify(b);

@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { canonicalUrl, getProject, glbUrl, isGenerationId } from "@/lib/api";
-import { getBuilding, type Building } from "@/lib/building";
+import { getBuilding, sameBuilding, type Building } from "@/lib/building";
 import { blockedHint, blockedStairAt, blockedStairs, floorAtHeight, floorState, GAP, manifestBuilding, placements, walkableFloors, type View } from "@/lib/building-view";
 import { setGhost } from "@/lib/ghost";
 import { BuildingControls, BuildingStats } from "@/components/BuildingControls";
@@ -81,7 +81,8 @@ export default function ViewerPage() {
       Promise.all([getProject(project, fetch, version, share.current), version === undefined ? getBuilding(project, fetch, share.current) : null]).then(([r, br]) => {
         const m = r.ok ? parseManifest(r.manifest) : null;
         if (!r.ok || !m) return setStatus(r.ok ? "error: malformed project manifest" : `error: ${r.message}`);
-        if (br && !br.ok) return setStatus(`error: ${br.message}`);
+        // no building data (API error): the floors still show, without offsets and pairings
+        if (br && !br.ok) queueMicrotask(() => setHint("Building data unavailable: floors are shown without offsets or pairings."));
         setViewing(version ?? null);
         const f = pickFloor(m, query.get("floor"));
         if (!f) return setStatus("error: project has no floors yet");
@@ -616,7 +617,7 @@ export default function ViewerPage() {
       Promise.all([getProject(manifest.id, fetch, undefined, share.current), getBuilding(manifest.id, fetch, share.current)]).then(([r, br]) => {
         const m = r.ok ? parseManifest(r.manifest) : null;
         if (!m || !br.ok || m.floors.length === 0) return;
-        setBuilding(br.building); // offsets and pairings may have changed
+        setBuilding((old) => (sameBuilding(old, br.building) ? old : br.building)); // only when offsets or pairings changed
         if (key(m) === key(manifest)) return;
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
         setManifest(m);
