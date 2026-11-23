@@ -12,10 +12,18 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.engine.settings import DEFAULTS
 
-# 0.7.1: Slab.polygon is the outline of the building part (walls included), not a floor-boundary ring;
-# Slab.boundary_id may be null and Slab.boundary_ids / holes are new. 0.7.0 artifacts (a slab per
-# boundary, boundary_id set) still validate: only optional fields were added or relaxed.
-SCHEMA_VERSION = "0.7.1"
+# Vertical convention (0.8.0; ADR-001 addendum). A floor's `elevation` is the UNDERSIDE of its floor slab,
+# the structural base: the grid/ground of a single-storey building. The slab fills base .. base + slab
+# thickness inside the walls, so the FINISHED FLOOR (what you walk on, floor boundary, stair and ramp
+# starts, column bases, balcony tops) is `elevation + slab thickness`. Walls start at the base, beside
+# the slab, and rise to finished floor + wall height. Wall, ceiling, window-sill, lintel and railing
+# heights are measured from the finished floor; the ceiling plane is finished floor + ceiling height;
+# the roof sits on the wall tops. A floor without a slab (no floor boundary or no slab thickness) has
+# its finished floor at `elevation`. Floor-to-floor stacking is unchanged: elevations step by the
+# floor-to-floor value, the next slab's underside following the previous floor's ceiling plus slab.
+# 0.7.1 (a slab per building part) was dropped again: a slab per floor boundary, as in 0.7.0; the
+# optional Slab.boundary_ids / holes of 0.7.1 stay readable ("holes" is always empty now).
+SCHEMA_VERSION = "0.8.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
 Point2 = tuple[float, float]
@@ -133,14 +141,15 @@ class Room(_Model):
 
 
 class Slab(_Model):
-    """Floor slab under a building part, walls included: top at floor elevation, `thickness` below it."""
+    """Floor slab of one floor boundary: from the floor's `elevation` (structural base) up by
+    `thickness`, whose top is the finished floor. The walls start at the same base beside it."""
 
     id: str
     type: Literal["slab"] = "slab"
-    boundary_id: str | None = None  # the one floor boundary it lies under, if exactly one
+    boundary_id: str | None = None  # the floor boundary it lies under
     boundary_ids: list[str] = []  # every floor boundary inside it (its top face is theirs)
-    polygon: list[Point2]  # outline of the building part: walls and floor boundaries
-    holes: list[list[Point2]] = []  # enclosed regions with no floor boundary (courtyards): no slab there
+    polygon: list[Point2]  # the floor boundary's ring
+    holes: list[list[Point2]] = []  # 0.7.1 only; always empty now
     thickness: Measured
     sources: list[SourceRef]  # the boundary's sources
 
@@ -346,7 +355,7 @@ class PlanOffset(_Model):
 class Floor(_Model):
     id: str
     name: str
-    elevation: Measured
+    elevation: Measured  # underside of the floor slab (see the vertical convention at the top)
     ceiling_height: Measured | None = None  # None -> blocking when walls exist
     walls: list[Wall] = []
     junctions: list[Junction] = []
@@ -361,6 +370,11 @@ class Floor(_Model):
     roofs: list[Roof] = []
     ramps: list[Ramp] = []
     plan_offset: PlanOffset | None = None  # None = plan coordinates are the source's
+
+    @property
+    def finished_level_mm(self) -> float:
+        """Top of the floor slab: what is walked on; elevation itself when there is no slab."""
+        return self.elevation.value + max((s.thickness.value for s in self.slabs), default=0.0)
 
     @model_validator(mode="after")
     def _check_ceiling(self) -> "Floor":

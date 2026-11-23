@@ -43,3 +43,14 @@ export function diffParameters(
   }
   return errors.length ? { ok: false, errors } : { ok: true, values };
 }
+
+/** Floors that cannot be rebuilt (no stored settings): what to tell the person and where to go. */
+export function legacyNotice(names: string[], projectId: string): { text: string; action: string; href: string } | null {
+  if (names.length === 0) return null;
+  const one = names.length === 1;
+  return {
+    text: `${one ? "The floor" : "These floors"} ${names.join(", ")} cannot be rebuilt from here: ${one ? "it was" : "they were"} created before the app kept the settings used to build ${one ? "it" : "them"}.`,
+    action: `Add ${one ? "it" : "them"} again from the DXF, then remove the old ${one ? "floor" : "floors"} under Floors.`,
+    href: `/new?project=${projectId}`,
+  };
+}

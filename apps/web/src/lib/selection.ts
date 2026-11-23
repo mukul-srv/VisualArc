@@ -36,7 +36,8 @@ export type ElementData = {
   wall_ids?: string[];
   source?: Provenance; // junction: always "inferred"
   elevation?: Measured; // ceiling: floor elevation + ceiling height
-  boundary_id?: string; // slab: the floor boundary it sits under
+  boundary_id?: string | null; // slab: the floor boundary it sits under
+  floor_offset_mm?: number; // wall: its base to the finished floor (the slab thickness); openings count from there
   shape?: "rect" | "circle"; // column
   centre?: Pt;
   radius?: Measured | null;

@@ -1,4 +1,4 @@
-"""Slab under the building part: courtyards get no slab, and 0.7.0 artifacts still validate."""
+"""The floor convention: slab and walls share a base; the finished floor is the slab top."""
 
 from pathlib import Path
 
@@ -7,13 +7,14 @@ import pytest
 
 from api.engine.adapters.dxf.reader import read_dxf
 from api.engine.canonical.model import Project, Slab
-from api.engine.geometry3d.extrude import build_meshes
+from api.engine.geometry3d.extrude import build_meshes, build_opening_parts
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures"
 
 
-def _building(tmp_path, with_floor: bool):
-    """4400 x 3400 outer, 200 mm walls; the 4000 x 3000 inside has A-FLOR only when asked."""
+def _building(tmp_path, with_floor=True, door=False):
+    """4400 x 3400 outer, 200 mm walls; the 4000 x 3000 inside has A-FLOR when asked. With `door`, the
+    south wall has a 900 mm gap (x 1000..1900) filled by a door marker."""
     doc = ezdxf.new("R2018", setup=False)
     doc.header["$INSUNITS"] = 4
     msp = doc.modelspace()
@@ -21,48 +22,83 @@ def _building(tmp_path, with_floor: bool):
     inner = [(200, 200), (4200, 200), (4200, 3200), (200, 3200)]
     for loop in (outer, inner):
         for i, a in enumerate(loop):
-            msp.add_line(a, loop[(i + 1) % 4], dxfattribs={"layer": "A-WALL"})
+            b = loop[(i + 1) % 4]
+            south = a[1] == b[1] and a[1] in (0, 200)
+            if door and south:
+                for lo, hi in ((min(a[0], b[0]), 1000), (1900, max(a[0], b[0]))):
+                    msp.add_line((lo, a[1]), (hi, a[1]), dxfattribs={"layer": "A-WALL"})
+                continue
+            msp.add_line(a, b, dxfattribs={"layer": "A-WALL"})
+    if door:
+        msp.add_lwpolyline([(1000, 0), (1900, 0), (1900, 200), (1000, 200)], close=True,
+                           dxfattribs={"layer": "A-DOOR"})
     if with_floor:
         msp.add_lwpolyline(inner, close=True, dxfattribs={"layer": "A-FLOR"})
     doc.saveas(tmp_path / "c.dxf")
-    return read_dxf(tmp_path / "c.dxf", 3000, ceiling_height=3000, building_type="residential")
+    return read_dxf(tmp_path / "c.dxf", 3000, ceiling_height=2600, building_type="residential")
 
 
-def _top_area(mesh, z):
-    up = (mesh.face_normals[:, 2] > 0.5) & (abs(mesh.triangles_center[:, 2] - z) < 1e-6)
-    return mesh.area_faces[up].sum()
-
-
-def test_enclosed_region_without_a_floor_boundary_gets_no_slab_and_an_issue(tmp_path):
-    p = _building(tmp_path, with_floor=False)
-    f = p.buildings[0].floors[0]
+def test_slab_and_walls_start_together_and_the_finished_floor_is_the_slab_top(tmp_path):
+    f = _building(tmp_path).buildings[0].floors[0]
+    meshes = build_meshes(f)
     (slab,) = f.slabs
-    assert len(slab.holes) == 1 and slab.boundary_ids == []
-    assert "slab_hole_without_floor" in [i.code for i in p.issues]
-    mesh = build_meshes(f)[slab.id]
-    # top face = the wall ring only: 4400 x 3400 - 4000 x 3000 mm2; nothing over the courtyard
-    assert _top_area(mesh, 0) == pytest.approx(4400 * 3400 - 4000 * 3000)
+    assert f.elevation.value == 0 and f.finished_level_mm == 200  # base, and base + 200 mm slab
+    assert meshes[slab.id].bounds[:, 2].tolist() == [0, 200]  # the slab fills base .. finished floor
+    for w in f.walls:  # walls share the base with the slab and rise to finished floor + wall height
+        assert meshes[w.id].bounds[:, 2].tolist() == [0, 200 + 3000]
+    assert meshes[f.boundaries[0].id].bounds[0, 2] == 200  # the walked surface
+    (ceiling,) = f.ceilings
+    assert ceiling.elevation.value == 200 + 2600  # finished floor + ceiling height
+    (roof,) = f.roofs
+    assert roof.base_elevation.value == 200 + 3000  # on the wall tops
 
 
-def test_with_a_floor_boundary_there_is_no_hole(tmp_path):
-    p = _building(tmp_path, with_floor=True)
-    (slab,) = p.buildings[0].floors[0].slabs
-    assert slab.holes == [] and slab.boundary_id == "fb-001"
-    assert "slab_hole_without_floor" not in [i.code for i in p.issues]
-    # the slab's own top faces cover the walls only: the boundary's face covers the room
-    mesh = build_meshes(p.buildings[0].floors[0])[slab.id]
-    assert _top_area(mesh, 0) == pytest.approx(4400 * 3400 - 4000 * 3000)
+def test_apertures_are_measured_from_the_finished_floor(tmp_path):
+    f = _building(tmp_path, door=True).buildings[0].floors[0]
+    (o,) = f.openings
+    assert o.sill_height.value == 0
+    wall = build_meshes(f)[o.wall_id]
+    # the door leaf stands on the finished floor (z = 200); the wall still carries its base below
+    leaf = build_opening_parts(f)[f"{o.id}-leaf"][2]
+    assert leaf.bounds[0, 2] == 200 and leaf.bounds[1, 2] == pytest.approx(200 + 2100 - 50)
+    assert wall.bounds[0, 2] == 0
 
 
-def test_a_0_7_0_slab_and_project_still_validate():
-    old_slab = {
+def test_a_floor_without_a_slab_has_its_finished_floor_at_the_elevation(tmp_path):
+    f = _building(tmp_path, with_floor=False).buildings[0].floors[0]  # no floor boundary: no slab
+    assert not f.slabs and f.finished_level_mm == f.elevation.value
+    assert build_meshes(f)[f.walls[0].id].bounds[:, 2].tolist() == [0, 3000]
+    assert not f.ceilings
+
+
+def test_floors_stack_by_their_elevations(tmp_path):
+    f0 = _building(tmp_path).buildings[0].floors[0]
+    up = read_dxf(tmp_path / "c.dxf", 3000, ceiling_height=2600, building_type="residential",
+                  floor_elevation=3000)
+    f1 = up.buildings[0].floors[0]
+    assert f1.finished_level_mm - f0.finished_level_mm == 3000
+    assert build_meshes(f1)[f1.slabs[0].id].bounds[:, 2].tolist() == [3000, 3200]
+    assert build_meshes(f1)[f1.walls[0].id].bounds[0, 2] == 3000  # the next base sits at its elevation
+
+
+def test_older_slab_shapes_still_validate():
+    # 0.7.0 (no boundary_ids) and 0.7.1 (boundary_ids, holes) slabs
+    base = {
         "id": "slab-001", "type": "slab", "boundary_id": "fb-001",
         "polygon": [[200, 200], [4200, 200], [4200, 3200], [200, 3200]],
         "thickness": {"value": 200, "unit": "mm", "source": "defaulted"},
         "sources": [{"format": "dxf", "layer": "A-FLOR", "entity_handle": "3C"}],
     }
-    s = Slab.model_validate(old_slab)  # no boundary_ids, no holes: both default
-    assert s.boundary_id == "fb-001" and s.boundary_ids == [] and s.holes == []
+    assert Slab.model_validate(base).boundary_ids == []
+    assert Slab.model_validate({**base, "boundary_id": None, "boundary_ids": ["fb-001"], "holes": []}).holes == []
     legacy = (FIXTURES / "expected" / "fixture_b.canonical.json").read_text(encoding="utf-8")
-    old = Project.model_validate_json(legacy.replace('"schema_version": "0.7.1"', '"schema_version": "0.7.0"'))
-    assert old.schema_version == "0.7.0"  # the version is data; a 0.7.0 file reads fine
+    old = Project.model_validate_json(legacy.replace('"schema_version": "0.8.0"', '"schema_version": "0.7.0"'))
+    assert old.schema_version == "0.7.0"  # the version is data; an older file reads fine
+
+
+def test_a_space_without_a_floor_outline_is_reported(tmp_path):
+    p = _building(tmp_path, with_floor=False)
+    (issue,) = [i for i in p.issues if i.code == "slab_hole_without_floor"]
+    assert issue.severity == "warning" and "A-FLOR" in issue.message
+    assert not p.buildings[0].floors[0].slabs  # no outline, no slab: said, not silent
+    assert "slab_hole_without_floor" not in [i.code for i in _building(tmp_path, with_floor=True).issues]

@@ -153,6 +153,8 @@ class GenerationRow(Base):
     blob_prefix: Mapped[str] = mapped_column(String(255))  # artifacts live under this key prefix
     # display name of a standalone model: the uploaded file name unless the owner renamed it
     name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # the GenerationRequest it was built from (None: made before requests were stored)
+    request: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # nullable: legacy rows and CLI imports have no owner; enforcement is a later subtask
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)

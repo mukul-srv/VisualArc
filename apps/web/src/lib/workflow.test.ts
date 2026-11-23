@@ -151,7 +151,7 @@ test("2-floor project: create, add floors, manifest, each floor GLB sits at its 
   for (const f of m.floors) {
     expect(f.elevation.source).toBe("user_provided");
     const box = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(f.generation_id))).scene);
-    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000 - 0.2, 3); // elevation is in the GLB; the default 200 mm slab sits below it
+    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000, 3); // the elevation is the base: slab and walls start there
   }
 });
 
@@ -177,7 +177,7 @@ test("consolidated DXF: preflight lists floors, generation blocks, confirm creat
   expect(sortFloors(m.floors).map((f) => f.name)).toEqual(["Ground", "First"]);
   for (const f of m.floors) {
     const box = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(f.generation_id))).scene);
-    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000 - 0.2, 3);
+    expect(box.min.y).toBeCloseTo(f.elevation.value / 1000, 3);
   }
 });
 
@@ -218,8 +218,15 @@ test("changing a parameter regenerates the floor and the served GLB changes (rea
   const gid1 = (after.manifest as { floors: { generation_id: string }[] }).floors[0].generation_id;
   expect(gid1).not.toBe(gid0); // a new generation, so a new GLB url
   const box1 = new THREE.Box3().setFromObject((await loadGlb(api.glbUrl(gid1))).scene);
-  expect(box0.min.y).toBeCloseTo(-0.2, 3);
-  expect(box1.min.y).toBeCloseTo(-0.4, 3); // the 400 mm slab
+  expect(box0.min.y).toBeCloseTo(0, 3);
+  expect(box1.min.y).toBeCloseTo(0, 3); // the base (grid) does not move...
+  const surface = (scene: THREE.Object3D) => {
+    let y = NaN;
+    scene.traverse((o) => o.userData?.type === "floor_boundary" && (y = new THREE.Box3().setFromObject(o).max.y));
+    return y;
+  };
+  expect(surface((await loadGlb(api.glbUrl(gid0))).scene)).toBeCloseTo(0.2, 3);
+  expect(surface((await loadGlb(api.glbUrl(gid1))).scene)).toBeCloseTo(0.4, 3); // ...the finished floor rises with the 400 mm slab
   const p = await projects.getParameters(pid);
   expect(p).toMatchObject({ ok: true, slab_thickness: { value: 400, source: "user_provided" } });
 }, 60_000);
@@ -235,37 +242,66 @@ async function generated(name: string, extra: Record<string, unknown> = {}) {
   return scene;
 }
 
-test("slab top is flush with the floor and the ground level is the floor level (walls do not float)", async () => {
+test("slab and walls start together on the ground; the walked floor is the slab top", async () => {
   const { groundLevel } = await import("./ground");
   const scene = await generated("fixture_a.dxf");
-  let slabMin = Infinity, slabMax = -Infinity, wallMin = Infinity;
+  let slabMin = Infinity, slabMax = -Infinity, wallMin = Infinity, boundary = NaN;
   scene.traverse((o) => {
     const b = new THREE.Box3().setFromObject(o);
     if (o.userData?.type === "slab") { slabMin = Math.min(slabMin, b.min.y); slabMax = Math.max(slabMax, b.max.y); }
     if (o.userData?.type === "wall") wallMin = Math.min(wallMin, b.min.y);
+    if (o.userData?.type === "floor_boundary") boundary = b.max.y;
   });
-  expect(slabMax).toBeCloseTo(0, 6); // the slab top is the floor elevation
-  expect(wallMin).toBeCloseTo(slabMax, 6); // walls start on the slab top: no gap
-  expect(slabMin).toBeCloseTo(-0.2, 6); // the slab is below grade
-  expect(groundLevel(scene)).toBeCloseTo(0, 6); // the grid sits at the floor, not at the slab underside
-  // the slab also lies under every wall, so none stands on air
-  const slab = new THREE.Box3();
-  const walls = new THREE.Box3();
-  scene.traverse((o) => {
-    if (o.userData?.type === "slab") slab.expandByObject(o);
-    if (o.userData?.type === "wall") walls.expandByObject(o);
-  });
-  expect(slab.containsBox(new THREE.Box3(new THREE.Vector3(walls.min.x, slab.min.y, walls.min.z), new THREE.Vector3(walls.max.x, slab.max.y, walls.max.z)))).toBe(true);
+  expect(slabMin).toBeCloseTo(0, 6); // the slab starts on the ground...
+  expect(wallMin).toBeCloseTo(slabMin, 6); // ...and so do the walls: a closed box, no gap, nothing below the grid
+  expect(slabMax).toBeCloseTo(0.2, 6); // the slab fills base .. base + 200 mm
+  expect(boundary).toBeCloseTo(slabMax, 6); // the floor you walk on is the slab top
+  expect(groundLevel(scene)).toBeCloseTo(slabMin, 6); // the grid sits at that common base
 });
 
-test("with default presets the ceiling and the roof underside share a plane (the walk-mode z-fight), and the fix separates them", async () => {
-  const { ceilingMeetsRoof, separateCoplanar } = await import("./roof");
+test("a wall's aperture box starts at the finished floor, not at the wall's base", async () => {
+  const { pickElement } = await import("./pick");
+  const scene = await generated("fixture_openings.dxf");
+  let wall: THREE.Mesh | undefined;
+  scene.traverse((o) => (o.userData?.type === "wall" && o.userData.openings?.length && !wall ? (wall = o as THREE.Mesh) : null));
+  const op = wall!.userData.openings[0];
+  expect(wall!.userData.floor_offset_mm).toBeCloseTo(200);
+  const mid = [(op.span.start[0] + op.span.end[0]) / 2000, -(op.span.start[1] + op.span.end[1]) / 2000];
+  const aim = (y: number) => pickElement(scene, new THREE.Ray(new THREE.Vector3(mid[0], y, mid[1] + 3), new THREE.Vector3(0, 0, -1)));
+  const lead = op.kind === "door" ? 0.05 : op.sill_height.value / 1000 + 0.05; // just above the opening's floor
+  expect(aim(0.2 + lead)?.opening?.id).toBe(op.id); // inside the aperture, counted from the finished floor
+  if (op.kind === "door") expect(aim(0.1)?.opening ?? null).toBeNull(); // in the wall's base, under the aperture
+});
+
+test("roof toggle: with default presets the roof underside is the ceiling, so the roof shows from inside and outside", async () => {
+  const { applyCeilingVisibility, setRoofVisible } = await import("./roof");
   const scene = await generated("fixture_roofs.dxf", { building_type: "residential" });
-  expect(ceilingMeetsRoof(scene)).toBe(true);
-  separateCoplanar(scene);
-  let offset = 0;
-  scene.traverse((o) => o.userData?.type === "ceiling" && ((o as THREE.Mesh).material as THREE.Material).polygonOffset && offset++);
-  expect(offset).toBeGreaterThan(0);
+  const camera = new THREE.PerspectiveCamera();
+  camera.layers.enable(1); // walk mode also draws the ceiling layer
+  const drawn = () => {
+    const types = new Set<string>();
+    scene.traverse((o) => (o as THREE.Mesh).isMesh && o.visible && camera.layers.test(o.layers) && types.add(o.userData.type));
+    return types;
+  };
+  applyCeilingVisibility(scene, true);
+  expect(drawn().has("roof")).toBe(true); // visible to the walking camera
+  expect(drawn().has("ceiling")).toBe(false); // not drawn over it: no z-fight, roof underside overhead
+  setRoofVisible(scene, false);
+  applyCeilingVisibility(scene, false);
+  expect(drawn().has("roof")).toBe(false);
+  expect(drawn().has("ceiling")).toBe(false); // roof off: open to the sky
+  setRoofVisible(scene, true);
+  applyCeilingVisibility(scene, true);
+  expect(drawn().has("roof")).toBe(true);
+});
+
+test("a ceiling lower than the roof is drawn under it", async () => {
+  const { applyCeilingVisibility } = await import("./roof");
+  const scene = await generated("fixture_roofs.dxf", { building_type: "residential", ceiling_height: 2400 });
+  applyCeilingVisibility(scene, true);
+  let ceiling = false;
+  scene.traverse((o) => o.userData?.type === "ceiling" && o.visible && (ceiling = true));
+  expect(ceiling).toBe(true);
 });
 
 test("walking up the real stair of fixture_stairs climbs to the top tread", async () => {
@@ -274,21 +310,22 @@ test("walking up the real stair of fixture_stairs climbs to the top tread", asyn
   const supports = collectSupports(scene);
   const limit = stepUpLimit(scene);
   expect(limit).toBeCloseTo(0.16 + 0.02); // from the stair's own riser
-  let x = 0.3, feet = 0;
+  const floor = 0.2; // finished floor: base 0 + the 200 mm slab
+  let x = 0.3, feet = floor;
   while (x < 5.1) { // stays on the stair (x 0.45 .. 5.2)
     const nx = x + 0.05;
-    const y = resolveHeight(nx, -1.0, feet, 0.05, supports, 0, limit);
+    const y = resolveHeight(nx, -1.0, feet, 0.05, supports, floor, limit);
     // plan y 1000 mm = three z -1.0, along the arrow
     expect(y).not.toBeNull();
     x = nx;
     feet = y as number;
   }
-  expect(feet).toBeCloseTo(19 * 0.16, 3);
+  expect(feet).toBeCloseTo(floor + 19 * 0.16, 3);
   // and the ramp slab (3200 over 4750 mm) is walkable too
-  let rx = 0.35, rf = 0; // from the floor in front, where the ramp starts at x = 0.45
+  let rx = 0.35, rf = floor; // from the floor in front, where the ramp starts at x = 0.45
   while (rx < 5.1) { // the ramp spans x 0.45 .. 5.2
     const nx = rx + 0.05;
-    const y = resolveHeight(nx, -3.0, rf, 0.05, supports, 0, limit);
+    const y = resolveHeight(nx, -3.0, rf, 0.05, supports, floor, limit);
     expect(y).not.toBeNull();
     rx = nx;
     rf = y as number;

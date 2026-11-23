@@ -21,18 +21,15 @@ def test_defaults_are_tagged_and_slab_sits_under_the_floor():
     assert p.parameters["roof_type"].value == "flat" and p.parameters["roof_pitch"].unit == "deg"
     assert "slab_thickness_defaulted" in {i.code for i in p.issues}
     f = p.buildings[0].floors[0]
-    # one slab for the whole building part, under the walls too: no wall floats above the ground
-    (slab,) = f.slabs
-    assert slab.thickness.source == "defaulted" and slab.boundary_ids == [b.id for b in f.boundaries]
-    z = build_meshes(f)[slab.id].bounds[:, 2]
-    assert z.tolist() == [f.elevation.value - 250, f.elevation.value]
-    from shapely.geometry import LineString, Polygon
-
-    outline = Polygon(slab.polygon).buffer(1e-6)
-    for w in f.walls:
-        assert outline.covers(LineString([w.centreline.start, w.centreline.end]))
-    # walls start on the slab top, which is the floor elevation
-    assert build_meshes(f)[f.walls[0].id].bounds[0, 2] == f.elevation.value
+    # one slab per floor boundary, from the base (elevation) up by its thickness; the walls start at the
+    # base too, so slab and walls share the ground
+    assert len(f.slabs) == len(f.boundaries) and f.slabs[0].thickness.source == "defaulted"
+    meshes = build_meshes(f)
+    z = meshes[f.slabs[0].id].bounds[:, 2]
+    assert z.tolist() == [f.elevation.value, f.elevation.value + 250]
+    assert meshes[f.walls[0].id].bounds[0, 2] == f.elevation.value
+    assert f.finished_level_mm == f.elevation.value + 250
+    assert meshes[f.boundaries[0].id].bounds[0, 2] == f.finished_level_mm  # the walked surface
 
 
 def test_user_values_override_and_tag_user_provided():

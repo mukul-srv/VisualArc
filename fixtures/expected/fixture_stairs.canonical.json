@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.7.1",
+  "schema_version": "0.8.0",
   "id": "fixture_stairs",
   "units": "mm",
   "source_file": "fixture_stairs.dxf",
@@ -343,7 +343,7 @@
                 ]
               ],
               "elevation": {
-                "value": 3000.0,
+                "value": 3200.0,
                 "unit": "mm",
                 "source": "inferred"
               },
@@ -371,20 +371,20 @@
               ],
               "polygon": [
                 [
-                  0.0,
-                  0.0
+                  200.0,
+                  200.0
                 ],
                 [
-                  0.0,
-                  4400.0
+                  6200.0,
+                  200.0
                 ],
                 [
-                  6400.0,
-                  4400.0
+                  6200.0,
+                  4200.0
                 ],
                 [
-                  6400.0,
-                  0.0
+                  200.0,
+                  4200.0
                 ]
               ],
               "holes": [],
@@ -526,7 +526,7 @@
               ],
               "outline_source": "walls",
               "base_elevation": {
-                "value": 3000.0,
+                "value": 3200.0,
                 "unit": "mm",
                 "source": "inferred"
               },

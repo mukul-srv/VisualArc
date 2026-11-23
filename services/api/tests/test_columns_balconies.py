@@ -42,7 +42,8 @@ def test_columns_footprint_and_extrusion_match_hand_calculation():
     meshes = build_meshes(f)
     assert meshes[rect.id].volume == pytest.approx(300 * 300 * 3000)
     assert meshes[circle.id].volume == pytest.approx(math.pi * 200**2 * 3000, rel=2e-3)
-    assert meshes[rect.id].bounds[:, 2].tolist() == [0, 3000]
+    # stands on the finished floor (base 0 + 200 mm slab) and rises by the ceiling height
+    assert meshes[rect.id].bounds[:, 2].tolist() == [200, 3200]
 
 
 def test_balcony_slab_and_railing_match_hand_calculation():
@@ -54,9 +55,9 @@ def test_balcony_slab_and_railing_match_hand_calculation():
     assert (b.thickness.value, b.thickness.source) == (200.0, "defaulted")
     slab = build_meshes(f)[b.id]
     assert slab.volume == pytest.approx(4000 * 1500 * 200)
-    assert slab.bounds[:, 2].tolist() == [-200, 0]  # top at floor elevation
+    assert slab.bounds[:, 2].tolist() == [0, 200]  # base .. finished floor, like the floor slab
     rail = build_balcony_railings(f)[f"{b.id}-railing"][1]
-    assert rail.bounds[:, 2].tolist() == [0, 900]
+    assert rail.bounds[:, 2].tolist() == [200, 1100]  # 900 mm from the finished floor
     meta = build_meta(p, build_scene(p))["elements"]
     assert meta["balcony-001"]["type"] == "balcony"
     assert meta["balcony-001-railing"]["type"] == "balcony_railing"

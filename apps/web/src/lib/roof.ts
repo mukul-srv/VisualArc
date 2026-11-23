@@ -16,28 +16,20 @@ export function setRoofVisible(model: THREE.Object3D, visible: boolean): void {
   for (const r of roofs(model)) r.visible = visible;
 }
 
-/** Root cause of the walk-mode glitch: with the default presets wall height = ceiling height, so
- *  the ceiling (zero-thickness, facing down) and the roof's eaves plane (also facing down) are the
- *  SAME plane, as are the wall tops under it. Equal depth in the same direction = z-fighting, seen
- *  flickering overhead as soon as ceilings are drawn (walk mode). True when a ceiling shares a
- *  plane with a roof's underside (within 1 mm). */
-export function ceilingMeetsRoof(model: THREE.Object3D): boolean {
+/** Which ceilings are drawn (in walk mode, the only mode that draws them) for the roof toggle. With the
+ *  default presets wall height = ceiling height, so the ceiling and the roof's underside are the same
+ *  plane (within 1 mm): drawn together they would z-fight and the ceiling would hide the roof.
+ *  - roof ON and the ceiling shares the roof's underside plane (the default presets): the ceiling is
+ *    hidden, the roof's own underside is what you see overhead: no second surface in that plane, so
+ *    no z-fighting, and the roof is visible from inside;
+ *  - roof ON and the ceiling is lower than the roof: the ceiling is drawn (a real lid under the roof);
+ *  - roof OFF: ceilings are hidden, so the room is open to the sky like in the orbit view. */
+export function applyCeilingVisibility(model: THREE.Object3D, roofOn: boolean): void {
   model.updateWorldMatrix(true, true);
   const under = roofs(model).map((r) => new THREE.Box3().setFromObject(r).min.y);
-  return meshesOf(model, "ceiling").some((c) => {
-    const y = new THREE.Box3().setFromObject(c).min.y;
-    return under.some((u) => Math.abs(u - y) < 0.001);
-  });
-}
-
-/** Pull ceilings towards the camera in depth (polygon offset), so where they share a plane with
- *  the roof underside the ceiling always wins; nothing moves and nothing else changes. */
-export function separateCoplanar(model: THREE.Object3D): void {
   for (const c of meshesOf(model, "ceiling")) {
-    for (const mat of Array.isArray(c.material) ? c.material : [c.material]) {
-      mat.polygonOffset = true;
-      mat.polygonOffsetFactor = -2;
-      mat.polygonOffsetUnits = -2;
-    }
+    const y = new THREE.Box3().setFromObject(c).min.y;
+    const sharesPlane = under.some((u) => Math.abs(u - y) < 0.001);
+    c.visible = roofOn && !sharesPlane;
   }
 }

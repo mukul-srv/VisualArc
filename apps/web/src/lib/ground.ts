@@ -1,8 +1,8 @@
 // Ground and support heights, free of the DOM so they are unit-testable.
 //
-// Ground plane: the viewer's grid sits at the floor level of the lowest storey (the TOP of its
-// slab), not at the model's lowest point (the slab's underside, which left walls looking raised
-// by the slab thickness). The slab is below grade.
+// Ground plane: the viewer's grid sits at the structural base of the lowest storey: the underside of
+// its slab, which is also where its walls start (canonical/model.py, vertical convention). Slab and
+// walls therefore stand on the grid together; the walked floor is the slab top, one slab thickness up.
 //
 // Support height: for any point, the height of the surface a walker can stand on there, from the
 // meshes that carry one (floor boundaries, balconies, stair steps, ramps). Walk mode uses it to
@@ -12,7 +12,7 @@ import * as THREE from "three";
 /** Types whose top surface can be walked on. */
 export const SUPPORT_TYPES = ["floor_boundary", "balcony", "stair", "ramp"];
 
-/** Floor level the grid and the walk baseline sit at, in metres (three.js Y).
+/** Level of the grid (the common base of slab and walls), in metres (three.js Y).
  *  `lowestElevationMm`: the lowest floor of the project, when known (several floors share one ground);
  *  otherwise the base of the lowest wall in the model, else the model's own bottom. */
 export function groundLevel(model: THREE.Object3D, lowestElevationMm?: number | null): number {
@@ -84,3 +84,12 @@ export function resolveHeight(
   if (s.type === "ramp" && travel > 0 && Math.abs(s.y - feetY) / travel > STEP.maxSlope) return null;
   return s.y;
 }
+
+/** Move `current` towards `target` with an exponential approach that does not depend on the frame
+ *  rate: after any total time the result is the same however it was cut into frames. Used for the
+ *  eye height, so stairs and ramps glide while the ground height itself stays exact. */
+export function dampTo(current: number, target: number, dt: number, rate = EYE_RATE): number {
+  return target + (current - target) * Math.exp(-rate * Math.max(0, dt));
+}
+
+export const EYE_RATE = 14; // 1/s: about 0.2 s to settle

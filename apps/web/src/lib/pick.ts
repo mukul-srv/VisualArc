@@ -29,7 +29,8 @@ export function pickElement(model: THREE.Object3D, ray: THREE.Ray): Pick | null 
     const ud = obj.userData as ElementData;
     if (ud?.type !== "wall" || !ud.openings?.length) return;
     const mesh = obj as THREE.Mesh;
-    const baseY = new THREE.Box3().setFromObject(mesh).min.y;
+    // the wall starts at the structural base; sills are measured from the finished floor above it
+    const baseY = new THREE.Box3().setFromObject(mesh).min.y + (ud.floor_offset_mm ?? 0) / 1000;
     for (const o of ud.openings) {
       const p = ray.intersectBox(openingBox(o, ud.thickness?.value ?? 0, baseY), new THREE.Vector3());
       if (p) cands.push({ opening: o, mesh, baseY, point: p, d: ray.origin.distanceTo(p) });

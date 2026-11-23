@@ -73,6 +73,7 @@ const CATALOG: Record<string, Entry> = {
   room_outline_open: { title: "Wall outline not closed", help: "Some wall ends are not joined to another wall, so no room closes through them. Join the walls in the drawing." },
   room_region_unusable: { title: "Room region not usable", help: "A closed region could not be turned into one room because of free-standing wall pieces inside it." },
   rooms_not_built: { title: "Rooms not built", help: "There are no walls, so text labels were not used as room names." },
+  slab_hole_without_floor: { title: "Room without a floor outline", help: "An enclosed space has no closed polyline on the floor layer, so it got no floor slab (and no walking surface). Draw the floor outline, or ignore this for a courtyard." },
   slab_thickness_defaulted: { title: "Slab thickness assumed", help: "The drawing gives none, so the preset value was used. Set it under Parameters.", info: true },
   stair_arrow_orphan: { title: "Arrow line outside any stair or ramp", help: "A line on a stair or ramp layer lies inside no outline of its kind and was not used." },
   stair_direction_ambiguous: { title: "Several arrows on one stair or ramp", help: "Keep one arrow line per flight; the direction was not guessed and nothing was built." },
