@@ -61,13 +61,13 @@ def test_default_gable_ridge_height_and_volume_match_hand_calculation():
     assert (r.kind, r.requested, r.outline_source, r.ridge_axis) == ("gable", "gable", "roof_layer", "x")
     assert (r.type_param.value, r.type_param.source) == ("gable", "defaulted")
     assert (r.pitch.value, r.pitch.source) == (30.0, "defaulted")
-    assert r.base_elevation.value == 3000.0  # floor 0 + wall height
+    assert r.base_elevation.value == 3200.0  # base 0 + 200 mm slab + 3000 wall height
     assert r.ridge_height.value == pytest.approx(H_GABLE)  # half-span * tan(pitch)
     assert (r.overhang.value, r.overhang.source) == (0.0, "source_extracted")  # a drawn outline is the edge
     assert {"roof_type_defaulted"} <= set(_codes(p))
     mesh = build_meshes(_floor(p))[r.id]
     assert mesh.is_watertight and mesh.volume == pytest.approx(0.5 * 5000 * H_GABLE * 7000)
-    np.testing.assert_allclose(mesh.bounds, [[-300, -300, 3000], [6700, 4700, 3000 + H_GABLE]])
+    np.testing.assert_allclose(mesh.bounds, [[-300, -300, 3200], [6700, 4700, 3200 + H_GABLE]])
 
 
 def test_roof_from_the_walls_adds_the_eave_overhang(tmp_path):
@@ -77,7 +77,7 @@ def test_roof_from_the_walls_adds_the_eave_overhang(tmp_path):
     assert (r.overhang.value, r.overhang.source) == (300.0, "defaulted")
     assert r.ridge_height.value == pytest.approx(H_GABLE)  # (4400 + 2 x 300) / 2 x tan 30
     mesh = build_meshes(_floor(p))[r.id]
-    np.testing.assert_allclose(mesh.bounds, [[-300, -300, 3000], [6700, 4700, 3000 + H_GABLE]])
+    np.testing.assert_allclose(mesh.bounds, [[-300, -300, 3000], [6700, 4700, 3000 + H_GABLE]])  # no floor boundary: no slab
 
 
 def test_hip_with_user_type_and_pitch(tmp_path):
@@ -91,7 +91,7 @@ def test_hip_with_user_type_and_pitch(tmp_path):
     L, W = 7000, 5000
     assert mesh.is_watertight and mesh.volume == pytest.approx(W * h / 6 * (3 * L - W))  # hip volume
     # the ridge is the long side minus the short side, centred on y = 2200
-    top = mesh.vertices[mesh.vertices[:, 2] > 3000 + h - 1e-6]
+    top = mesh.vertices[mesh.vertices[:, 2] > 3200 + h - 1e-6]
     assert sorted(set(top[:, 0].round(6))) == [2200.0, 4200.0] and set(top[:, 1].round(6)) == {2200.0}
 
 
@@ -110,7 +110,7 @@ def test_commercial_default_is_a_flat_slab():
     assert (r.thickness.value, r.thickness.source) == (200.0, "defaulted")
     mesh = build_meshes(_floor(p))[r.id]
     assert mesh.volume == pytest.approx(7000 * 5000 * 200)
-    assert mesh.bounds[:, 2].tolist() == [3000, 3200]
+    assert mesh.bounds[:, 2].tolist() == [3250, 3450]  # 250 mm slab + 3000 walls, then 200 mm of roof
 
 
 @pytest.mark.parametrize(

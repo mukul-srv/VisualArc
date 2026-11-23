@@ -15,7 +15,6 @@ from pathlib import Path
 import ezdxf
 from ezdxf import units
 from shapely.geometry import Polygon
-from shapely.ops import unary_union
 
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
@@ -142,9 +141,6 @@ def resolve_scale(doc, user_units: str | None = None) -> float | None:
         return units.conversion_factor(code or user, units.MM) if code or user else None
     except (TypeError, ValueError):
         return None
-
-
-AREA_EPS_MM2 = 1.0  # a hole smaller than a square millimetre uncovered is float noise
 
 
 def _ref(e) -> SourceRef:
@@ -717,6 +713,10 @@ def read_dxf(
     issues += role_issues
     if scope:
         issues += scope.notes
+    # Floor convention (model.py): `elevation` is the underside of the slab, the finished floor is the
+    # slab thickness higher. Wall, ceiling and roof heights are measured from the finished floor.
+    slab_param = given.get("slab_thickness", preset.slab_thickness if preset else None)
+    floor_t = slab_param if (boundaries and slab_param) else 0.0
     ceil_h = ceilings = None
     ceil_src = "user_provided"
     if ceiling_height is None and paired and preset:
@@ -733,7 +733,7 @@ def read_dxf(
         ceil_h = Measured(value=ceiling_height, source=ceil_src)
         # derived sum, so "inferred" (not the user's own number); the floor
         # elevation it builds on is still reported by elevation_defaulted
-        top = Measured(value=elevation.value + ceiling_height, source="inferred")
+        top = Measured(value=elevation.value + floor_t + ceiling_height, source="inferred")
         ceilings = [
             Ceiling(
                 id=b.id.replace("fb-", "ceiling-", 1),
@@ -905,7 +905,7 @@ def read_dxf(
             plans, roof_issues = plan_roofs(outs, req_t, pitch_v, settings)
             issues += roof_issues
             base = None if height is None else Measured(
-                value=elevation.value + height.value, source="inferred")
+                value=elevation.value + floor_t + height.value, source="inferred")
             if plans and base is None:
                 issues.append(Issue(
                     code="roof_base_unknown", severity="warning",
@@ -974,38 +974,21 @@ def read_dxf(
                 railings=p.railings if railing_h is not None else [],
                 sources=[p.ref]))
     slabs = []
-    if (boundaries or paired) and (
-        slab_t := given.get("slab_thickness", preset.slab_thickness if preset else None)
-    ):
+    if boundaries and slab_param:
         slab_src = "user_provided" if "slab_thickness" in given else "defaulted"
-        # one slab per connected part of the building, under the walls too (so no wall floats
-        # above the ground): the exterior of the union of walls, junctions and floor boundaries
-        shapes = ([w.rect() for w in paired] + [Polygon(j.polygon) for j in pieces]
-                  + [Polygon(b.polygon) for b in boundaries])
-        floors = unary_union([Polygon(b.polygon) for b in boundaries]) if boundaries else Polygon()
-        for n, o in enumerate(wall_outlines(shapes, settings), 1):
-            inside = [b for b in boundaries
-                      if Polygon(o.polygon).buffer(settings.tolerance_mm).covers(Polygon(b.polygon))]
-            # an enclosed region no floor boundary covers (a courtyard, or a room drawn without
-            # A-FLOR) gets no slab: a floor there is not in the drawing
-            bare = [list(h) for h in o.holes
-                    if Polygon(h).difference(floors).area > AREA_EPS_MM2]
-            if bare:
-                issues.append(Issue(
-                    code="slab_hole_without_floor", severity="warning",
-                    message=f"{len(bare)} enclosed region(s) inside slab-{n:03d} have no floor "
-                    "boundary on the floor layer (courtyard, or a room drawn without one), so "
-                    "no slab is built there",
-                    sources=[s for b in inside for s in b.sources]))
-            slabs.append(Slab(
-                id=f"slab-{n:03d}",
-                boundary_id=inside[0].id if len(inside) == 1 else None,
-                boundary_ids=[b.id for b in inside],
-                polygon=o.polygon,
-                holes=bare,
-                thickness=Measured(value=slab_t, source=slab_src),
-                sources=[s for b in inside for s in b.sources],
-            ))
+        # one slab per floor boundary, filling the room between the structural base and the finished
+        # floor; the walls start at the base too (they run down beside the slab), so nothing floats
+        slabs = [
+            Slab(
+                id=b.id.replace("fb-", "slab-", 1),
+                boundary_id=b.id,
+                boundary_ids=[b.id],
+                polygon=b.polygon,
+                thickness=Measured(value=slab_param, source=slab_src),
+                sources=b.sources,
+            )
+            for b in boundaries
+        ]
     # one report for the default, whichever of slabs, balconies, stairs or ramps use it
     slab_default = given.get("slab_thickness") is None and preset is not None
     if slab_default and (

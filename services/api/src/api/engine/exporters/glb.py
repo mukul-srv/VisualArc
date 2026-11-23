@@ -71,6 +71,10 @@ def build_scene(project: Project) -> trimesh.Scene:
                 )
                 mesh.metadata = {
                     "floor_id": floor.id,
+                    # openings are measured from the finished floor, which is this far above the
+                    # wall's base (the viewer places aperture boxes with it)
+                    **({"floor_offset_mm": floor.finished_level_mm - floor.elevation.value}
+                       if el.type == "wall" else {}),
                     **el.model_dump(mode="json", exclude={"centreline", "polygon"}),
                 }
                 if el.id in hosted:  # key absent otherwise: pre-T12 GLBs unchanged

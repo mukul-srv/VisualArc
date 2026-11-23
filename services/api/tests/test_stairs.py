@@ -48,7 +48,8 @@ def test_stair_step_count_riser_and_tread_match_hand_calculation():
     assert (s.rise_param.source, s.run_param.source) == ("user_provided", "user_provided")
     mesh = build_meshes(_floor(_read()))[s.id]
     assert mesh.volume == pytest.approx(250 * 1000 * 160 * (19 * 20 / 2))  # sum of blocks k = 1..19
-    assert mesh.bounds.tolist() == [[450, 500, 0], [5200, 1500, 19 * 160]]  # the top riser is the floor above
+    # starts at the finished floor (200 mm slab); the top riser is the floor above
+    assert mesh.bounds.tolist() == [[450, 500, 200], [5200, 1500, 200 + 19 * 160]]
     assert "stair_run_mismatch" not in _codes(_read())
 
 
@@ -59,7 +60,7 @@ def test_ramp_slope_and_slab_match_hand_calculation():
     assert (r.thickness.value, r.thickness.source) == (200.0, "defaulted")
     mesh = build_meshes(_floor(p))[r.id]
     assert mesh.is_watertight and mesh.volume == pytest.approx(1000 * 4750 * 200)
-    assert mesh.bounds[:, 2].tolist() == [-200, 3200]
+    assert mesh.bounds[:, 2].tolist() == [0, 3400]  # rises 3200 from the finished floor (200); slab 200 thick
     steep = [i for i in p.issues if i.code == "ramp_slope_steep"]
     assert len(steep) == 1 and "1:1.5" in steep[0].message
     meta = build_meta(p, build_scene(p))["elements"]
@@ -94,7 +95,7 @@ def test_arrow_direction_flips_the_flight(tmp_path, arrow, direction):
     (s,) = _floor(p).stairs
     assert s.direction == direction
     first = build_meshes(_floor(p))[s.id].bounds
-    assert first[:, 2].tolist() == [0, 19 * 160]  # same steps, mirrored along x
+    assert first[:, 2].tolist() == [0, 19 * 160]  # same steps, mirrored along x (no floor slab here)
 
 
 def test_vertical_arrow_gives_y_direction_and_uses_the_other_extent(tmp_path):

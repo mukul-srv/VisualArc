@@ -35,10 +35,11 @@ def _flat(polygon: Polygon, z: float, up: bool = True) -> trimesh.Trimesh:
 
 
 def _wall_with_openings(
-    w: Wall, openings: list[Opening], z0: float, height: float
+    w: Wall, openings: list[Opening], z0: float, height: float, lift: float = 0.0
 ) -> trimesh.Trimesh:
     """Elevation profile (u along centreline, v up) minus apertures, extruded
-    through the full thickness, then placed on the centreline: one closed mesh."""
+    through the full thickness, then placed on the centreline: one closed mesh. The wall starts at
+    the structural base `z0`; apertures are measured from the finished floor, `lift` higher."""
     start, end = np.array(w.centreline.start), np.array(w.centreline.end)
     length = float(np.linalg.norm(end - start))
     d = (end - start) / length
@@ -47,8 +48,8 @@ def _wall_with_openings(
         us = sorted(
             float(np.dot(np.array(p) - start, d)) for p in (o.span.start, o.span.end)
         )
-        top = o.sill_height.value + o.height.value
-        holes.append(box(us[0], o.sill_height.value, us[1], top))
+        top = lift + o.sill_height.value + o.height.value
+        holes.append(box(us[0], lift + o.sill_height.value, us[1], top))
     profile = box(0, 0, length, height).difference(unary_union(holes))
     # a full-height aperture splits the wall into separate closed pieces
     parts = getattr(profile, "geoms", [profile])
@@ -85,7 +86,7 @@ def build_opening_parts(floor: Floor) -> dict[str, tuple[str, Opening, trimesh.T
         a0, a1 = sorted((o.span.start[axis], o.span.end[axis]))
         c = o.span.start[1 - axis]
         t, fw, pt = walls[o.wall_id].thickness.value, d.frame_width.value, d.panel_thickness.value
-        s = floor.elevation.value + o.sill_height.value
+        s = floor.finished_level_mm + o.sill_height.value
         top = s + o.height.value
         door = d.panel == "leaf"
 
@@ -112,7 +113,7 @@ def build_balcony_railings(floor: Floor) -> dict[str, tuple[Balcony, trimesh.Tri
         parts = [
             _prism(
                 LineString([r.start, r.end]).buffer(b.railing_thickness.value / 2, cap_style="flat"),
-                floor.elevation.value, b.railing_height.value,
+                floor.finished_level_mm, b.railing_height.value,
             )
             for r in b.railings
         ]
@@ -203,7 +204,9 @@ def build_roof(r: Roof) -> trimesh.Trimesh | None:
 
 def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
     """Element id -> mesh for every wall, junction, floor boundary, slab and ceiling."""
-    z0 = floor.elevation.value
+    base = floor.elevation.value  # structural base: walls and slab start here (the grid)
+    z0 = floor.finished_level_mm  # finished floor: the walked surface; everything else stands on it
+    lift = z0 - base  # slab thickness, 0 without a slab
     heights = {w.id: _height(w) for w in floor.walls}
     hosted: dict[str, list[Opening]] = {}
     for o in floor.openings:
@@ -211,16 +214,16 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
     meshes = {}
     for w in floor.walls:
         if w.id in hosted:
-            meshes[w.id] = _wall_with_openings(w, hosted[w.id], z0, heights[w.id])
+            meshes[w.id] = _wall_with_openings(w, hosted[w.id], base, heights[w.id] + lift, lift)
             continue
         # unchanged path: walls without openings stay byte-identical to pre-T12
         line = LineString([w.centreline.start, w.centreline.end])
         rect = line.buffer(w.thickness.value / 2, cap_style="flat")
-        meshes[w.id] = _prism(rect, z0, heights[w.id])
+        meshes[w.id] = _prism(rect, base, heights[w.id] + lift)
     for j in floor.junctions:
         # corner fill must reach the tallest wall it joins, else a notch shows
         meshes[j.id] = _prism(
-            Polygon(j.polygon), z0, max(heights[i] for i in j.wall_ids)
+            Polygon(j.polygon), base, max(heights[i] for i in j.wall_ids) + lift
         )
     for b in floor.boundaries:
         meshes[b.id] = _flat(Polygon(b.polygon), z0)
@@ -245,19 +248,13 @@ def build_meshes(floor: Floor) -> dict[str, trimesh.Trimesh]:
                           else _flat(Polygon(bal.polygon), z0))
     for sl in floor.slabs:
         t = sl.thickness.value
-        outline = Polygon(sl.polygon, sl.holes)  # holes: courtyards, no slab there
-        m = _prism(outline, z0 - t, t)
-        # over a floor boundary the top face is the boundary's surface: drop it there so the
-        # two coplanar faces do not z-fight; boundary + slab together are the closed solid
+        m = _prism(Polygon(sl.polygon), z0 - t, t)
+        # the top face is the floor boundary's surface: drop it here (open top) so the two
+        # coplanar faces do not z-fight; boundary + slab together are the closed solid
         top = (m.face_normals[:, 2] > 0.5) & (m.triangles_center[:, 2] > z0 - 1e-6)
         m.update_faces(~top)
         m.remove_unreferenced_vertices()
-        # the top face stays wherever no floor boundary covers it (under the walls)
-        rest = outline.difference(unary_union(
-            [Polygon(b.polygon) for b in floor.boundaries if b.id in sl.boundary_ids]))
-        tops = [_flat(g, z0) for g in getattr(rest, "geoms", [rest])
-                if isinstance(g, Polygon) and g.area > 1e-6]
-        meshes[sl.id] = trimesh.util.concatenate([m, *tops]) if tops else m
+        meshes[sl.id] = m
     for c in floor.ceilings:  # underside faces down so it shows from inside
         meshes[c.id] = _flat(Polygon(c.polygon), c.elevation.value, up=False)
     return meshes

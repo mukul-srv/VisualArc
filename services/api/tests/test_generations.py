@@ -31,10 +31,11 @@ def test_generation_success_serves_usable_glb(client):
     glb = client.get(body["artifacts"]["glb"])
     assert glb.status_code == 200 and glb.headers["content-type"] == "model/gltf-binary"
     scene = trimesh.load(trimesh.util.wrap_as_stream(glb.content), file_type="glb")
-    # y min: the default 200 mm slab; the default gable roof (30 deg) adds 300 mm eaves on every side
-    # and a ridge (5.8 m span / 2 x tan 30 deg = 1.6743 m) above the 3 m walls
+    # y min 0: the walls and the 200 mm slab start together on the base; the default gable roof (30 deg)
+    # adds 300 mm eaves on every side and a ridge (5.8 m span / 2 x tan 30 deg = 1.6743 m) above the
+    # wall tops (0.2 m slab + 3 m walls)
     np.testing.assert_allclose(
-        scene.bounds, [[-0.3, -0.2, -5.5], [8.5, 3.0 + 2.9 * 0.5773502691896257, 0.3]], atol=1e-5)
+        scene.bounds, [[-0.3, 0.0, -5.5], [8.5, 3.2 + 2.9 * 0.5773502691896257, 0.3]], atol=1e-5)
     assert "# Verification report" in client.get(body["artifacts"]["report"]).text
 
 
