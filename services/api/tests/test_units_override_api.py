@@ -68,3 +68,22 @@ def test_real_house_through_upload_layers_split():
     uid, cands = _run(c, HOUSE.read_bytes())
     ok = c.post(f"{U}/{uid}/split", json=_split_body(cands, units="m", units_override=True))
     assert ok.status_code == 201, ok.text
+
+
+@pytest.mark.skipif(not HOUSE.is_file(), reason="house drawing not present")
+def test_real_house_with_the_door_window_layer_mapped_reads_its_blocks_and_bridges_gaps():
+    c = TestClient(app)
+    uid, cands = _run(c, HOUSE.read_bytes())
+    spec = {"preset": "custom", "mapping": {"PUERYVENTA": "door"}}
+    lay = c.post(f"{U}/{uid}/layers?units=m&units_override=true", json=spec).json()
+    hint = [i for i in lay["issues"] if i["code"] == "unmapped_layer" and "PUERYVENTA" in i["message"]]
+    assert not hint  # mapped now: no longer reported as unmapped
+    body = _split_body(cands, units="m", units_override=True, conventions=spec)
+    ok = c.post(f"{U}/{uid}/split", json=body)
+    assert ok.status_code == 201, ok.text
+    kinds = []
+    for f in ok.json()["floors"]:
+        gid = f["floor"]["generation_id"]
+        canon = c.get(f"/api/v1/generations/{gid}/artifacts/canonical").json()
+        kinds += [o["kind"] for o in canon["buildings"][0]["floors"][0]["openings"]]
+    assert kinds.count("door") >= 1 and kinds.count("window") >= 1  # read from blocks and bridged gaps

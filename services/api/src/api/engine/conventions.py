@@ -114,8 +114,21 @@ def resolve(preset: str, mapping: dict[str, str] | None = None) -> Settings:
     )
 
 
+def layer_hint(layer: str, settings: Settings = DEFAULTS) -> str | None:
+    """A suggestion for what an unmapped layer might be (from its name), or None. Never applied."""
+    name = strip_floor_prefix(layer, settings).upper()
+    role = next((r for word, r in settings.layer_name_hints if word in name), None)
+    return None if role is None else (
+        f"the name suggests a {role} layer: map it to {role} under Layer conventions to include it"
+    )
+
+
 def layer_roles(preset: str, mapping: dict[str, str] | None, layers: list[str]) -> list[dict]:
     """Each layer with its role under preset + mapping (None = unmapped; the engine reports it)."""
     s = resolve(preset, mapping)
     roles = {**known_roles(s), **dict.fromkeys(s.ignore_layers, "ignore")}
-    return [{"layer": l, "role": roles.get(strip_floor_prefix(l, s).upper())} for l in layers]
+    out = []
+    for l in layers:
+        role = roles.get(strip_floor_prefix(l, s).upper())
+        out.append({"layer": l, "role": role, "hint": None if role else layer_hint(l, s)})
+    return out

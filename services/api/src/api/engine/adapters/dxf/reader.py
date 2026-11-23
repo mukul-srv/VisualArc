@@ -42,6 +42,7 @@ from api.engine.canonical.model import (
     Stair,
     Wall,
 )
+from api.engine.conventions import layer_hint
 from api.engine.geometry2d.balconies import find_balconies
 from api.engine.geometry2d.floor import closed_outer_perimeter, floor_issue
 from api.engine.geometry2d.openings import (
@@ -59,7 +60,7 @@ from api.engine.geometry2d.roofs import Outline as RoofOutline
 from api.engine.geometry2d.roofs import plan_roofs, ridge_height, wall_outlines
 from api.engine.geometry2d.rooms import Label, find_rooms
 from api.engine.geometry2d.stairs import Arrow, Outline, find_flights
-from api.engine.geometry2d.walls import Segment
+from api.engine.geometry2d.walls import Segment, pair_walls
 from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS, Settings
 
@@ -435,6 +436,7 @@ def read_dxf(
     block_markers: dict[str, list[SourceRef]] = {}  # block name -> its INSERTs used as markers
     decorative: dict[str, list] = {}  # opening layer -> ignored symbol entities
     swings = []  # ARCs on the door layer (orphan check)
+    arc_centres: list[tuple[float, float]] = []  # centres of door-swing-like ARCs, loose or inside blocks (mm)
     labels: list[Label] = []  # TEXT/MTEXT: room-name candidates, placed later
     column_layers, balcony_layers = settings.column_layers, settings.balcony_layers
     cols: list[tuple] = []  # (ref, "rect", Rect) | (ref, "circle", centre, radius mm)
@@ -447,6 +449,13 @@ def read_dxf(
         if scope and e.dxf.handle not in scope.handles:
             continue
         layer, kind = strip_floor_prefix(e.dxf.layer, settings).upper(), e.dxftype()
+        if kind == "INSERT":  # a block holding an ARC may be a door symbol: evidence only, where a gap is
+            try:
+                arc_centres += [mm(a.ocs().to_wcs(a.dxf.center)) for a in e.virtual_entities() if a.dxftype() == "ARC"]
+            except (ValueError, TypeError, AttributeError, ezdxf.DXFError):
+                pass
+        elif kind == "ARC" and layer in settings.door_layers:
+            arc_centres.append(mm(e.ocs().to_wcs(e.dxf.center)))
         if layer in opening_kind:  # ADR-002 §2
             if kind == "INSERT":
                 # a block: its footprint (bounding box of the geometry, swing arcs left out) is the marker
@@ -649,12 +658,19 @@ def read_dxf(
         if counts.keys() & {"TEXT", "MTEXT"}:
             listed += " (TEXT/MTEXT inside a closed room still name it)"
         more = f"; first {ref_cap} of {len(ents)} listed" if len(ents) > ref_cap else ""
+        hints = ""
+        if hint := layer_hint(name, settings):  # a suggestion from the name, never applied
+            hints += f"; suggestion (not applied): {hint}"
+        lines = [Segment(e.dxf.handle, e.dxf.layer, mm(e.dxf.start), mm(e.dxf.end)) for e in ents if e.dxftype() == "LINE"]
+        if 0 < len(lines) <= settings.max_wall_segments and (pairs := len(pair_walls(lines, settings)[0])):
+            hints += (f"; its lines hold {pairs} parallel line pair(s) at wall-like distances: if it holds "
+                      "walls, map it to wall to include them (not applied)")
         issues.append(
             Issue(
                 code="unmapped_layer",
                 severity="warning",
                 message=f"layer {name} is not a mapped layer ("
-                f"{', '.join(sorted(wall_layers))}, {settings.floor_label}); ignored {listed}{more}",
+                f"{', '.join(sorted(wall_layers))}, {settings.floor_label}); ignored {listed}{more}{hints}",
                 sources=[_ref(e) for e in ents[:ref_cap]],
             )
         )
@@ -681,9 +697,13 @@ def read_dxf(
                 sources=[_ref(e) for e in ents[:ref_cap]],
             )
         )
+    segments, cut_issues = cut_walls_at_markers(segments, markers, settings)
+    issues += cut_issues
+    res = resolve_openings(segments, markers, settings, tuple(arc_centres))
+    paired, pieces = res.walls, res.junctions
     for e in swings:
         centre = mm(e.ocs().to_wcs(e.dxf.center))
-        if not on_marker_boundary(centre, markers, settings.tolerance_mm):
+        if not on_marker_boundary(centre, [*markers, *(o.marker for o in res.openings if o.marker.inferred)], settings.tolerance_mm):
             issues.append(
                 Issue(
                     code="orphan_door_swing",
@@ -695,10 +715,6 @@ def read_dxf(
                 )
             )
 
-    segments, cut_issues = cut_walls_at_markers(segments, markers, settings)
-    issues += cut_issues
-    res = resolve_openings(segments, markers, settings)
-    paired, pieces = res.walls, res.junctions
     from_block = {r.entity_handle for refs in block_markers.values() for r in refs}
     for name, refs in block_markers.items():
         issues.append(

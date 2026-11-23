@@ -212,3 +212,67 @@ def test_layers_endpoint_reads_the_drawing_in_the_units_the_user_chose(tmp_path)
     codes = {i["code"] for i in r["issues"]}
     assert "units_overridden" in codes and "units_implausible" not in codes
     assert c.post(f"/api/v1/uploads/{up['upload_id']}/layers?units=km", json={}).status_code == 422
+
+
+# ---- layer-name hints and mapping a block layer (suggestions are never applied) ----------------
+
+
+def _wall_with_block_layer(tmp_path, layer="PUERYVENTA"):
+    """A 5 m wall (200 mm) broken at x 1000..1900, a 900 x 200 block in the gap on an unmapped layer."""
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    for y in (0, 200):
+        msp.add_line((0, y), (1000, y), dxfattribs={"layer": "A-WALL"})
+        msp.add_line((1900, y), (5000, y), dxfattribs={"layer": "A-WALL"})
+    blk = doc.blocks.new("VENT")
+    for a, b in [((0, 0), (900, 0)), ((900, 0), (900, 200)), ((900, 200), (0, 200)), ((0, 200), (0, 0))]:
+        blk.add_line(a, b)
+    msp.add_blockref("VENT", (1000, 0), dxfattribs={"layer": layer})
+    path = tmp_path / "pv.dxf"
+    doc.saveas(path)
+    return path
+
+
+def test_layer_hint_is_a_suggestion_in_the_issue_and_the_layers_api_never_applied(tmp_path):
+    from api.engine.conventions import layer_hint
+
+    assert "door or window" in layer_hint("PUERYVENTA") and "window" in layer_hint("Fenster-1")
+    assert layer_hint("A-ANNO") is None
+    path = _wall_with_block_layer(tmp_path)
+    p = read_dxf(path, **H)
+    msg = next(i.message for i in p.issues if i.code == "unmapped_layer")
+    assert "suggestion (not applied)" in msg and "PUERYVENTA" in msg
+    # still unmapped: the block was not read until the user maps the layer
+    assert "opening_from_block" not in [i.code for i in p.issues]
+    c = TestClient(app)
+    up = c.post("/api/v1/uploads", content=path.read_bytes()).json()["upload_id"]
+    layers = {l["layer"]: l for l in c.post(f"/api/v1/uploads/{up}/layers", json={}).json()["layers"]}
+    assert layers["PUERYVENTA"]["role"] is None and "door or window" in layers["PUERYVENTA"]["hint"]
+    assert layers["A-WALL"]["hint"] is None
+
+
+def test_mapping_the_block_layer_reads_the_blocks_as_openings_through_the_api(tmp_path):
+    path = _wall_with_block_layer(tmp_path)
+    c = TestClient(app)
+    up = c.post("/api/v1/uploads", content=path.read_bytes()).json()["upload_id"]
+    spec = {"preset": "custom", "mapping": {"PUERYVENTA": "window"}}
+    lay = c.post(f"/api/v1/uploads/{up}/layers", json=spec).json()
+    assert {l["layer"]: l["role"] for l in lay["layers"]}["PUERYVENTA"] == "window"
+    assert "opening_from_block" in [i["code"] for i in lay["issues"]]
+    done = _run(c, "/generations", {"upload_id": up, "wall_height": 2700, "ceiling_height": 2700, "conventions": spec})
+    assert done["status"] == "succeeded", done
+    canon = c.get(f"/api/v1/generations/{done['result']['generation_id']}/artifacts/canonical").json()
+    (op,) = canon["buildings"][0]["floors"][0]["openings"]
+    assert (op["kind"], op["width"]["value"], op["width"]["source"]) == ("window", 900, "source_extracted")
+
+
+def test_unmapped_layer_with_wall_like_line_pairs_says_how_many(tmp_path):
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    for y in (0, 200, 5000, 5200):
+        doc.modelspace().add_line((0, y), (3000, y), dxfattribs={"layer": "A-WALL" if y < 1000 else "TERRACE"})
+    path = tmp_path / "t.dxf"
+    doc.saveas(path)
+    msg = next(i.message for i in read_dxf(path, **H).issues if i.code == "unmapped_layer" and "TERRACE" in i.message)
+    assert "1 parallel line pair" in msg and "map it to wall" in msg and "(not applied)" in msg

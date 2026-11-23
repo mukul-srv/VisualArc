@@ -41,6 +41,7 @@ class Marker:
     kind: str  # "door" | "window": the layer is the kind (ADR-002 §1)
     ref: SourceRef
     rect: Rect
+    inferred: bool = False  # made from an unmarked gap (kind by rule), not drawn
 
     def edges(self, axis: str | None = None) -> list[tuple[Point2, Point2]]:
         """All 4 edges, or only those perpendicular to a host running along `axis`."""
@@ -239,6 +240,7 @@ class Resolution:
     openings: list[FoundOpening]
     segments: list[Segment]  # the wall segments that went into pairing
     issues: list[Issue]
+    unmarked: list = field(default_factory=list)  # gaps with no marker at all and nothing across them
 
 
 def _analyse(segments, markers, consumed, settings):
@@ -316,10 +318,53 @@ def cut_walls_at_markers(
 
 
 def resolve_openings(
+    segments: list[Segment],
+    markers: list[Marker],
+    settings: Settings = DEFAULTS,
+    door_hints: tuple[Point2, ...] = (),
+) -> Resolution:
+    """`_resolve`, then each unmarked gap of a plausible width becomes an opening and the walls are resolved
+    again with it. Kind: a door when a door-swing arc is centred at the gap (`door_hints`: arc centres, mm),
+    otherwise a window (default sill), and the report says which and why. Gaps outside the width range stay
+    unmarked gaps; nothing is bridged that has a face line across it or differing walls either side."""
+    res = _resolve(segments, markers, settings)
+    lo_w, hi_w = settings.bridged_opening_width_mm
+    todo = [g for g in res.unmarked if lo_w <= g.hi - g.lo <= hi_w] if settings.bridge_unmarked_gaps else []
+    if not todo:
+        return res
+    new, why = [], {}
+    for g in todo:
+        c, t = _geom(g.a)[1], g.a.thickness
+        rect = (g.lo, c - t / 2, g.hi, c + t / 2) if g.axis == "h" else (c - t / 2, g.lo, c + t / 2, g.hi)
+        swing = next((p for p in door_hints if box(*rect).buffer(t / 2).covers(Point(p))), None)
+        kind = "door" if swing else "window"
+        m = Marker(kind, g.a.sources[0].ref, rect, inferred=True)
+        new.append(m)
+        why[id(m)] = (
+            f"a door-swing arc is centred at ({swing[0]:g}, {swing[1]:g})" if swing
+            else "no door-swing arc at the gap, so assumed a window (default sill)"
+        )
+    res = _resolve(segments, [*markers, *new], settings)
+    for m in new:
+        o = next((o for o in res.openings if o.marker is m), None)
+        if o is None:
+            continue  # did not resolve to an exact gap: the usual issues for it are in the result
+        res.issues.append(
+            Issue(
+                code="unmarked_gap_bridged",
+                severity="warning",
+                message=f"unmarked gap {o.lo:g}..{o.hi:g} ({o.hi - o.lo:g} mm) on {o.wall_id} bridged as a "
+                f"{m.kind} opening (inferred, not drawn): {why[id(m)]}. Mark it on the door or window "
+                "layer to say otherwise",
+                sources=[m.ref, *(j.ref for j in o.jambs)],
+            )
+        )
+    return res
+
+
+def _resolve(
     segments: list[Segment], markers: list[Marker], settings: Settings = DEFAULTS
 ) -> Resolution:
-    """Pair walls around marked openings; with no markers this is pair_walls +
-    find_junctions plus the gap checks."""
     tol = settings.tolerance_mm
     # §3: consume segments on any marker edge, then keep only the jambs of markers
     # that exactly fill a gap (edges perpendicular to the host). Shrinks to a fixpoint.
@@ -343,6 +388,7 @@ def resolve_openings(
         for g in a.gaps:
             on_gap.setdefault(id(g), []).append(k)
 
+    unmarked: list[_Gap] = []
     valid: dict[int, int] = {}  # id(gap) -> its single exact marker
     for g in gaps:
         if not g.host_ok:
@@ -371,6 +417,8 @@ def resolve_openings(
                 )
             )
         if not ks:
+            if not faces and g.host_ok:
+                unmarked.append(g)
             issues.append(
                 Issue(
                     code="unmarked_wall_gap",
@@ -404,8 +452,12 @@ def resolve_openings(
         chain = [w]
         while id(chain[-1]) in nxt:
             chain.append(nxt[id(chain[-1])])
+        end = chain[-1].end
+        # one line: the end takes the start's constant coordinate (walls on a line can differ by float noise,
+        # and a wall whose ends differ at all would be read as running the other way)
+        end = (end[0], chain[0].start[1]) if _geom(chain[0])[0] == "h" else (chain[0].start[0], end[1])
         m = PairedWall(
-            "", chain[0].start, chain[-1].end, w.thickness,
+            "", chain[0].start, end, w.thickness,
             tuple(s for c in chain for s in c.sources),
         )  # fmt: skip
         merged.append(m)
@@ -502,7 +554,7 @@ def resolve_openings(
                     sources=[m.ref] + _refs(gwalls),
                 )
             )
-    return Resolution(out_walls, junctions, found, pair_in, issues + junction_issues)
+    return Resolution(out_walls, junctions, found, pair_in, issues + junction_issues, unmarked)
 
 
 def build_openings(
@@ -522,7 +574,7 @@ def build_openings(
         "door": (s.default_door_height_mm, s.default_door_sill_mm),
         "window": (s.default_window_height_mm, s.default_window_sill_mm),
     }
-    measured = "user_provided" if from_user else "source_extracted"
+    measured_default = "user_provided" if from_user else "source_extracted"
     # span start (y, x): the opening id order, also used for issue refs
     found = sorted(found, key=lambda o: (o.c, o.lo) if o.axis == "h" else (o.lo, o.c))
     openings, issues = [], []
@@ -588,8 +640,8 @@ def build_openings(
             kind=o.kind,
             wall_id=o.wall_id,
             span=LineGeometry(start=ends[0], end=ends[1]),
-            offset=Measured(value=o.offset, source=measured),
-            width=Measured(value=o.hi - o.lo, source=measured),
+            offset=Measured(value=o.offset, source="inferred" if o.marker.inferred else measured_default),
+            width=Measured(value=o.hi - o.lo, source="inferred" if o.marker.inferred else measured_default),
             height=Measured(value=h, source=h_src),
             sill_height=Measured(value=sill, source=sill_src),
             sources=[o.marker.ref] + [j.ref for j in o.jambs],

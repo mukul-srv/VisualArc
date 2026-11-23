@@ -6,6 +6,7 @@ each test writes, never from reader output.
 
 import json
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
 import ezdxf
@@ -13,6 +14,11 @@ import pytest
 
 from api.cli import main
 from api.engine.adapters.dxf.reader import read_dxf
+from api.engine.settings import DEFAULTS
+
+# These tests are about markers, not about the gap beside them: the unmarked-gap bridging is off so a gap with
+# no marker keeps its old meaning (a void, `unmarked_wall_gap`). The bridging rule has its own tests.
+NO_BRIDGE = replace(DEFAULTS, bridge_unmarked_gaps=False)
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures"
 
@@ -129,16 +135,14 @@ def test_1_worked_example_exact_values(tmp_path):
         "roof_type_unknown": 1,
         "opening_dimension_defaulted": 2,
         "opening_symbol_ignored": 2,
-        "unpaired_segment": 2,
+        "wall_end_caps_consumed": 1,  # the two end caps of the wall
         "elevation_defaulted": 1,
         "wall_role_inferred": 1,
         "ceiling_not_built": 1,  # worked example draws no A-FLOR boundary
     }
     assert not _codes(p, "blocking")
-    unpaired = [i for i in p.issues if i.code == "unpaired_segment"]
-    assert sorted(_handles(r for i in unpaired for r in i.sources)) == sorted(
-        [h["e0"], h["e1"]]
-    )
+    caps = [i for i in p.issues if i.code == "wall_end_caps_consumed"]  # e0 and e1: the wall's two end caps
+    assert sorted(_handles(r for i in caps for r in i.sources)) == sorted([h["e0"], h["e1"]])
     sym = {
         i.message.split(":")[0]: i
         for i in p.issues
@@ -268,7 +272,7 @@ def test_4_marker_only_partly_over_a_solid_wall_is_not_cut(tmp_path, marker):
 def test_4_marker_in_free_space(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     d.rect("M", 1000, 3000, 1900, 3200, "A-GLAZ")
-    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700, settings=NO_BRIDGE)
     assert _issue(p, "opening_marker_outside_wall").severity == "blocking"
     assert "unmarked_wall_gap" in _codes(p)
 
@@ -336,13 +340,65 @@ def test_7_wall_line_on_marker_long_edge_is_not_a_jamb(tmp_path):
     assert not _floor(p).openings
 
 
-def test_8_unmarked_gap_is_a_warning(tmp_path):
+def test_8_unmarked_gap_is_a_warning_when_not_bridged(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
-    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700, settings=NO_BRIDGE)
     issue = _issue(p, "unmarked_wall_gap")
     assert issue.severity == "warning" and not _codes(p, "blocking")
     assert len(_floor(p).walls) == 2 and not _floor(p).openings
     assert set(_handles(issue.sources)) == {d.h[n] for n in ("b1", "t1", "b2", "t2")}
+
+
+def test_8_unmarked_gap_of_plausible_width_is_bridged_as_an_inferred_opening(tmp_path):
+    # supersedes the old "unmarked gap stays a void" rule for gaps within the plausible opening width
+    d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    assert "unmarked_wall_gap" not in _codes(p) and not _codes(p, "blocking")
+    (w,) = _floor(p).walls  # one continuous wall now
+    (o,) = _floor(p).openings
+    assert (o.kind, o.span.start, o.span.end, o.width.value) == ("window", (1000, 100), (1900, 100), 900)
+    assert (o.width.source, o.offset.source) == ("inferred", "inferred")
+    assert (o.sill_height.value, o.sill_height.source) == (900, "defaulted")
+    note = _issue(p, "unmarked_gap_bridged")
+    assert note.severity == "warning" and "window" in note.message and "no door-swing arc" in note.message
+    assert w.id in note.message
+
+
+@pytest.mark.parametrize("gap", [(1000, 1300), (1000, 3500)])  # 300 mm slot, 2500 mm open front
+def test_8_unmarked_gap_outside_the_plausible_width_is_left_alone(tmp_path, gap):
+    d = _wall_with_gap(Drawing(), *gap, jambs=False)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    assert "unmarked_wall_gap" in _codes(p) and "unmarked_gap_bridged" not in _codes(p)
+    assert not _floor(p).openings
+
+
+def test_8_door_swing_arc_at_the_gap_makes_it_a_door(tmp_path):
+    d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
+    d.msp.add_arc((1000, 200), 900, 0, 90, dxfattribs={"layer": "A-DOOR"})  # swing centred at the hinge corner
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    (o,) = _floor(p).openings
+    assert o.kind == "door" and (o.sill_height.value, o.sill_height.source) == (0, "defaulted")
+    note = _issue(p, "unmarked_gap_bridged")
+    assert "door opening" in note.message and "door-swing arc is centred at" in note.message
+    assert "orphan_door_swing" not in _codes(p)  # the arc now sits on the opening it belongs to
+
+
+def test_8_door_symbol_block_with_an_arc_at_the_gap_counts_as_a_door_swing(tmp_path):
+    d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
+    blk = d.doc.blocks.new("D")
+    blk.add_arc((0, 0), 900, 0, 90)
+    d.msp.add_blockref("D", (1000, 200), dxfattribs={"layer": "ANYTHING"})  # an unmapped layer: only evidence
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    assert [o.kind for o in _floor(p).openings] == ["door"]
+
+
+def test_8_gap_with_a_face_line_across_it_is_not_bridged(tmp_path):
+    d = Drawing()
+    d.line("b1", (0, 0), (1000, 0))
+    d.line("b2", (1900, 0), (5000, 0))
+    d.line("t", (0, 200), (5000, 200))  # the top face is not broken
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    assert "unmarked_gap_bridged" not in _codes(p) and not _floor(p).openings
 
 
 # --- 9-10. opening-layer entities ---------------------------------------------
@@ -352,7 +408,7 @@ def test_9_insert_on_door_layer(tmp_path):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     d.doc.blocks.new("DOOR")
     e = d.msp.add_blockref("DOOR", (1000, 0), dxfattribs={"layer": "A-DOOR"})
-    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700, settings=NO_BRIDGE)
     issue = _issue(p, "unsupported_opening_block")
     # an empty block has no footprint: reported (warning), no opening made, nothing silently dropped
     assert issue.severity == "warning" and _handles(issue.sources) == [e.dxf.handle]
@@ -401,7 +457,7 @@ def test_insert_block_not_fitting_a_gap_is_reported_not_blocking(tmp_path):
 def test_9_invalid_marker(tmp_path, pts, kw):
     d = _wall_with_gap(Drawing(), 1000, 1900, jambs=False)
     e = d.msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": "A-GLAZ", **kw})
-    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700, settings=NO_BRIDGE)
     issue = _issue(p, "invalid_opening_marker")
     assert issue.severity == "blocking" and _handles(issue.sources) == [e.dxf.handle]
     assert not _floor(p).openings
@@ -562,3 +618,17 @@ def test_block_exactly_across_a_solid_wall_cuts_it_like_a_marker(tmp_path):
     p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
     assert "opening_cut_into_wall" in _codes(p, "warning") and "opening_from_block" in _codes(p)
     assert sorted(o.kind for o in _floor(p).openings) == ["door", "window"]
+
+
+def test_8_wall_halves_that_differ_by_float_noise_merge_into_one_straight_host(tmp_path):
+    # real drawings carry 1e-11 mm noise between pieces of one wall line; the merged wall must stay horizontal
+    d = Drawing()
+    e = 2e-11
+    d.line("b1", (0, 0), (1000, 0))
+    d.line("b2", (1900, e), (5000, e))
+    d.line("t1", (0, 200), (1000, 200))
+    d.line("t2", (1900, 200 + e), (5000, 200 + e))
+    p = read_dxf(d.save(tmp_path), 2700, ceiling_height=2700)
+    (w,) = _floor(p).walls
+    (o,) = _floor(p).openings
+    assert o.offset.value == pytest.approx(1000) and w.centreline.start[1] == pytest.approx(w.centreline.end[1], abs=1e-9)
