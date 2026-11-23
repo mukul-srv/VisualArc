@@ -55,6 +55,7 @@ export type Door = {
   leaf: THREE.Mesh;
   pivot: THREE.Group;
   hinge: Hinge;
+  root?: THREE.Object3D; // the floor model it belongs to: its plan offset moves the door in the world
   open: boolean; // the target state
   angle: number; // current, 0 = closed
 };
@@ -77,7 +78,7 @@ export function buildDoors(model: THREE.Object3D): Door[] {
     (leaf.parent ?? model).add(pivot);
     pivot.updateMatrixWorld(true);
     pivot.attach(leaf); // keeps the leaf where it is, now rotating about the hinge
-    doors.push({ opening: leaf.userData.opening, leaf, pivot, hinge, open: false, angle: 0 });
+    doors.push({ opening: leaf.userData.opening, leaf, pivot, hinge, root: model, open: false, angle: 0 });
   }
   return doors;
 }
@@ -115,8 +116,12 @@ export function animate(doors: Door[], dt: number): boolean {
  *  caught in a leaf that is still swinging. */
 export const blocking = (doors: Door[]) => doors.filter((d) => !d.open).map((d) => d.leaf);
 
+/** A world point in the plan frame the door's coordinates are in (its floor model may be offset). */
+const local = (d: Door, p: THREE.Vector3) => (d.root ? new THREE.Vector3(p.x - d.root.position.x, p.y, p.z - d.root.position.z) : p);
+
 /** Horizontal distance (m) from `p` to the door's opening (its span on the wall centreline). */
-export function distanceToOpening(d: Door, p: THREE.Vector3): number {
+export function distanceToOpening(d: Door, p0: THREE.Vector3): number {
+  const p = local(d, p0);
   const [sx, sy] = d.opening.span.start;
   const [ex, ey] = d.opening.span.end;
   const a = new THREE.Vector2(sx / 1000, -sy / 1000);
@@ -140,7 +145,8 @@ export function nearestDoor(doors: Door[], p: THREE.Vector3, reach = DOOR.reach)
 /** A door only closes when the walker is clear of the leaf's whole sweep: the quarter disc about the
  *  hinge, as wide as the leaf, from the closed position (in the doorway) to the open one (to the
  *  side it opens to), plus the body radius. Anywhere else, even right next to the door, it can close. */
-export function canClose(d: Door, p: THREE.Vector3): boolean {
+export function canClose(d: Door, p0: THREE.Vector3): boolean {
+  const p = local(d, p0);
   const { pivot, along, toward, length } = d.hinge;
   const w = new THREE.Vector3(p.x - pivot.x, 0, p.z - pivot.z);
   const r = WALK.radius;

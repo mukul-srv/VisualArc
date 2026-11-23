@@ -35,3 +35,10 @@ test("offset, confirm and unpair hit their endpoints", async () => {
   await unpair("p", ref, d);
   expect([call(d)[0], call(d)[1].method]).toEqual(["/api/v1/projects/p/building/pairings/unpair", "POST"]);
 });
+
+test("sameBuilding is false for null or a changed building", async () => {
+  const { sameBuilding } = await import("./building");
+  expect(sameBuilding(null, b)).toBe(false);
+  expect(sameBuilding(b, JSON.parse(JSON.stringify(b)))).toBe(true);
+  expect(sameBuilding(b, { ...b, pairings: [] })).toBe(false);
+});

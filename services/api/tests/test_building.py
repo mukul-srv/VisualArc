@@ -70,6 +70,8 @@ def test_alignment_warns_for_offset_and_not_for_aligned_or_smaller_floor():
     (i,) = check_alignment([a, _fd("b", 1, [], bbox=(20000, 0, 30000, 8000))])  # disjoint
     assert i["severity"] == "warning"
     assert check_alignment([a, _fd("b", 1, [], bbox=None)])[0]["code"] == "floor_no_outline"
+    # a zero-area outline (one line) is reported as not comparable, never as a false mismatch
+    assert [i["code"] for i in check_alignment([a, _fd("b", 1, [], bbox=(0, 0, 10000, 0))])] == ["floor_no_outline"]
 
 
 # --- API ---
@@ -133,6 +135,8 @@ def test_confirm_unpair_repair_and_restore(proj):
     ref = {k: p[k] for k in REF}
     assert c.put(f"{P}/{pid}/building/pairings", json=ref).json()["status"] == "confirmed"
     assert [x["status"] for x in _b(c, pid)["pairings"]] == ["confirmed"]
+    saved = c.get(f"{P}/{pid}").json()["pairings"]
+    assert [x["status"] for x in saved] == ["confirmed"]
     v_confirmed = c.get(f"{P}/{pid}").json()["version"]
     assert c.post(f"{P}/{pid}/building/pairings/unpair", json=ref).status_code == 200
     b = _b(c, pid)
@@ -149,6 +153,12 @@ def test_confirm_unpair_repair_and_restore(proj):
     # removing a floor drops its pairings
     c.delete(f"{P}/{pid}/floors/{f['id']}")
     assert _b(c, pid)["pairings"] == []
+
+
+def test_auto_pairs_are_never_persisted(proj):
+    c, pid, _g, _f = proj
+    c.post(f"{P}/{pid}/building/pairings/unpair", json={k: _b(c, pid)["pairings"][0][k] for k in REF})
+    assert [x["status"] for x in c.get(f"{P}/{pid}").json()["pairings"]] == ["rejected"]
 
 
 def test_building_roles():
