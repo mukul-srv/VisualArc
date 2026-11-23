@@ -22,10 +22,19 @@ const FORM_RESOLVABLE = ["units_missing", "floor_split_unconfirmed"];
 export const unitsDoubtful = (pre: Pick<Preflight, "issues">) =>
   pre.issues.some((i) => i.code === "units_implausible" || i.code === "units_overridden");
 
-/** Blocking issues the user cannot fix from the form. When the units look wrong, every blocking issue may
- *  come from reading them wrongly (walls too thin to pair, say), so choosing the real units gets a fresh read. */
+// Blocking issues a wrong unit can cause (walls too thin or too small to pair, markers missing their gaps)
+const UNIT_SYMPTOMS = [
+  "no_walls", "ambiguous_pairing", "overlapping_wall_lines", "partial_wall_gap", "opening_marker_without_gap",
+  "opening_marker_mismatch", "opening_marker_outside_wall", "opening_spans_multiple_gaps", "opening_host_mismatch",
+];
+
+/** Blocking issues the user cannot fix from the form. When the units look wrong, the geometry symptoms
+ *  of reading them wrongly are not final (choosing the real units gets a fresh read); any other blocking
+ *  issue still locks the button. */
 export const unresolvable = (issues: Issue[], doubtful: boolean) =>
-  doubtful ? [] : issues.filter((i) => i.severity === "blocking" && !FORM_RESOLVABLE.includes(i.code));
+  issues.filter(
+    (i) => i.severity === "blocking" && !FORM_RESOLVABLE.includes(i.code) && !(doubtful && UNIT_SYMPTOMS.includes(i.code)),
+  );
 
 export const splitIssues = (issues: Issue[]) => ({
   blocking: issues.filter((i) => i.severity === "blocking"),

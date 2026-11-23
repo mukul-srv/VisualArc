@@ -105,17 +105,31 @@ def _usable(segments: list[Segment], tol: float) -> tuple[list[_Axial], list[Iss
 
 
 def _merge_overlaps(axial: list[_Axial], tol: float) -> tuple[list[_Axial], list[Issue]]:
-    """Merge collinear segments (same axis and line) that overlap into one covering their union.
-    Segments that only touch end to end (split faces) stay as they are."""
+    """Merge collinear segments (same axis, line and layer) that overlap into one covering their union.
+    Segments that only touch end to end (split faces) stay as they are. Overlapping lines on different
+    layers are not merged: the layer carries the wall role, so pair_walls blocks on them."""
     axial_pos = {a: n for n, a in enumerate(axial)}
     out, issues = [], []
-    by_line = sorted(axial, key=lambda a: (a.axis, a.c, a.lo))
+    # lines within tol of each other are one line (float noise): number them, then order by layer and start
+    line_id: dict[_Axial, int] = {}
+    n, prev = -1, None
+    for a in sorted(axial, key=lambda a: (a.axis, a.c)):
+        if prev is None or a.axis != prev.axis or a.c - prev.c > tol:
+            n, prev = n + 1, a
+        line_id[a] = n
+    by_line = sorted(axial, key=lambda a: (line_id[a], a.seg.layer, a.lo))
     i = 0
     while i < len(by_line):
         first = by_line[i]
         group, hi = [first], first.hi
         i += 1
-        while i < len(by_line) and by_line[i].axis == first.axis and abs(by_line[i].c - first.c) <= tol                 and by_line[i].lo < hi - tol:
+        while (
+            i < len(by_line)
+            and by_line[i].axis == first.axis
+            and by_line[i].seg.layer == first.seg.layer
+            and abs(by_line[i].c - first.c) <= tol
+            and by_line[i].lo < hi - tol
+        ):
             group.append(by_line[i])
             hi = max(hi, by_line[i].hi)
             i += 1
@@ -160,7 +174,19 @@ def pair_walls(
             shared = min(a.hi, b.hi) - max(a.lo, b.lo)
             if shared <= tol:  # disjoint or touching end-to-end (split faces)
                 continue
-            if abs(a.c - b.c) <= tol:  # same line, merged above: only touching ends remain
+            if abs(a.c - b.c) <= tol:
+                # same-layer overlaps were merged above, so this is the same line on two layers
+                # (e.g. exterior vs interior role): the roles cannot both hold, never auto-resolved
+                issues.append(
+                    Issue(
+                        code="overlapping_wall_lines",
+                        severity="blocking",
+                        message=f"segments {a.seg.handle} ({a.seg.layer}) and {b.seg.handle} "
+                        f"({b.seg.layer}) overlap by {shared:.1f} mm on the same line but lie on "
+                        "different layers; keep one",
+                        sources=[a.seg.ref, b.seg.ref],
+                    )
+                )
                 continue
             if not thk_min - tol <= abs(a.c - b.c) <= thk_max + tol:
                 continue

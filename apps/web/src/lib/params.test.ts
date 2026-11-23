@@ -78,6 +78,8 @@ test("a doubtful size offers the units override and unlocks the form", () => {
   const pre = { upload_id: "u", issues: [issue("units_implausible"), issue("no_walls", "blocking")], needs: [], inventory: { layers: [], entity_counts: {} } } as Preflight;
   expect(unitsDoubtful(pre)).toBe(true);
   expect(unresolvable(pre.issues, true)).toEqual([]);
+  // doubt about the units unlocks only what wrong units can cause: other blocking issues still lock
+  expect(unresolvable([...pre.issues, issue("wall_height_missing", "blocking")], true).map((i) => i.code)).toEqual(["wall_height_missing"]);
   expect(unresolvable(pre.issues, false).map((i) => i.code)).toEqual(["no_walls"]);
   const f = { buildingType: "residential", wallHeight: "", ceilingHeight: "", units: "m", doorHeight: "", windowHeight: "", windowSill: "" } as FormValues;
   const r = buildRequest(pre, f);

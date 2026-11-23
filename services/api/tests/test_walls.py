@@ -159,3 +159,16 @@ def test_unexplained_region_carries_touching_wall_sources():
 def test_non_orthogonal_and_degenerate_segments_warn():
     _, _, issues = run([((0, 0), (1000, 500)), ((5, 5), (5, 5))])
     assert codes(issues) == ["degenerate_segment", "non_orthogonal_segment"]
+
+
+def test_overlapping_lines_on_different_layers_are_not_merged():
+    # the layer carries the wall role: the same line on an exterior and an interior layer is a conflict
+    segs = [
+        Segment("H0", "A-WALL-EXTR", (0, 0), (1000, 0)),
+        Segment("H1", "A-WALL-EXTR", (0, 200), (1000, 200)),
+        Segment("H2", "A-WALL-INTR", (0, 0), (1000, 0)),
+    ]
+    _, issues = pair_walls(segs)
+    assert [(i.code, i.severity) for i in issues if i.code == "overlapping_wall_lines"] == [
+        ("overlapping_wall_lines", "blocking")
+    ]
