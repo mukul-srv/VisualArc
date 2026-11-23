@@ -1,5 +1,6 @@
 """The floor convention: slab and walls share a base; the finished floor is the slab top."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import ezdxf
@@ -8,11 +9,14 @@ import pytest
 from api.engine.adapters.dxf.reader import read_dxf
 from api.engine.canonical.model import Project, Slab
 from api.engine.geometry3d.extrude import build_meshes, build_opening_parts
+from api.engine.settings import DEFAULTS
+
+NO_INFER = replace(DEFAULTS, infer_floor_boundary=False)  # the floor-without-an-outline path
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures"
 
 
-def _building(tmp_path, with_floor=True, door=False):
+def _building(tmp_path, with_floor=True, door=False, settings=DEFAULTS):
     """4400 x 3400 outer, 200 mm walls; the 4000 x 3000 inside has A-FLOR when asked. With `door`, the
     south wall has a 900 mm gap (x 1000..1900) filled by a door marker."""
     doc = ezdxf.new("R2018", setup=False)
@@ -35,7 +39,7 @@ def _building(tmp_path, with_floor=True, door=False):
     if with_floor:
         msp.add_lwpolyline(inner, close=True, dxfattribs={"layer": "A-FLOR"})
     doc.saveas(tmp_path / "c.dxf")
-    return read_dxf(tmp_path / "c.dxf", 3000, ceiling_height=2600, building_type="residential")
+    return read_dxf(tmp_path / "c.dxf", 3000, ceiling_height=2600, building_type="residential", settings=settings)
 
 
 def test_slab_and_walls_start_together_and_the_finished_floor_is_the_slab_top(tmp_path):
@@ -65,7 +69,7 @@ def test_apertures_are_measured_from_the_finished_floor(tmp_path):
 
 
 def test_a_floor_without_a_slab_has_its_finished_floor_at_the_elevation(tmp_path):
-    f = _building(tmp_path, with_floor=False).buildings[0].floors[0]  # no floor boundary: no slab
+    f = _building(tmp_path, with_floor=False, settings=NO_INFER).buildings[0].floors[0]  # no floor boundary: no slab
     assert not f.slabs and f.finished_level_mm == f.elevation.value
     assert build_meshes(f)[f.walls[0].id].bounds[:, 2].tolist() == [0, 3000]
     assert not f.ceilings
@@ -97,8 +101,47 @@ def test_older_slab_shapes_still_validate():
 
 
 def test_a_space_without_a_floor_outline_is_reported(tmp_path):
-    p = _building(tmp_path, with_floor=False)
+    p = _building(tmp_path, with_floor=False, settings=NO_INFER)
     (issue,) = [i for i in p.issues if i.code == "slab_hole_without_floor"]
     assert issue.severity == "warning" and "A-FLOR" in issue.message
     assert not p.buildings[0].floors[0].slabs  # no outline, no slab: said, not silent
     assert "slab_hole_without_floor" not in [i.code for i in _building(tmp_path, with_floor=True).issues]
+
+
+def test_floor_boundary_is_inferred_from_the_closed_wall_perimeter(tmp_path):
+    p = _building(tmp_path, with_floor=False)
+    f = p.buildings[0].floors[0]
+    (b,) = f.boundaries  # the inside of the walls: what the drawing's own A-FLOR polygon would have been
+    assert sorted(b.polygon) == sorted([(200, 200), (4200, 200), (4200, 3200), (200, 3200)])
+    assert b.sources and {s.layer for s in b.sources} == {"A-WALL"}  # traceable to the walls around it
+    (note,) = [i for i in p.issues if i.code == "floor_boundary_inferred"]
+    assert note.severity == "warning" and "perimeter" in note.message
+    (slab,) = f.slabs  # slab, finished floor and ceiling follow from it as for a drawn outline
+    assert slab.boundary_id == b.id and f.finished_level_mm == 200 and f.ceilings
+    assert "slab_hole_without_floor" not in [i.code for i in p.issues]
+    assert "floor_boundary_inferred" not in [i.code for i in _building(tmp_path, with_floor=True).issues]
+
+
+def test_open_perimeter_infers_nothing_and_says_so(tmp_path):
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    for loop in ([(0, 0), (4400, 0), (4400, 3400), (0, 3400)], [(200, 200), (4200, 200), (4200, 3200), (200, 3200)]):
+        for i, a in enumerate(loop[:3]):  # the west side is missing: the outline is open
+            doc.modelspace().add_line(a, loop[i + 1], dxfattribs={"layer": "A-WALL"})
+    doc.saveas(tmp_path / "open.dxf")
+    f_p = read_dxf(tmp_path / "open.dxf", 3000, ceiling_height=2600, building_type="residential")
+    assert not f_p.buildings[0].floors[0].boundaries and not f_p.buildings[0].floors[0].slabs
+    (note,) = [i for i in f_p.issues if i.code == "floor_boundary_not_inferred"]
+    assert note.severity == "warning" and "closed" in note.message
+
+
+def test_an_unusable_floor_outline_is_not_replaced_by_an_inferred_one(tmp_path):
+    # the user drew a floor outline (open, so ignored with its own warning): not overridden behind their back
+    _building(tmp_path, with_floor=False)  # writes c.dxf
+    doc = ezdxf.readfile(tmp_path / "c.dxf")
+    doc.modelspace().add_lwpolyline([(200, 200), (4200, 200), (4200, 3200)], close=False, dxfattribs={"layer": "A-FLOR"})
+    doc.saveas(tmp_path / "c2.dxf")
+    p = read_dxf(tmp_path / "c2.dxf", 3000, ceiling_height=2600, building_type="residential")
+    codes = [i.code for i in p.issues]
+    assert "open_floor_boundary" in codes and "floor_boundary_inferred" not in codes
+    assert not p.buildings[0].floors[0].boundaries

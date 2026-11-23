@@ -1,5 +1,6 @@
 """Stairs and ramps, single floor (Phase 1/11)."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import ezdxf
@@ -12,12 +13,16 @@ from api.engine.canonical.model import Project
 from api.engine.conventions import ROLES, layer_roles, resolve
 from api.engine.exporters.glb import build_meta, build_scene
 from api.engine.geometry3d.extrude import build_meshes
+from api.engine.settings import DEFAULTS
 from api.main import app
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures"
 STAIRS = FIXTURES / "input" / "fixture_stairs.dxf"
 P = "/api/v1/projects"
 PARAMS = {"stair_rise": 160, "stair_run": 250}
+
+
+NO_INFER = replace(DEFAULTS, infer_floor_boundary=False)  # these stair tests assume a floor with no slab
 
 
 def _read(path=STAIRS, params=PARAMS, **kw):
@@ -91,7 +96,7 @@ def _plan(tmp_path, *, stair=True, arrows=((450, 1000, 5200, 1000),), extra=(), 
     [((5200, 1000, 450, 1000), "-x"), ((450, 1000, 5200, 1000), "+x")],
 )
 def test_arrow_direction_flips_the_flight(tmp_path, arrow, direction):
-    p = _read(_plan(tmp_path, arrows=[arrow]))
+    p = _read(_plan(tmp_path, arrows=[arrow]), settings=NO_INFER)
     (s,) = _floor(p).stairs
     assert s.direction == direction
     first = build_meshes(_floor(p))[s.id].bounds

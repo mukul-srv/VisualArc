@@ -122,6 +122,16 @@ class Settings:
     wall_thickness_min_mm: float = 50.0
     wall_thickness_max_mm: float = 600.0
 
+    # A wall line with partners at different distances over the same stretch is resolved only when
+    # one distance clearly dominates: every other partner shares at most this fraction of the chosen
+    # distance's shared length with the line (a corner or a stub touching it, not a second wall).
+    # Otherwise the pairing stays blocking. PROVISIONAL: a round fraction, not from a standard.
+    partner_dominance_ratio: float = 0.1
+
+    # A floor drawn without any floor-outline entity gets one inferred from the closed wall perimeter
+    # (the interior faces of the walls around each enclosed space), reported as a warning.
+    infer_floor_boundary: bool = True
+
     # Plausible size of a building plan (its longest side). A plan outside this is more likely
     # read in the wrong units (a metre drawing flagged as inches is ~25x too small) than real;
     # it is reported, never corrected. PROVISIONAL: a round range, not from a standard.

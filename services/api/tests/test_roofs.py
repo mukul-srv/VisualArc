@@ -1,6 +1,7 @@
 """Roofs: flat, gable and hip over the building outline (Phase 1/12)."""
 
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import ezdxf
@@ -14,6 +15,7 @@ from api.engine.canonical.model import Project
 from api.engine.conventions import ROLES, layer_roles, resolve
 from api.engine.exporters.glb import build_meta, build_scene
 from api.engine.geometry3d.extrude import build_meshes, build_roof
+from api.engine.settings import DEFAULTS
 from api.main import app
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures"
@@ -21,6 +23,9 @@ ROOFS = FIXTURES / "input" / "fixture_roofs.dxf"
 P = "/api/v1/projects"
 TAN30 = math.tan(math.radians(30))
 H_GABLE = 2500 * TAN30  # fixture: 7000 x 5000 eaves, half-span 2500
+
+
+NO_INFER = replace(DEFAULTS, infer_floor_boundary=False)  # the floor-without-an-outline path
 
 
 def _read(path=ROOFS, **kw):
@@ -71,13 +76,22 @@ def test_default_gable_ridge_height_and_volume_match_hand_calculation():
 
 
 def test_roof_from_the_walls_adds_the_eave_overhang(tmp_path):
-    p = _read(_walls_only(tmp_path))
+    p = _read(_walls_only(tmp_path), settings=NO_INFER)
     (r,) = _floor(p).roofs
     assert r.outline_source == "walls" and r.sources == []
     assert (r.overhang.value, r.overhang.source) == (300.0, "defaulted")
     assert r.ridge_height.value == pytest.approx(H_GABLE)  # (4400 + 2 x 300) / 2 x tan 30
     mesh = build_meshes(_floor(p))[r.id]
     np.testing.assert_allclose(mesh.bounds, [[-300, -300, 3000], [6700, 4700, 3000 + H_GABLE]])  # no floor boundary: no slab
+
+
+def test_roof_from_the_walls_sits_on_the_inferred_slab(tmp_path):
+    # without a floor outline the closed wall perimeter gives one (reported), so there is a slab under the walls
+    p = _read(_walls_only(tmp_path))
+    assert "floor_boundary_inferred" in _codes(p)
+    (r,) = _floor(p).roofs
+    mesh = build_meshes(_floor(p))[r.id]
+    np.testing.assert_allclose(mesh.bounds, [[-300, -300, 3200], [6700, 4700, 3200 + H_GABLE]])
 
 
 def test_hip_with_user_type_and_pitch(tmp_path):
