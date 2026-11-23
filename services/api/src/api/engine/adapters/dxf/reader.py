@@ -636,16 +636,25 @@ def read_dxf(
                 message="DXF has no wall height; supply --wall-height (mm)",
             )
         )
-    # A ceiling cannot float above the walls: with the walls lower than the ceiling the model had a
-    # roof at the wall tops with the ceiling (and a stair to it) poking through and hidden above it.
-    # The walls are raised to the ceiling height (inferred) and the issue below says so.
+    # A ceiling above the walls leaves a gap (a roof at the wall tops with the ceiling, and a stair to it,
+    # hidden above it). An ASSUMED wall height (the preset's) is raised to the ceiling, so the model stays
+    # whole, and the issue below says so. A wall height the user gave is a known measurement and is never
+    # altered: it stays, and the same issue warns about the gap instead.
     ceil_target = ceiling_height if ceiling_height is not None else (
         preset.ceiling_height if (paired and preset) else None)
-    walls_raised_from = None
+    ceiling_over_walls = None  # (wall height as it was, raised?)
     if height is not None and ceil_target is not None and ceil_target > height.value + settings.tolerance_mm:
-        walls_raised_from = height.value
-        wall_height = ceil_target
-        height = Measured(value=ceil_target, source="inferred")
+        raised = height.source == "defaulted"
+        ceiling_over_walls = (height.value, raised)
+        if raised:
+            for i, it in enumerate(issues):  # the "assumed" note must report the value actually used
+                if it.code == "wall_height_defaulted":
+                    issues[i] = Issue(
+                        code="wall_height_defaulted", severity="warning",
+                        message=f"Wall height assumed {height.value:g} mm ({building_type} default) and "
+                        f"raised to {ceil_target:g} mm to meet the ceiling; not in the DXF")
+            wall_height = ceil_target
+            height = Measured(value=ceil_target, source="inferred")
     # a user-given lintel (opening head) height sizes openings that have no height of their own;
     # the preset's nominal heights stay when the lintel is only the assumed default
     door_h, window_h = door_height, window_height
@@ -778,14 +787,15 @@ def read_dxf(
                     "and the walls rise above it (roof sits on the walls); set both to move the storey",
                 )
             )
-        if walls_raised_from is not None:
+        if ceiling_over_walls is not None:
+            was, raised = ceiling_over_walls
             issues.append(
                 Issue(
                     code="ceiling_above_walls",
                     severity="warning",
-                    message=f"ceiling height {ceiling_height:g} mm exceeds wall height "
-                    f"{walls_raised_from:g} mm; the walls were raised to the ceiling (a ceiling "
-                    "cannot float above them)",
+                    message=f"ceiling height {ceiling_height:g} mm exceeds wall height {was:g} mm; "
+                    + ("the assumed walls were raised to the ceiling" if raised else
+                       "the wall height you gave is kept, so there is a gap above the walls"),
                 )
             )
     elif paired:

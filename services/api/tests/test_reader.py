@@ -425,13 +425,22 @@ def test_a_ceiling_higher_than_the_walls_raises_the_walls_to_it_and_says_so():
     # the preset's walls are 2700; a 9000 ceiling must not float above them (roof and stair poked through)
     p = read_dxf(FIXTURE_A, building_type="residential", ceiling_height=9000)
     f = p.buildings[0].floors[0]
-    assert {(w.height.value, w.height.source) for w in f.walls} == {(9000.0, "inferred")}
+    assert {(w.height.value, w.height.source) for w in f.walls} == {(9000.0, "inferred")}  # the assumed walls, raised to the ceiling
     (issue,) = _by_code(p, "ceiling_above_walls")
     assert "2700" in issue.message and "raised" in issue.message
+    (note,) = _by_code(p, "wall_height_defaulted")  # reports the value actually used, not the preset's 2700
+    assert "raised to 9000" in note.message
     assert f.ceilings[0].elevation.value == f.finished_level_mm + 9000  # the ceiling plane: finished floor (200 slab) + 9000
     assert f.roofs[0].base_elevation.value == f.ceilings[0].elevation.value  # the roof sits on the raised walls, above it
-    # a user-given wall height is raised too, and an equal or lower ceiling leaves the walls alone
+    # a wall height the user gave is a known measurement: kept, with a warning about the gap (never altered)
     q = read_dxf(FIXTURE_A, 3000, ceiling_height=3500)
-    assert {w.height.value for w in q.buildings[0].floors[0].walls} == {3500.0}
+    assert {(w.height.value, w.height.source) for w in q.buildings[0].floors[0].walls} == {(3000.0, "user_provided")}
+    (gap,) = _by_code(q, "ceiling_above_walls")
+    assert "kept" in gap.message and "gap above the walls" in gap.message
+    # ...also when the ceiling is only the preset's assumed one
+    t = read_dxf(FIXTURE_A, 2000, building_type="residential")  # preset ceiling 2700 above the user's 2000 walls
+    assert {(w.height.value, w.height.source) for w in t.buildings[0].floors[0].walls} == {(2000.0, "user_provided")}
+    assert "ceiling_above_walls" in [i.code for i in t.issues]
+    # an equal or lower ceiling leaves the walls alone
     r = read_dxf(FIXTURE_A, 3000, ceiling_height=2500)
     assert {(w.height.value, w.height.source) for w in r.buildings[0].floors[0].walls} == {(3000.0, "user_provided")}

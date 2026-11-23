@@ -197,3 +197,59 @@ test("no tunnelling: a falling walker beside the stair still cannot enter its bo
   // at 0.7 m above the floor (mid-fall) walking back into tread 12's side (top 1.92): blocked
   expect(resolveHeight(2.9, 0.95, 0.7, 0.05, supports, 0, 0.18)).toBeNull();
 });
+
+test("slabs and balconies overhead are not bodies: a walker beneath an upper floor is not blocked", () => {
+  const g = new THREE.Group();
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6)); // the ground floor
+  g.add(box("floor_boundary", -5, 8, 3.199, 3.2, -3, 6)); // an upper floor's surface at 3.2 m, overhead
+  g.add(box("balcony", 2, 4, 2.9, 3.1, 2, 4)); // a balcony slab above head height
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  for (const [x, z] of [[0, 0], [3, 3], [5, 1]]) {
+    expect(stepOnto(x, z, 0, 0.05, supports, 0, 0.18)).toEqual({ ok: true, ground: expect.closeTo(0, 6) }); // walks, stands on the floor
+  }
+  // while a stair on the same floor still blocks from the side
+  g.add(box("stair", 0, 1, 0, 1.0, 0, 1, { riser_height: { value: 160 } }));
+  g.updateMatrixWorld(true);
+  expect(stepOnto(0.5, 0.5, 0, 0.05, collectSupports(g), 0, 0.18).ok).toBe(false);
+});
+
+test("no tunnelling at the largest frame step: 0.1 m moves into a solid are blocked at every position", () => {
+  const g = new THREE.Group();
+  for (let k = 1; k <= 19; k++) g.add(box("stair", (k - 1) * 0.25, k * 0.25, 0, k * 0.16, 0, 1, k === 1 ? { riser_height: { value: 160 } } : {}));
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6));
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  // the viewer clamps dt to 0.05 s at 2 m/s: a move is at most 0.1 m, less than the thinnest solid (a 0.25 m tread)
+  for (const z of [-0.5, -0.3, -0.1, 0.05, 0.15, 0.25, 0.35]) {
+    const inside = z > 0; // z 0..1 is the stair's side (tread 9, top 1.44 m)
+    expect(stepOnto(2.3, z, 0, 0.1, supports, 0, 0.18).ok).toBe(!inside);
+  }
+  // and a fall with the largest dt never undershoots the ground, stays monotonic and lands at rest
+  let feet = 1.92, vy = 0, prev = feet;
+  for (let i = 0; i < 100 && feet > 0; i++) {
+    ({ feet, vy } = fall(feet, 0, vy, 0.05));
+    expect(feet).toBeGreaterThanOrEqual(0);
+    expect(feet).toBeLessThanOrEqual(prev);
+    prev = feet;
+  }
+  expect(feet).toBe(0);
+  expect(vy).toBe(0);
+});
+
+test("a stale ground height cannot leave the walker floating: looking the ground up again where they stand drops them", () => {
+  const g = new THREE.Group();
+  g.add(box("floor_boundary", -5, 8, -0.001, 0, -3, 6)); // only the floor is left; the surface they stood on is gone
+  g.updateMatrixWorld(true);
+  const supports = collectSupports(g);
+  let feet = 1.0, ground = 1.0, vy = 0; // stale: both still at 1 m
+  const here = stepOnto(2, 2, feet, 0, supports, 0, 0.18); // the per-frame lookup (no travel)
+  expect(here.ok).toBe(true);
+  if (here.ok) ground = here.ground;
+  expect(ground).toBeCloseTo(0, 6);
+  for (let i = 0; i < 200 && feet > ground; i++) ({ feet, vy } = fall(feet, ground, vy, 1 / 60));
+  expect(feet).toBeCloseTo(0, 6); // fell to the floor, and can move again from there
+  expect(stepOnto(2.05, 2, feet, 0.05, supports, 0, 0.18).ok).toBe(true);
+  // with no surface at all, the baseline is the ground
+  expect(stepOnto(2, 2, 1.0, 0, collectSupports(new THREE.Group()), 0, 0.18)).toEqual({ ok: true, ground: 0 });
+});

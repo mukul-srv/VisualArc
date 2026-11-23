@@ -367,6 +367,10 @@ export default function ViewerPage() {
       // the eye eases to the exact ground height every frame (also when standing still or falling)
       // gravity: the feet fall to the ground under them (off a stair's side, a ramp's edge...) and land;
       // the eye eases below, so the landing is soft and nothing teleports
+      // the ground is looked up again where the walker stands, every frame: a stale one (a swapped model, a
+      // floor that changed) cannot leave them floating, they fall to what is really below
+      const here = stepOnto(walk.pos.x, walk.pos.z, walk.floorY, 0, walk.supports, walk.baseY, walk.stepUp);
+      if (here.ok) walk.groundY = here.ground;
       ({ feet: walk.floorY, vy: walk.vy } = fall(walk.floorY, walk.groundY, walk.vy, dt));
       const goal = walk.floorY + WALK.eye;
       if (Math.abs(walk.eyeY - goal) > 1e-4) {

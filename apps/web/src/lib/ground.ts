@@ -71,11 +71,17 @@ export function supportAt(x: number, z: number, fromY: number, supports: THREE.M
 
 export type Step = { ok: true; ground: number } | { ok: false };
 
+/** Surfaces that are solid BODIES (down to the floor): a stair is a solid mass, a ramp a wedge. A floor
+ *  slab or balcony is a surface, not a body: the one overhead (an upper floor, a balcony above) must not
+ *  stop someone walking beneath it. */
+const BODY_TYPES = ["stair", "ramp"];
+
 /** Can the walker, with feet at `feetY`, be at (x, z) after moving `travel` metres, and what is the
  *  ground there? Flights and other raised surfaces are SOLID bodies (a stair is a solid mass, a ramp a
  *  wedge down to the floor), whatever lies beneath:
- *   - the highest surface there is more than a step above the feet: blocked. That is the side or riser
- *     of a stair, the side of a ramp, or the space under a ramp (you cannot walk in from below);
+ *   - the highest stair or ramp surface there is more than a step above the feet: blocked. That is the
+ *     side or riser of a stair, the side of a ramp, or the space under a ramp (you cannot walk in from
+ *     below). Slabs and balconies overhead are not bodies and never block;
  *   - otherwise the ground is the highest surface within a step above the feet, or the baseline `baseY`
  *     when there is none. It may be far below: the walker then falls (see `fall`), nothing stops them
  *     walking off an edge;
@@ -85,7 +91,7 @@ export type Step = { ok: true; ground: number } | { ok: false };
 export function stepOnto(
   x: number, z: number, feetY: number, travel: number, supports: THREE.Mesh[], baseY: number, stepUp: number,
 ): Step {
-  const top = supportAt(x, z, feetY, supports, 1000);
+  const top = supportAt(x, z, feetY, supports.filter((m) => BODY_TYPES.includes(m.userData?.type)), 1000);
   if (top && top.y > feetY + stepUp) return { ok: false };
   const s = supportAt(x, z, feetY, supports, stepUp);
   if (s && s.type === "ramp" && s.y > feetY && travel > 0 && (s.y - feetY) / travel > STEP.maxSlope) return { ok: false };
