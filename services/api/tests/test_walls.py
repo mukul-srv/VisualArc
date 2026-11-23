@@ -43,7 +43,7 @@ def test_l_corner_gets_one_junction():
     assert sorted(junctions[0].wall_ids) == sorted(w.id for w in walls)
     # end caps have no partner: since the cap rule they are consumed as the walls' ends, in one report
     assert codes(issues) == ["wall_end_caps_consumed"]
-    assert len([i for i in issues if i.code == "wall_end_caps_consumed"][0].sources) == 2
+    assert len(next(i for i in issues if i.code == "wall_end_caps_consumed").sources) == 2
 
 
 def test_t_junction_fills_gap_under_stem():
@@ -272,4 +272,4 @@ def test_loose_line_that_is_not_a_wall_end_cap_stays_unpaired():
     ])
     assert len(walls) == 1
     assert [i.code for i in issues] == ["unpaired_segment", "unpaired_segment", "wall_end_caps_consumed"]
-    assert [s.entity_handle for s in [i for i in issues if i.code == "wall_end_caps_consumed"][0].sources] == ["H2"]
+    assert [s.entity_handle for s in next(i for i in issues if i.code == "wall_end_caps_consumed").sources] == ["H2"]
