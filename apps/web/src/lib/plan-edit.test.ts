@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import type { OverlayData } from "./overlay";
 import {
-  EDIT, EMPTY_HISTORY, addOpeningOp, addWallOp, applyOps, axisOf, canAdd, dragEndpoint, endpointAt, hitTest, inspectorRows, moveWall, nextId,
-  openingFromFields, orthogonal, push, redo, removeOpeningOp, removeWallOp, renameRoomOp, setOpeningOp, setWallOp, slideOpening, snap, toEditModel,
+  EDIT, EMPTY_HISTORY, addOpeningOp, addWallOp, applyOps, axisOf, canAdd, dragEndpoint, endpointAt, dragged, hitTest, inspectorRows, isNoop, moveWall, nextId,
+  openingFromFields, orthogonal, push, redo, removeOpeningOp, removeWallOp, renameRoomOp, setOpeningOp, setWallOp, slideOpening, snap, snapMove, toEditModel,
   undo, wallFromFields, type EditModel, type EditWall,
 } from "./plan-edit";
 
@@ -153,4 +153,30 @@ test("toEditModel reads the overlay and refuses data from before editing support
   expect(toEditModel({ ...d, model: { ...d.model, walls: [{ ...d.model.walls[0], handles: undefined }] } })).toBeNull();
   expect(axisOf([0, 0], [10, 0])).toBe("h");
   expect(axisOf([0, 0], [0, 0])).toBeNull();
+});
+
+test("a click that moves nothing is not an edit: not a drag, and no-op ops are recognised", () => {
+  expect(dragged([100, 100], [100, 100], 0.5)).toBe(false);
+  expect(dragged([100, 100], [102, 100], 0.5)).toBe(false); // 1 px
+  expect(dragged([100, 100], [110, 100], 0.5)).toBe(true); // 5 px
+  const w = m.walls[1];
+  expect(isNoop(setWallOp("e1", w, { start: w.start, end: w.end })!)).toBe(true);
+  expect(isNoop(setWallOp("e1", w, { start: [4000, 200], end: [4000, 4800] }, 300)!)).toBe(false);
+  expect(isNoop(setWallOp("e1", w, { start: [4010, 200], end: [4010, 4800] })!)).toBe(false);
+  const o = m.openings[0];
+  expect(isNoop(setOpeningOp("e2", o))).toBe(true);
+  expect(isNoop(setOpeningOp("e2", o, { height: 1000 }))).toBe(false);
+  expect(isNoop(setOpeningOp("e2", o, { kind: "door" }))).toBe(false);
+  expect(isNoop(removeWallOp("e3", w))).toBe(false);
+});
+
+test("a wall move snaps by whichever end snaps nearest", () => {
+  const w = m.walls[1]; // x = 4000, y 200..4800
+  // moving by (-1010, 0) puts the wall at x = 2990; at 0.5 px/mm the grid is closer than any wall: delta lands on the grid
+  expect(snapMove(w, [-1003, 0], m, 0.5)).toEqual([-1000, 0]);
+  // the end that needs the smaller adjustment decides: start 3 mm from wall-001's y = 100, end 4 mm off the grid
+  const near = { ...w, start: [4000, 103] as [number, number], end: [4000, 4704] as [number, number] };
+  expect(snapMove(near, [0, 0], m, 0.5)).toEqual([0, -3]);
+  const far = { ...w, start: [4000, 112] as [number, number], end: [4000, 4704] as [number, number] };
+  expect(snapMove(far, [0, 0], m, 0.5)).toEqual([0, -4]);
 });

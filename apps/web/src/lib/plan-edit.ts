@@ -10,11 +10,12 @@ export const EDIT = {
   gridMm: 10,
   snapPx: 8, // snap to other walls' endpoints/axes within this many screen pixels
   hitPx: 6, // click tolerance in screen pixels
-  minWallMm: 50,
+  minWallMm: 50, // UI guard only; the server's limits live in services/api/src/api/engine/settings.py
   defaultThicknessMm: 200,
   defaultWidthMm: { door: 900, window: 1200 }, // prefilled when adding; shown as the user's own entry
-  maxEdits: 500, // the server's limit per floor
-  tolMm: 1, // same tolerance as the server's edit matching
+  maxEdits: 500, // mirrors Settings.max_edits (services/api/src/api/engine/settings.py)
+  tolMm: 1, // mirrors Settings.edit_match_tolerance_mm (same file)
+  dragMinPx: 3, // a click that moves less than this is a click, not a drag
 } as const;
 
 // --- ops: mirror services/api/src/api/engine/edits.py ----------------------------------------------------------
@@ -99,6 +100,27 @@ export function hitTest(m: EditModel, p: Pt, tol: number): Selection | null {
   }
   const r = m.rooms.find((x) => pointInPolygon(p, x.polygon));
   return r ? { kind: "room", id: r.id } : null;
+}
+
+/** Whether the pointer moved far enough from where it went down to count as a drag (screen px, via the scale). */
+export const dragged = (origin: Pt, cur: Pt, scale: number) => Math.hypot(cur[0] - origin[0], cur[1] - origin[1]) * scale >= EDIT.dragMinPx;
+
+/** Snap a wall move by whichever end snaps nearest (to another wall or the grid); returns the delta to move by. */
+export function snapMove(w: EditWall, d: Pt, m: EditModel, scale: number): Pt {
+  const best = [w.start, w.end].map((e) => {
+    const t: Pt = [e[0] + d[0], e[1] + d[1]];
+    const s = snap(t, m, scale, w.id);
+    return { delta: [s[0] - e[0], s[1] - e[1]] as Pt, off: Math.hypot(s[0] - t[0], s[1] - t[1]) };
+  }).sort((a, b) => a.off - b.off)[0];
+  return best.delta;
+}
+
+/** An op that leaves its target exactly as it was (a click that moved nothing): not worth an edit. */
+export function isNoop(op: EditOp): boolean {
+  const same = (a: Pt, b: Pt) => near(a, b);
+  if (op.op === "set_wall") return same(op.start, op.target.start) && same(op.end, op.target.end) && Math.abs(op.thickness - op.target.thickness) <= EDIT.tolMm;
+  if (op.op === "set_opening") return op.kind === op.target.kind && same(op.start, op.target.start) && same(op.end, op.target.end) && op.height === undefined && op.sill_height === undefined;
+  return false;
 }
 
 /** Which end of a wall is within `tol` of `p`, if any (the endpoint drag handles). */

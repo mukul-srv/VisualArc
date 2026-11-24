@@ -6,7 +6,7 @@ import { saveEditsJob, STAGE_LABEL, type JobProgress } from "../lib/jobs";
 import { fit, getPlanOverlay, overlayBounds, panBy, toPlan, toScreen, wallCorners, zoomAt, type Fit, type OverlayData } from "../lib/overlay";
 import type { Floor } from "../lib/project";
 import {
-  EDIT, EMPTY_HISTORY, addOpeningOp, addWallOp, applyOps, canAdd, dragEndpoint, endpointAt, hitTest, moveWall, nextId, orthogonal, push, pxToMm, redo,
+  EDIT, EMPTY_HISTORY, addOpeningOp, addWallOp, applyOps, canAdd, dragEndpoint, dragged, isNoop, snapMove, endpointAt, hitTest, moveWall, nextId, orthogonal, push, pxToMm, redo,
   removeOpeningOp, removeWallOp, setOpeningOp, setWallOp, slideOpening, snap, toEditModel, undo, type EditModel, type EditOp, type EditOpening, type EditWall, type Pt, type Selection,
 } from "../lib/plan-edit";
 import { IssueList } from "./IssueList";
@@ -21,14 +21,13 @@ type Drag =
 
 /** The transient op of a drag, from the committed model: the same op that is saved when the pointer is released. */
 function dragOp(d: Drag, committed: EditModel, id: string, scale: number): EditOp | null {
-  if (d.kind === "pan") return null;
+  if (d.kind === "pan" || !dragged(d.origin, d.cur, scale)) return null; // a click is not a drag: nothing is snapped or saved
   if (d.kind === "slide") {
     const g = slideOpening(d.opening, d.host, [d.cur[0] - d.origin[0], d.cur[1] - d.origin[1]]);
     return g && setOpeningOp(id, d.opening, g);
   }
   if (d.kind === "move") {
-    const s = snap([d.wall.start[0] + d.cur[0] - d.origin[0], d.wall.start[1] + d.cur[1] - d.origin[1]], committed, scale, d.wall.id);
-    return setWallOp(id, d.wall, moveWall(d.wall, [s[0] - d.wall.start[0], s[1] - d.wall.start[1]]));
+    return setWallOp(id, d.wall, moveWall(d.wall, snapMove(d.wall, [d.cur[0] - d.origin[0], d.cur[1] - d.origin[1]], committed, scale)));
   }
   const g = dragEndpoint(d.wall, d.kind, snap(d.cur, committed, scale, d.wall.id));
   return g && setWallOp(id, d.wall, g);
@@ -50,6 +49,7 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<JobProgress | null>(null);
   const [blocked, setBlocked] = useState<Issue[] | null>(null);
+  const [saved, setSaved] = useState<Issue[] | null>(null); // issues of the last successful save (skipped edits show here)
   const canvas = useRef<HTMLCanvasElement>(null);
 
   const load = useCallback(async () => {
@@ -72,7 +72,7 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   const now = useMemo(() => (committed ? (transient ? applyOps(committed, [transient]) : committed) : null), [committed, transient]);
 
   const commit = useCallback((op: EditOp | null) => {
-    if (op && canAdd(existing.length, hist)) setHist(push(hist, op));
+    if (op && !isNoop(op) && canAdd(existing.length, hist)) setHist(push(hist, op));
   }, [existing.length, hist]);
 
   // wheel zoom needs a non-passive listener so the page does not scroll
@@ -206,6 +206,7 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   async function save() {
     setBusy(true);
     setBlocked(null);
+    setSaved(null);
     setError(null);
     const r = await saveEditsJob(projectId, floor.id, allOps, setJob);
     setBusy(false);
@@ -213,25 +214,34 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
     if (r.ok) {
       setHist(EMPTY_HISTORY);
       setSel(null);
+      setSaved(r.issues);
       await load();
       onSaved();
     } else if (r.kind === "blocked") setBlocked(r.issues);
     else setError(r.message);
   }
 
+  const discardOk = () => hist.done.length === 0 || window.confirm(`Discard ${hist.done.length} unsaved change${hist.done.length === 1 ? "" : "s"}?`);
   if (error && !data) return <p role="alert">{error}</p>;
   if (!data) return <p role="status">Loading the plan…</p>;
   if (!base || !committed || !now) return <p role="alert">This floor was made before editing was supported: add it again from its DXF to edit it.</p>;
   return (
     <section aria-label={`Edit plan: ${floor.name}`}>
-      <h3>Edit plan: {floor.name} <button type="button" onClick={onClose} disabled={busy}>Close</button></h3>
+      <h3>Edit plan: {floor.name} <button type="button" onClick={() => discardOk() && onClose()} disabled={busy}>Close</button></h3>
       <p><small>Orthogonal walls, doors, windows and room names. Rooms and everything built from them update when you save; the 3D viewer shows the saved version.</small></p>
       <EditorToolbar tool={tool} setTool={(t) => { setTool(t); setAnchor(null); if (t === "door" || t === "window") setWidth(String(EDIT.defaultWidthMm[t])); }}
         width={width} setWidth={setWidth} thickness={thickness} setThickness={setThickness}
         canUndo={hist.done.length > 0} canRedo={hist.undone.length > 0} onUndo={() => setHist(undo(hist))} onRedo={() => setHist(redo(hist))}
-        pending={hist.done.length} busy={busy} onSave={save} onDiscard={() => { setHist(EMPTY_HISTORY); setSel(null); setAnchor(null); }} />
+        pending={hist.done.length} busy={busy} onSave={save} onDiscard={() => { if (!discardOk()) return; setHist(EMPTY_HISTORY); setSel(null); setAnchor(null); }} />
       {busy && <p role="status">{job ? `${STAGE_LABEL[job.stage] ?? job.stage} (${job.progress}%)` : "Saving…"}</p>}
       {error && <p role="alert" style={{ color: "#b00020" }}>{error}</p>}
+      {saved && (
+        <div role="status">
+          <p>Saved. Edits the drawing could not apply, and other notes about the result, are listed here:</p>
+          <IssueList issues={saved.filter((i) => i.code.startsWith("edit_"))} />
+          <details><summary>All issues of the saved floor ({saved.length})</summary><IssueList issues={saved} /></details>
+        </div>
+      )}
       {blocked && (
         <div role="alert">
           <p><strong>Nothing was saved:</strong> the edits give blocking issues. Change or undo them and save again.</p>
