@@ -128,6 +128,28 @@ test("success path: openings fixture -> viewer-loadable GLB with metadata", asyn
   expect((await fetch(`${base}/api/v1/generations/${gen.generation_id}/artifacts/secret`)).status).toBe(404);
 });
 
+test("review: a draft stores nothing and reports blocking issues; accept generates", async () => {
+  const jobs = await import("./jobs");
+  const up = await api.uploadDxf(fixture("fixture_openings.dxf"));
+  if (!up.ok) throw new Error(up.message);
+  const recent = async () => { const r = await fetch("/api/v1/generations/recent"); return (await r.json()) as unknown[]; };
+  const before = (await recent()).length;
+  // blocked draft still succeeds as a job and carries the issues
+  const blocked = await jobs.draftJob(up.upload_id, { units: "cm" }, undefined, fetch, 50);
+  if (!blocked.ok) throw new Error(blocked.message);
+  expect(blocked.blocking).toBe(true);
+  expect(blocked.floors[0].issues.map((i) => i.code)).toContain("units_conflict");
+  const draft = await jobs.draftJob(up.upload_id, { building_type: "commercial" }, undefined, fetch, 50);
+  if (!draft.ok) throw new Error(draft.message);
+  expect(draft.blocking).toBe(false);
+  expect(draft.floors[0].stats?.walls).toBeGreaterThan(0);
+  expect(draft.floors[0].overlay?.model.walls.length).toBeGreaterThan(0);
+  expect((await recent()).length).toBe(before); // nothing stored
+  const accepted = await jobs.generateJob({ upload_id: up.upload_id, building_type: "commercial" }, undefined, fetch, 50);
+  expect(accepted.ok).toBe(true);
+  expect((await recent()).length).toBe(before + 1);
+}, 60_000);
+
 test("2-floor project: create, add floors, manifest, each floor GLB sits at its elevation", async () => {
   const { parseManifest, sortFloors } = await import("./project");
   const c = await api.createProject("House");

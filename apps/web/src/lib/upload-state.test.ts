@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile } from "./upload-state";
+import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, reviewKey, reviewStale } from "./upload-state";
 
 const pid = "a".repeat(32);
 const typed = { on: true, target: pid, floorName: "Ground", elevation: "3000" };
@@ -63,4 +63,13 @@ test("once a project was created for the upload, a retry joins it instead of cre
   const after = targetAfterCreate(typed, "a".repeat(32));
   expect(after.target).toBe("a".repeat(32)); // an id now, so the form adds a floor instead of creating a project
   expect(after.floorName).toBe("Ground");
+});
+
+test("a review is stale once any reviewed input changes", () => {
+  const a = { form: { wallHeight: "" }, rows: [], conv: { preset: "aia", mapping: {} }, proj: { on: false } };
+  const key = reviewKey(a);
+  expect(reviewStale(null, a)).toBe(false);
+  expect(reviewStale(key, structuredClone(a))).toBe(false);
+  expect(reviewStale(key, { ...a, form: { wallHeight: "3000" } })).toBe(true);
+  expect(reviewStale(key, { ...a, conv: { preset: "aia", mapping: { X: "wall" } } })).toBe(true);
 });

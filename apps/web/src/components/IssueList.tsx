@@ -1,5 +1,5 @@
 import type { Issue } from "../lib/api";
-import { groupIssues, LEVEL_LABEL, locations, summarize, summaryLine, type IssueGroup } from "../lib/issues";
+import { groupIssues, type FixAction, LEVEL_LABEL, locations, summarize, summaryLine, type IssueGroup } from "../lib/issues";
 
 const COLOR = { error: "#b00020", warning: "#8a6100", info: "#35516b" } as const;
 
@@ -28,7 +28,7 @@ function Items({ issues }: { issues: Issue[] }) {
   );
 }
 
-function Group({ g, open }: { g: IssueGroup; open?: boolean }) {
+function Group({ g, open, onFix }: { g: IssueGroup; open?: boolean; onFix?: (a: FixAction) => void }) {
   return (
     <details open={open} style={{ margin: "6px 0" }}>
       <summary style={{ cursor: "pointer", color: COLOR[g.level] }}>
@@ -36,6 +36,7 @@ function Group({ g, open }: { g: IssueGroup; open?: boolean }) {
         {g.tag && <> <em>[{g.tag}]</em></>}
       </summary>
       <p style={{ margin: "4px 0" }}>{g.help}</p>
+      {onFix && g.action && <button onClick={() => onFix(g.action!)}>{g.action.label}</button>}
       <Items issues={g.issues} />
       <p style={{ margin: 0 }}><small>Code: <code>{g.code}</code></small></p>
     </details>
@@ -44,7 +45,7 @@ function Group({ g, open }: { g: IssueGroup; open?: boolean }) {
 
 // Errors (blocking issues) stay open and visible; warnings and info sit in one collapsed
 // accordion, grouped by what they mean. Presentation only: every issue is listed in its group.
-export function IssueList({ issues }: { issues: Issue[] }) {
+export function IssueList({ issues, onFix }: { issues: Issue[]; onFix?: (a: FixAction) => void }) {
   if (!issues.length) return <p>No issues found.</p>;
   const groups = groupIssues(issues);
   const s = summarize(issues);
@@ -57,14 +58,14 @@ export function IssueList({ issues }: { issues: Issue[] }) {
       {errors.length > 0 && (
         <section aria-label="Blocking issues">
           <h3>Blocking issues ({s.error}): generation is not possible until resolved</h3>
-          {errors.map((g) => <Group key={`${g.level}:${g.code}`} g={g} open />)}
+          {errors.map((g) => <Group key={`${g.level}:${g.code}`} g={g} open onFix={onFix} />)}
         </section>
       )}
       {rest.length > 0 && (
         <details>
           <summary style={{ cursor: "pointer" }}>Warnings and notes ({restLine})</summary>
           {s.info > 0 && <p style={{ margin: "4px 0" }}><small>Info items are engine warnings about values the engine assumed or noted (for example assumed defaults). They are listed here, none are hidden.</small></p>}
-          {rest.map((g) => <Group key={`${g.level}:${g.code}`} g={g} />)}
+          {rest.map((g) => <Group key={`${g.level}:${g.code}`} g={g} onFix={onFix} />)}
         </details>
       )}
     </div>
