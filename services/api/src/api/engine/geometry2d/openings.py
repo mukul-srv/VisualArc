@@ -563,14 +563,14 @@ def build_openings(
     heights: dict[str, tuple[float | None, float | None]],
     from_user: bool,
     settings: Settings = DEFAULTS,
-    edited: dict[str, tuple[float | None, float | None]] | None = None,
+    edited: dict[str, tuple[float | None, float | None, bool, bool]] | None = None,
 ) -> tuple[list[Opening], list[Issue]]:
     """Canonical Openings with ADR-002 §5/§7 provenance.
 
     `heights`: kind -> (height flag, sill flag); None = use the Settings default.
     Door sill has no flag (always defaulted).
-    `edited`: marker handle -> (height, sill) the user gave in an edit (None = not given). An edited opening's
-    width and offset, and the heights given, are `user_modified`.
+    `edited`: marker handle -> (height, sill the user gave in an edit (None = not given), width changed, offset
+    changed). Only those values are `user_modified`; the rest keep their provenance.
     """
     edited = edited or {}
     s, cap = settings, settings.unmapped_ref_cap
@@ -585,7 +585,7 @@ def build_openings(
     for kind in ("door", "window"):
         mine = [o for o in found if o.kind == kind]
         # openings whose height and sill were both given in an edit are not "defaulted"
-        mine_d = [o for o in mine if None in edited.get(o.marker.ref.entity_handle, (None, None))]
+        mine_d = [o for o in mine if None in edited.get(o.marker.ref.entity_handle, (None, None))[:2]]
         given = heights.get(kind, (None, None))
         (h0, h0_src), (sill0, sill0_src) = (
             (v, "user_provided") if v is not None else (d, "defaulted")
@@ -608,7 +608,7 @@ def build_openings(
                 )
             )
         for o in mine:
-            ov = edited.get(o.marker.ref.entity_handle, (None, None))
+            ov = edited.get(o.marker.ref.entity_handle, (None, None))[:2]
             h, h_src = (ov[0], "user_modified") if ov[0] is not None else (h0, h0_src)
             sill, sill_src = (ov[1], "user_modified") if ov[1] is not None else (sill0, sill0_src)
             if wall_height is not None and sill + h > wall_height + s.tolerance_mm:
@@ -649,8 +649,8 @@ def build_openings(
             kind=o.kind,
             wall_id=o.wall_id,
             span=LineGeometry(start=ends[0], end=ends[1]),
-            offset=Measured(value=o.offset, source=_span_source(o, measured_default, edited)),
-            width=Measured(value=o.hi - o.lo, source=_span_source(o, measured_default, edited)),
+            offset=Measured(value=o.offset, source=_span_source(o, measured_default, edited, 3)),
+            width=Measured(value=o.hi - o.lo, source=_span_source(o, measured_default, edited, 2)),
             height=Measured(value=h, source=h_src),
             sill_height=Measured(value=sill, source=sill_src),
             sources=[o.marker.ref] + [j.ref for j in o.jambs],
@@ -660,10 +660,11 @@ def build_openings(
     ], issues
 
 
-def _span_source(o: FoundOpening, measured_default: str, edited: dict) -> str:
+def _span_source(o: FoundOpening, measured_default: str, edited: dict, flag: int) -> str:
     if o.marker.inferred:
         return "inferred"
-    return "user_modified" if o.marker.ref.entity_handle in edited else measured_default
+    changed = edited.get(o.marker.ref.entity_handle, (None, None, False, False))[flag]
+    return "user_modified" if changed else measured_default
 
 
 def _detail(o: FoundOpening, height: float, sill: float, s: Settings) -> OpeningDetail | None:

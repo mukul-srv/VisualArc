@@ -536,16 +536,22 @@ def regenerate(pid: str, overrides: dict, user_id: str, progress=None):
 def apply_edits(pid: str, floor_id: str, edits: list[dict], user_id: str, progress=None):
     """Replace one floor's stored edits and regenerate only that floor, as one new version. A blocking
     result (e.g. an edit that makes a bad opening) changes nothing and returns the 409 response."""
-    with session() as db, db.begin():
-        row = owned(db, ProjectRow, pid, user_id, "unknown project", lock=True, need="editor")
-        manifest = row.data
-        f = _floor(row, floor_id)
-        top = max(g["elevation"]["value"] for g in manifest["floors"])
-        moved, issues = _replay(db, pid, {**f, "edits": edits}, {}, f["elevation"]["value"] == top,
-                                user_id, progress)
-        if moved is None:
-            return blocked_response(issues)
-        row.data = {**manifest, "floors": [moved if g["id"] == floor_id else g for g in manifest["floors"]]}
-        v = _version(db, row, user_id, f"Edited {f['name']}: {len(edits)} changes"[:200])
-        number = v.number
+    class _Blocked(Exception):
+        pass
+
+    try:
+        with session() as db, db.begin():
+            row = owned(db, ProjectRow, pid, user_id, "unknown project", lock=True, need="editor")
+            manifest = row.data
+            f = _floor(row, floor_id)
+            top = max(g["elevation"]["value"] for g in manifest["floors"])
+            moved, issues = _replay(db, pid, {**f, "edits": edits}, {}, f["elevation"]["value"] == top,
+                                    user_id, progress)
+            if moved is None:
+                raise _Blocked  # leaving the transaction by exception rolls it back
+            row.data = {**manifest, "floors": [moved if g["id"] == floor_id else g for g in manifest["floors"]]}
+            v = _version(db, row, user_id, f"Edited {f['name']}: {len(edits)} changes"[:200])
+            number = v.number
+    except _Blocked:
+        return blocked_response(issues)
     return {"project_id": pid, "version": number, "floor": moved, "issues": issues}

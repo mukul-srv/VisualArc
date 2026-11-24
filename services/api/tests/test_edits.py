@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 
 from api import jobs
-from api.db import ProjectVersionRow, session
+from api.db import GenerationRow, ProjectVersionRow, session
 from api.engine.adapters.dxf.reader import read_dxf
 from api.engine.edits import EditsRequest
 from api.main import app
@@ -66,8 +66,38 @@ def test_move_wall_rederives_rooms(two):
                         "thickness": 200}])
     assert sorted(r.area.value for r in f.rooms) == [2800 * 4800, 4800 * 4800]
     w = next(w for w in f.walls if w.centreline.start[0] == 3100)
-    assert (w.thickness.source, w.sources[0].format, w.sources[0].entity_handle) == ("user_modified", "edit", "e1")
+    # moved, not thickened: its thickness is still the drawing's; only the lines are the edit's
+    assert (w.thickness.source, w.sources[0].format, w.sources[0].entity_handle) == ("source_extracted", "edit", "e1")
     assert "edit_target_missing" not in _codes(p)
+    _, f = _read(two, [{"op": "set_wall", "id": "e2", "target": ref, "start": [4100, 200], "end": [4100, 5000],
+                        "thickness": 300}])
+    assert next(w for w in f.walls if w.centreline.start[0] == 4100).thickness.source == "user_modified"
+
+
+def test_removing_a_wall_keeps_the_lines_of_a_wall_crossing_it(tmp_path):
+    doc = ezdxf.new("R2018", setup=False)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    for x0, y0, x1, y1 in ((0, 0, 8200, 5200), (200, 200, 8000, 5000)):
+        pts = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        for i, a in enumerate(pts):
+            msp.add_line(a, pts[(i + 1) % 4], dxfattribs={"layer": "A-WALL"})
+    for x in (4000, 4200):  # the partition, drawn in two pieces either side of the crossing wall
+        msp.add_line((x, 200), (x, 2400), dxfattribs={"layer": "A-WALL"})
+        msp.add_line((x, 2600), (x, 5000), dxfattribs={"layer": "A-WALL"})
+    for y in (2400, 2600):  # the crossing wall: its faces run through the partition's footprint
+        msp.add_line((200, y), (8000, y), dxfattribs={"layer": "A-WALL"})
+    path = tmp_path / "cross.dxf"
+    doc.saveas(path)
+    _, f0 = _read(path)
+    crossing = next(w for w in f0.walls if w.centreline.start[1] == 2500)
+    part = [w for w in f0.walls if w.centreline.start[0] == 4100]
+    assert part and crossing.centreline.end[0] - crossing.centreline.start[0] > 7000
+    ops = [{"op": "remove_wall", "id": f"r{i}", "target": _wall_ref(w)} for i, w in enumerate(part)]
+    p, f = _read(path, ops)
+    after = next(w for w in f.walls if w.centreline.start[1] == 2500)
+    assert (after.centreline.start, after.centreline.end) == (crossing.centreline.start, crossing.centreline.end)
+    assert not [w for w in f.walls if w.centreline.start[0] == 4100] and "edit_target_missing" not in _codes(p)
 
 
 def test_remove_wall_merges_rooms(two):
@@ -146,7 +176,14 @@ def test_move_opening_and_remove_opening_close_the_old_gap():
                              "start": [a, w.span.start[1]], "end": [b, w.span.start[1]], "height": 900, "sill_height": 1000}])
     o = next(o for o in f.openings if o.sources[0].entity_handle == "e1")
     assert (o.span.start[0], o.span.end[0], o.width.value) == (a, b, b - a)
-    assert (o.height.source, o.sill_height.value, o.width.source) == ("user_modified", 1000, "user_modified")
+    assert (o.height.source, o.sill_height.value, o.width.source, o.offset.source) == (
+        "user_modified", 1000, "user_modified", "user_modified")
+    # a height-only edit leaves the drawn width and offset as they were
+    _, f = _read(OPENINGS, [{"op": "set_opening", "id": "e2", "target": _ref(w), "kind": "window",
+                             "start": w.span.start, "end": w.span.end, "height": 900}])
+    o = next(o for o in f.openings if o.sources[0].entity_handle == "e2")
+    assert (o.height.source, o.width.source, o.offset.source) == ("user_modified", w.width.source, w.offset.source)
+    assert (o.width.value, o.offset.value) == (w.width.value, w.offset.value)
     assert len(f.openings) == len(f0.openings)
     assert not {"unmarked_wall_gap", "unmarked_gap_bridged"} & set(_codes(p))
     p, f = _read(OPENINGS, [{"op": "remove_opening", "id": "e1", "target": _ref(w)}])
@@ -207,6 +244,11 @@ def _versions(pid):
         return db.scalar(select(func.count()).select_from(ProjectVersionRow).where(ProjectVersionRow.project_id == pid))
 
 
+def _generations():
+    with session() as db:
+        return db.scalar(select(func.count()).select_from(GenerationRow))
+
+
 def _plan(c, pid, fid):
     return c.get(f"{P}/{pid}/floors/{fid}/plan").json()
 
@@ -235,7 +277,7 @@ def test_edit_job_replays_one_floor_and_makes_one_version(client, tmp_path):
     ov = _plan(client, pid, fid)
     assert ov["edits"][0]["id"] == "e1"
     moved = next(w for w in ov["model"]["walls"] if w["start"][0] == 3100)
-    assert (moved["provenance"], moved["handles"]) == ("user_modified", ["e1", "e1"])
+    assert (moved["provenance"], moved["handles"]) == ("source_extracted", ["e1", "e1"])  # edited lines, drawn thickness
 
 
 def test_edits_survive_parameter_change_and_restore_drops_them(client, tmp_path):
@@ -260,10 +302,12 @@ def test_blocking_edit_saves_nothing(client, tmp_path):
     ref = {"start": top["start"], "end": top["end"], "thickness": top["thickness"], "handles": top["handles"]}
     op = {"op": "add_opening", "id": "e1", "wall": ref, "kind": "door", "start": [1000, 100], "end": [1900, 100],
           "height": 3500}
+    manifest, gens = client.get(f"{P}/{pid}").json(), _generations()
     j = _edit(client, pid, fid, [op])
     assert j["status"] == "failed"
     assert "opening_exceeds_wall_height" in {i["code"] for i in j["result"]["issues"]}
     assert _versions(pid) == before and _plan(client, pid, fid)["edits"] == []
+    assert client.get(f"{P}/{pid}").json() == manifest and _generations() == gens  # the block rolled everything back
 
 
 def test_edits_api_validation_and_access(client, tmp_path):

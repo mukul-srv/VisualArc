@@ -227,10 +227,14 @@ def _inside(p, r: Rect, tol: float) -> bool:
 
 
 def _drop_across(segs: list[Segment], axis: str, rect: Rect, tol: float) -> list[Segment]:
-    """Remove the short lines running across a wall inside `rect` (jambs, end caps): what they belonged to is gone."""
+    """Remove the lines running across a wall from one face to the other inside `rect` (jambs, end caps): what
+    they closed is gone. A crossing wall's own lines are longer than that or run along the wall, so they stay."""
+    cross = (rect[3] - rect[1]) if axis == "h" else (rect[2] - rect[0])
+
     def across(s: Segment) -> bool:
         a = _seg(s, tol)
-        return a is not None and a[0] != axis and _inside(s.start, rect, tol) and _inside(s.end, rect, tol)
+        return (a is not None and a[0] != axis and a[3] - a[2] >= cross - tol
+                and _inside(s.start, rect, tol) and _inside(s.end, rect, tol))
 
     return [s for s in segs if not across(s)]
 
@@ -354,9 +358,25 @@ def apply_geometry_edits(
     return segs, mks, issues
 
 
-def opening_dimensions(ops: Sequence) -> dict[str, tuple[float | None, float | None]]:
-    """Per edited opening (its marker handle = the op id): the height and sill the user gave, if any."""
-    return {o.id: (o.height, o.sill_height) for o in ops if o.op in ("set_opening", "add_opening")}
+def opening_dimensions(ops: Sequence) -> dict[str, tuple[float | None, float | None, bool, bool]]:
+    """Per edited opening (its marker handle = the op id): the height and sill the user gave, if any, and whether
+    its width and its offset really changed against the snapshot the edit started from (a new opening: both)."""
+    tol = DEFAULTS.edit_match_tolerance_mm
+    out = {}
+    for o in ops:
+        if o.op == "add_opening":
+            out[o.id] = (o.height, o.sill_height, True, True)
+        elif o.op == "set_opening":
+            i = 0 if _axis(o.start, o.end) == "h" else 1
+            new, old = sorted((o.start[i], o.end[i])), sorted((o.target.start[i], o.target.end[i]))
+            out[o.id] = (o.height, o.sill_height, abs((new[1] - new[0]) - (old[1] - old[0])) > tol, abs(new[0] - old[0]) > tol)
+    return out
+
+
+def modified_thickness(ops: Sequence) -> set[str]:
+    """Ids of the edits that give a wall a thickness the user chose (a new wall, or a changed thickness)."""
+    tol = DEFAULTS.edit_match_tolerance_mm
+    return {o.id for o in ops if o.op == "add_wall" or (o.op == "set_wall" and abs(o.thickness - o.target.thickness) > tol)}
 
 
 def apply_room_edits(rooms: list[Room], ops: Sequence) -> tuple[list[Room], list[Issue]]:

@@ -48,6 +48,7 @@ from api.engine.edits import (
     apply_geometry_edits,
     apply_room_edits,
     edit_ref,
+    modified_thickness,
     opening_dimensions,
 )
 from api.engine.geometry2d.balconies import find_balconies
@@ -706,6 +707,7 @@ def read_dxf(
             )
         )
     edit_ids = {e.id for e in edits}
+    thickness_edits = modified_thickness(edits)
     if edits:  # before openings are resolved, so everything downstream re-derives from the edited lines
         segments, markers, edit_issues = apply_geometry_edits(segments, markers, edits, settings)
         issues += edit_issues
@@ -862,7 +864,7 @@ def read_dxf(
             centreline=LineGeometry(start=w.start, end=w.end),
             thickness=Measured(
                 value=w.thickness,
-                source="user_modified" if any(s.handle in edit_ids for s in w.sources)
+                source="user_modified" if any(s.handle in thickness_edits for s in w.sources)
                 else "user_provided" if from_user else "source_extracted",
             ),
             height=height,
