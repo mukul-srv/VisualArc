@@ -10,6 +10,7 @@ import { getProjectConventions, listConventions, putProjectConventions, type Con
 import { AccessPanel } from "./AccessPanel";
 import { HELP } from "../lib/help";
 import { BuildingPanel } from "./BuildingPanel";
+import { PlanEditor } from "./PlanEditor";
 import { PlanOverlay } from "./PlanOverlay";
 import { ParametersPanel } from "./ParametersPanel";
 import { AppNav } from "./AppNav";
@@ -30,6 +31,7 @@ export function ProjectView({ id }: { id: string }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<TabId>("floors");
+  const [editingPlan, setEditingPlan] = useState<string | null>(null); // floor id open in the plan editor
   const [convOpen, setConvOpen] = useState(false); // layer conventions fold, under Floors
   const [conv, setConv] = useState<ConventionsSpec | null>(null);
   const [convInfo, setConvInfo] = useState<{ presets: PresetInfo[]; roles: string[] } | null>(null);
@@ -109,8 +111,12 @@ export function ProjectView({ id }: { id: string }) {
           <>
             <FloorList projectId={id} floors={manifest.floors} role={role} busy={busy}
               onRename={(fid, n) => run(() => renameFloor(id, fid, n), load)}
-              onRemove={(fid) => run(() => removeFloor(id, fid), load)} />
-            <p><small>To change the geometry, fix the DXF and add it as a new floor. Editing walls and openings in the app is planned.</small></p>
+              onRemove={(fid) => { setEditingPlan(null); run(() => removeFloor(id, fid), load); }}
+              onEditPlan={setEditingPlan} />
+            {editingPlan && manifest.floors.some((f) => f.id === editingPlan) && (
+              <PlanEditor key={editingPlan} projectId={id} floor={manifest.floors.find((f) => f.id === editingPlan)!} onSaved={load} onClose={() => setEditingPlan(null)} />
+            )}
+            <p><small>{edit ? "Use Edit plan on a floor to change its walls, doors, windows and room names, or fix the DXF and add it as a new floor." : "To change the geometry, fix the DXF and add it as a new floor."}</small></p>
             <details>
               <summary>Plan vs model (the drawing under what was built)</summary>
               <PlanOverlay projectId={id} floors={manifest.floors} />

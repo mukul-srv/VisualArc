@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { addFloorJob, generateJob } from "./jobs";
+import { addFloorJob, generateJob, saveEditsJob } from "./jobs";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const seq = (...rs: Response[]) => vi.fn(async () => rs.shift()!) as unknown as typeof fetch;
@@ -44,4 +44,16 @@ test("persistent poll errors fail; 404 fails at once", async () => {
   expect(await generateJob({ upload_id: "u" }, undefined, many, 0)).toMatchObject({ ok: false, kind: "error" });
   const gone = seq(json({ job_id: "j" }, 202), json({ detail: "unknown job" }, 404));
   expect(await generateJob({ upload_id: "u" }, undefined, gone, 0)).toMatchObject({ ok: false, message: "unknown job" });
+});
+
+test("saving edits PUTs the full list to the floor's edits URL; a blocking edit comes back with its issues", async () => {
+  const f = vi.fn(async (_u: RequestInfo | URL, init?: RequestInit) =>
+    init?.method === "PUT" ? json({ job_id: "j" }, 202)
+      : json({ status: "failed", stage: "building-model", progress: 50, error: "Blocking issues", result: { issues: [{ code: "opening_exceeds_wall_height" }] } })) as unknown as typeof fetch;
+  const r = await saveEditsJob("p1", "floor-0", [{ op: "remove_wall", id: "e1" }], undefined, f, 0);
+  const put = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+  expect(put[0]).toContain("/api/v1/jobs/projects/p1/floors/floor-0/edits");
+  expect(put[1].method).toBe("PUT");
+  expect(JSON.parse(put[1].body as string)).toEqual({ edits: [{ op: "remove_wall", id: "e1" }] });
+  expect(r).toMatchObject({ ok: false, kind: "blocked", issues: [{ code: "opening_exceeds_wall_height" }] });
 });

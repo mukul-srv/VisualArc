@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { fit, getPlanOverlay, overlayBounds, toScreen, wallCorners, type OverlayData } from "./overlay";
+import { fit, getPlanOverlay, overlayBounds, panBy, toPlan, toScreen, wallCorners, zoomAt, type OverlayData } from "./overlay";
 
 const d: OverlayData = {
   floor_id: "f",
@@ -54,4 +54,20 @@ test("getPlanOverlay reads the floor plan endpoint and passes the share token", 
   const r = await getPlanOverlay("p1", "floor-0", f, "tok");
   expect(r.ok && r.overlay.floor_id).toBe("f");
   expect(url).toBe("/api/v1/projects/p1/floors/floor-0/plan?share=tok");
+});
+
+test("toPlan inverts toScreen; zoomAt keeps the point under the cursor; panBy shifts the view", () => {
+  const f = fit(overlayBounds(d)!, 500, 400, 10);
+  for (const [x, y] of [[0, 0], [1234.5, 2222], [-500, 3000]] as [number, number][]) {
+    const [sx, sy] = toScreen(f, x, y);
+    const [px, py] = toPlan(f, sx, sy);
+    expect(px).toBeCloseTo(x, 6);
+    expect(py).toBeCloseTo(y, 6);
+  }
+  const z = zoomAt(f, 120, 80, 2);
+  expect(z.scale).toBeCloseTo(f.scale * 2, 9);
+  const [px, py] = toPlan(f, 120, 80);
+  const [sx, sy] = toScreen(z, px, py);
+  expect([sx, sy].map((v) => Math.round(v * 1e6) / 1e6)).toEqual([120, 80]);
+  expect(toScreen(panBy(f, 5, -3), 0, 0)).toEqual([toScreen(f, 0, 0)[0] + 5, toScreen(f, 0, 0)[1] - 3]);
 });

@@ -150,6 +150,38 @@ test("review: a draft stores nothing and reports blocking issues; accept generat
   expect((await recent()).length).toBe(before + 1);
 }, 60_000);
 
+test("plan editing: the overlay feeds the editor model, a saved edit is replayed, a blocking edit saves nothing", async () => {
+  const jobs = await import("./jobs");
+  const overlay = await import("./overlay");
+  const edit = await import("./plan-edit");
+  const created = await api.createProject("Edit plan");
+  if (!created.ok) throw new Error(created.message);
+  const pid = (created as unknown as { project_id: string }).project_id;
+  const up = await api.uploadDxf(fixture("fixture_openings.dxf"));
+  if (!up.ok) throw new Error(up.message);
+  const add = await jobs.addFloorJob(pid, { upload_id: up.upload_id, floor_name: "G", elevation: 0, wall_height: 3000, ceiling_height: 3000 });
+  if (!add.ok) throw new Error(add.message);
+  const fid = (add.floor as { id: string }).id;
+  const load = async () => {
+    const r = await overlay.getPlanOverlay(pid, fid);
+    if (!r.ok) throw new Error(r.message);
+    return r.overlay;
+  };
+  const model = edit.toEditModel(await load());
+  expect(model?.openings.length).toBeGreaterThan(0);
+  const o = model!.openings[0];
+  // a blocking edit (taller than its wall) is a failed job with issues, and nothing is stored
+  const bad = await jobs.saveEditsJob(pid, fid, [edit.setOpeningOp("e1", o, { height: 3500 })], undefined, fetch, 100);
+  expect(bad).toMatchObject({ ok: false, kind: "blocked" });
+  expect((await load()).edits).toEqual([]);
+  // removing an opening is saved, replayed and visible in the next overlay
+  const ok = await jobs.saveEditsJob(pid, fid, [edit.removeOpeningOp("e1", o)], undefined, fetch, 100);
+  expect(ok.ok).toBe(true);
+  const after = await load();
+  expect(after.edits).toHaveLength(1);
+  expect(after.model.openings).toHaveLength(model!.openings.length - 1);
+}, 60_000);
+
 test("2-floor project: create, add floors, manifest, each floor GLB sits at its elevation", async () => {
   const { parseManifest, sortFloors } = await import("./project");
   const c = await api.createProject("House");
