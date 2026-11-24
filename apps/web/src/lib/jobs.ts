@@ -62,8 +62,9 @@ async function run<T>(
   }
 }
 
-const startPost = (path: string, body: unknown, f: Fetch) => () =>
-  f(url(path), { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const startReq = (method: "POST" | "PUT") => (path: string, body: unknown, f: Fetch) => () =>
+  f(url(path), { method, credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const startPost = startReq("POST");
 
 export const generateJob = (params: GenerationParams, onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
   run<{ generation_id: string; issues: Issue[] }>(startPost("/generations", params, f), onProgress, f, intervalMs);
@@ -87,3 +88,8 @@ export type DraftBody = Omit<GenerationParams, "upload_id"> & { floors?: unknown
 
 export const draftJob = (uploadId: string, body: DraftBody, onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
   run<DraftResult>(startPost(`/uploads/${uploadId}/draft`, body, f), onProgress, f, intervalMs);
+
+/** Replace a floor's edits (the full ordered list) and regenerate that floor. A blocking edit comes back as a failed
+ *  job with its issues (kind "blocked"); nothing is saved then. */
+export const saveEditsJob = (projectId: string, floorId: string, edits: unknown[], onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
+  run<{ version: number; issues: Issue[] }>(startReq("PUT")(`/projects/${projectId}/floors/${floorId}/edits`, { edits }, f), onProgress, f, intervalMs);

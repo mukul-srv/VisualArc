@@ -79,6 +79,7 @@ export function FloorList(p: {
   busy?: boolean;
   onRename: (floorId: string, name: string) => void;
   onRemove: (floorId: string) => void;
+  onEditPlan?: (floorId: string) => void; // editors and the owner: opens the 2D plan editor
 }) {
   const { edit } = can(p.role);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
@@ -99,6 +100,7 @@ export function FloorList(p: {
             <>
               <span>{f.name} at {f.elevation.value} mm</span>
               <a href={viewerUrl(p.projectId, f.id)}>Open in viewer</a>
+              {edit && p.onEditPlan && <button type="button" disabled={p.busy} onClick={() => p.onEditPlan!(f.id)}>Edit plan</button>}
               {edit && (
                 <MoreMenu title={HELP.more}>
                   <button type="button" disabled={p.busy} onClick={() => setRenaming({ id: f.id, name: f.name })}>Rename</button>

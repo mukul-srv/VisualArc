@@ -12,3 +12,6 @@ Browser viewer for engine output. Never duplicates parsing or geometry rules (th
 Fresh worktree: don't `npm ci` unless the lockfile differs from main. If `apps/web/package-lock.json` matches main, link main's deps (PowerShell, from repo root):
 `New-Item -ItemType Junction -Path apps/web/node_modules -Target <main-repo>/apps/web/node_modules`
 `next build` needs a real `npm ci` — Turbopack does not follow the junction.
+
+## Plan editor
+- `PlanEditor` (project Floors tab, editor+) edits walls, doors/windows and room names. All logic is pure in `lib/plan-edit.ts` (hit-test, snap, drag, op builders mirroring `engine/edits.py`, undo/redo, local preview); the preview only moves edited rectangles, the server re-derives everything on save (`saveEditsJob`) and a block saves nothing.

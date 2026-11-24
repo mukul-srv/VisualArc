@@ -115,3 +115,12 @@ test("a missing role fails closed to viewer", () => {
   expect(html).not.toMatch(/Add floor|>Share<|>Delete</);
   expect(html).toContain("(shared: viewer)");
 });
+
+test("Edit plan is offered to editors and owners only, and only when the page can open the editor", () => {
+  const list = (role: Role, on = true) =>
+    renderToStaticMarkup(<FloorList projectId={id} floors={floors} role={role} onRename={() => {}} onRemove={() => {}} onEditPlan={on ? () => {} : undefined} />);
+  expect(list("owner").match(/>Edit plan</g)).toHaveLength(2);
+  expect(list("editor")).toContain(">Edit plan<");
+  expect(list("viewer")).not.toContain("Edit plan");
+  expect(list("editor", false)).not.toContain("Edit plan");
+});

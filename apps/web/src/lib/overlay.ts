@@ -8,11 +8,14 @@ export type OverlayData = {
   unit: "mm";
   source: { segments: { layer: string; wall: boolean; p: [number, number, number, number] }[]; total: number; truncated: boolean };
   model: {
-    walls: { id: string; start: [number, number]; end: [number, number]; thickness: number }[];
+    // handles, provenance, wall_id, width/height/sill and rooms come with the backend's editing support (older data lacks them)
+    walls: { id: string; start: [number, number]; end: [number, number]; thickness: number; handles?: string[]; provenance?: string }[];
     junctions: [number, number][][];
-    openings: { id: string; kind: string; start: [number, number]; end: [number, number]; inferred: boolean }[];
+    openings: { id: string; kind: string; start: [number, number]; end: [number, number]; inferred: boolean; wall_id?: string; width?: number; height?: number; sill?: number; provenance?: string; handles?: string[] }[];
     boundaries: { polygon: [number, number][]; inferred: boolean }[];
+    rooms?: { id: string; polygon: [number, number][]; name: string; name_source: string; area: number; label_point: [number, number] }[];
   };
+  edits?: unknown[]; // the floor's stored edit ops, in order
 };
 
 export const getPlanOverlay = (pid: string, floorId: string, f: Fetch = fetch, share?: string | null) =>
@@ -46,6 +49,18 @@ export function fit(b: Bounds, width: number, height: number, pad = 12): Fit {
 
 /** Plan mm -> canvas px (y flipped: plan up is screen up). */
 export const toScreen = (f: Fit, x: number, y: number): [number, number] => [x * f.scale + f.offX, f.offY - y * f.scale];
+
+/** Canvas px -> plan mm (the inverse of toScreen). */
+export const toPlan = (f: Fit, sx: number, sy: number): [number, number] => [(sx - f.offX) / f.scale, (f.offY - sy) / f.scale];
+
+/** Zoom by `factor` keeping the plan point under the cursor (sx, sy) where it is. */
+export function zoomAt(f: Fit, sx: number, sy: number, factor: number): Fit {
+  const [px, py] = toPlan(f, sx, sy);
+  const scale = f.scale * factor;
+  return { ...f, scale, offX: sx - px * scale, offY: sy + py * scale };
+}
+
+export const panBy = (f: Fit, dx: number, dy: number): Fit => ({ ...f, offX: f.offX + dx, offY: f.offY + dy });
 
 /** A wall footprint rectangle (its four corners, plan mm) from its centreline and thickness. */
 export function wallCorners(w: { start: [number, number]; end: [number, number]; thickness: number }): [number, number][] {
