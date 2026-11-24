@@ -55,3 +55,7 @@ export function changeTarget(prev: ProjectTarget, next: ProjectTarget): { proj: 
   const moved = prev.on !== next.on || prev.target.trim() !== next.target.trim();
   return { proj: moved ? { ...next, elevation: "" } : next, resetConventions: moved && existing(prev) && !existing(next) };
 }
+
+/** Everything a review was read from; Accept must save exactly this, so any change makes the review stale. */
+export const reviewKey = (inputs: unknown): string => JSON.stringify(inputs);
+export const reviewStale = (saved: string | null, inputs: unknown): boolean => saved !== null && saved !== reviewKey(inputs);

@@ -21,7 +21,7 @@ from api.sharing import Principal
 from api.storage import blob_path, upload_path
 
 
-def _segments(doc, handles: set[str] | None, k: float, off: tuple[float, float], settings) -> list[tuple]:
+def segments_of(doc, handles: set[str] | None, k: float, off: tuple[float, float], settings) -> list[tuple]:
     """(layer, x0, y0, x1, y1) in plan mm for LINEs and the edges of LWPOLYLINEs on the floor's entities."""
     out = []
     ox, oy = off
@@ -81,7 +81,7 @@ def get_plan_overlay(pid: str, floor_id: str, who: Principal):
     if k is None:
         raise HTTPException(409, "the source drawing's units could not be resolved")
     sc = f.get("scope")
-    segs = _segments(doc, None if sc is None else set(sc["handles"]), k, (0.0, 0.0) if sc is None else tuple(sc["offset"]), settings)
+    segs = segments_of(doc, None if sc is None else set(sc["handles"]), k, (0.0, 0.0) if sc is None else tuple(sc["offset"]), settings)
     try:
         canon = json.loads(blob_path(f"{prefix}/model.canonical.json").read_text("utf-8"))
         fl = canon["buildings"][0]["floors"][0]

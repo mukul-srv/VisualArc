@@ -9,7 +9,7 @@ const m2 = (mm2: number) => (mm2 / 1e6).toFixed(1);
 
 /** Guided review before saving: per floor the plan drawn from the draft, stats and issues with fix
  *  actions. Accept is disabled while blocking issues remain. Nothing here is stored. */
-export function ReviewPanel(p: { draft: DraftResult; busy: boolean; onFix: (a: FixAction) => void; onRerun: () => void; onAccept: () => void }) {
+export function ReviewPanel(p: { draft: DraftResult; stale?: boolean; busy: boolean; onFix: (a: FixAction) => void; onRerun: () => void; onAccept: () => void }) {
   const { draft } = p;
   return (
     <section aria-label="Review">
@@ -27,7 +27,8 @@ export function ReviewPanel(p: { draft: DraftResult; busy: boolean; onFix: (a: F
         </div>
       ))}
       <button disabled={p.busy} onClick={p.onRerun}>Re-run review</button>{" "}
-      <button disabled={p.busy || draft.blocking} onClick={p.onAccept}>Accept &amp; generate</button>
+      <button disabled={p.busy || draft.blocking || p.stale} onClick={p.onAccept}>Accept &amp; generate</button>
+      {p.stale && <p role="status">The inputs changed since this review. Re-run it before accepting.</p>}
       {draft.blocking && <p role="status">Resolve the blocking issues, then re-run the review.</p>}
     </section>
   );

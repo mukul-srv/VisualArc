@@ -4,7 +4,7 @@ generate/split/add-floor calls, so there is one commit path."""
 
 from api.engine.adapters.dxf.reader import InputError, load_doc, resolve_scale
 from api.generations import GenerationRequest, read_project, request_settings
-from api.plan_overlay import _segments, overlay_of
+from api.plan_overlay import overlay_of, segments_of
 from api.storage import upload_path
 from api.uploads import FloorConfirm, split_plan
 
@@ -30,7 +30,7 @@ def _entry(project, req, name: str | None, key: str | None, scope) -> dict:
     except InputError:
         k = None
     if k is not None:
-        segs = _segments(doc, None if scope is None else set(scope.handles), k,
+        segs = segments_of(doc, None if scope is None else set(scope.handles), k,
                          (0.0, 0.0) if scope is None else tuple(scope.offset),
                          request_settings(req))
         out["overlay"] = {"unit": "mm", **overlay_of(fl, segs, request_settings(req))}

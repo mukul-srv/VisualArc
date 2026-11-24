@@ -77,7 +77,8 @@ def test_draft_split_rows():
 
 
 def test_draft_owner_only():
-    c = TestClient(app)
-    up = _upload(c)
-    assert c.post("/api/v1/jobs/uploads/" + "0" * 32 + "/draft", json=H).status_code == 404
-    assert up
+    owner, other = TestClient(app), TestClient(app)  # each client is a fresh user
+    up = _upload(owner)
+    assert other.post(f"/api/v1/jobs/uploads/{up}/draft", json=H).status_code == 404
+    assert owner.post("/api/v1/jobs/uploads/" + "0" * 32 + "/draft", json=H).status_code == 404
+    assert owner.post(f"/api/v1/jobs/uploads/{up}/draft", json=H).status_code == 202

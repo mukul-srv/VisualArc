@@ -25,3 +25,9 @@ test("accept is disabled while blocking issues remain", () => {
   expect(blocked).toContain("Choose units");
   expect(render(draft([], false))).not.toMatch(/<button disabled=""[^>]*>Accept/);
 });
+
+test("a stale review cannot be accepted", () => {
+  const html = renderToStaticMarkup(<ReviewPanel draft={draft([], false)} stale busy={false} onFix={() => {}} onRerun={() => {}} onAccept={() => {}} />);
+  expect(html).toMatch(/<button disabled=""[^>]*>Accept &amp; generate/);
+  expect(html).toContain("inputs changed");
+});

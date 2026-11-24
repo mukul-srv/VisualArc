@@ -7,7 +7,7 @@ import { createProject, getPresets, getProject, isGenerationId, splitUpload, upl
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, unitsDoubtful, unresolvable, type FormValues } from "@/lib/params";
-import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache, targetAfterCreate, uploadStep } from "@/lib/upload-state";
+import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache, reviewKey, reviewStale, targetAfterCreate, uploadStep } from "@/lib/upload-state";
 import { HELP } from "@/lib/help";
 import { focusSelector, type FixAction } from "@/lib/issues";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
@@ -30,7 +30,7 @@ export function UploadFlow() {
   const [rows, setRows] = useState<SplitRow[]>([]);
   const [projectName, setProjectName] = useState("");
   const [proj, setProj] = useState(NO_TARGET);
-  const [review, setReview] = useState<DraftResult | null>(null);
+  const [review, setReview] = useState<{ draft: DraftResult; key: string } | null>(null);
 
   const [presets, setPresets] = useState<Presets | null>(null);
   const [conv, setConv] = useState<ConventionsSpec>(DEFAULT_CONVENTIONS);
@@ -188,6 +188,7 @@ export function UploadFlow() {
     else setFailure(r);
   }
 
+  const inputs = { form, rows, conv, projectName, proj };
   // Review: a draft read of the upload that stores nothing; Accept runs the normal generate/split calls.
   async function onReview() {
     if (!pre) return;
@@ -213,7 +214,7 @@ export function UploadFlow() {
     const r = await draftJob(pre.upload_id, body, setJob);
     setBusy(false);
     setJob(null);
-    if (r.ok) setReview(r);
+    if (r.ok) setReview({ draft: r, key: reviewKey(inputs) });
     else setFailure(r);
   }
 
@@ -278,7 +279,7 @@ export function UploadFlow() {
             disabled={busy || blocked.length > 0}
             onSubmit={onReview}
           />
-          {review && <ReviewPanel draft={review} busy={busy} onFix={onFix} onRerun={onReview} onAccept={splitting ? onSplit : onGenerate} />}
+          {review && <ReviewPanel draft={review.draft} stale={reviewStale(review.key, inputs)} busy={busy} onFix={onFix} onRerun={onReview} onAccept={splitting ? onSplit : onGenerate} />}
           {blocked.length > 0 && <p>Fix the blocking issues in the drawing and upload it again.</p>}
         </>
       )}
