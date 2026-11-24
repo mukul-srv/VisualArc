@@ -6,7 +6,39 @@ import { refs } from "./selection";
 export type Level = "error" | "warning" | "info";
 export const LEVEL_LABEL: Record<Level, string> = { error: "Error", warning: "Warning", info: "Info" };
 
+// What the user can do about an issue in the upload flow; the UI maps each to a form field (focusSelector).
+export type FixAction =
+  | { kind: "layer"; label: string }
+  | { kind: "param"; label: string; field: "wallHeight" | "ceilingHeight" }
+  | { kind: "units"; label: string }
+  | { kind: "split"; label: string };
+
 type Entry = { title: string; help: string; info?: true };
+
+const MAP_LAYER: FixAction = { kind: "layer", label: "Map layers" };
+const SET_UNITS: FixAction = { kind: "units", label: "Choose units" };
+const ACTIONS: Record<string, FixAction> = {
+  unmapped_layer: MAP_LAYER,
+  no_walls: MAP_LAYER,
+  no_plan_geometry: MAP_LAYER,
+  units_missing: SET_UNITS,
+  units_conflict: SET_UNITS,
+  units_implausible: SET_UNITS,
+  wall_height_missing: { kind: "param", label: "Set wall height", field: "wallHeight" },
+  ceiling_height_missing: { kind: "param", label: "Set ceiling height", field: "ceilingHeight" },
+  floor_split_unconfirmed: { kind: "split", label: "Confirm floors" },
+};
+export const actionOf = (code: string): FixAction | undefined => ACTIONS[code];
+
+/** CSS selector of the control a fix action points at (UploadForm / ConventionsPanel). */
+export function focusSelector(a: FixAction): string {
+  switch (a.kind) {
+    case "layer": return 'section[aria-label="Layer conventions"] select';
+    case "param": return `#f-${a.field}`;
+    case "units": return "#f-units";
+    case "split": return 'input[aria-label^="Name "]';
+  }
+}
 
 // What each engine code means in plain language and what to do about it. `info` = a value the
 // engine assumed or a note about the input, not a defect (still counted and listed).
@@ -127,7 +159,7 @@ export const levelOf = (i: Issue): Level =>
   i.severity === "blocking" ? "error" : CATALOG[i.code]?.info || i.code.endsWith("_defaulted") ? "info" : "warning";
 
 /** `info` groups are still engine *warnings* (severity is never changed); `tag` says why they are quieter. */
-export type IssueGroup = { code: string; title: string; help: string; level: Level; issues: Issue[]; tag?: string };
+export type IssueGroup = { code: string; title: string; help: string; level: Level; issues: Issue[]; tag?: string; action?: FixAction };
 
 const ORDER: Record<Level, number> = { error: 0, warning: 1, info: 2 };
 
@@ -147,6 +179,7 @@ export function groupIssues(issues: Issue[]): IssueGroup[] {
         level,
         issues: [],
         ...(i.code.endsWith("_defaulted") ? { tag: "assumed default" } : {}),
+        ...(ACTIONS[i.code] ? { action: ACTIONS[i.code] } : {}),
       };
       by.set(key, g);
     }

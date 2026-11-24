@@ -38,6 +38,27 @@ def _segments(doc, handles: set[str] | None, k: float, off: tuple[float, float],
     return out
 
 
+def overlay_of(fl: dict, segs: list[tuple], settings) -> dict:
+    """Pure: the plan overlay (source linework + model footprints) of one canonical floor dict and its
+    source segments. Wall layers come first so a cut keeps the walls."""
+    walls = settings.wall_layers
+    segs = sorted(segs, key=lambda s: s[0].upper() not in walls)
+    cap = settings.plan_overlay_max_segments
+    return {
+        "source": {
+            "segments": [{"layer": s[0], "wall": s[0].upper() in walls, "p": [s[1], s[2], s[3], s[4]]} for s in segs[:cap]],
+            "total": len(segs),
+            "truncated": len(segs) > cap,
+        },
+        "model": {
+            "walls": [{"id": w["id"], "start": w["centreline"]["start"], "end": w["centreline"]["end"], "thickness": w["thickness"]["value"]} for w in fl["walls"]],
+            "junctions": [j["polygon"] for j in fl["junctions"]],
+            "openings": [{"id": o["id"], "kind": o["kind"], "start": o["span"]["start"], "end": o["span"]["end"], "inferred": o["width"]["source"] == "inferred"} for o in fl["openings"]],
+            "boundaries": [{"polygon": b["polygon"], "inferred": b.get("source") == "inferred"} for b in fl["boundaries"]],
+        },
+    }
+
+
 @public_router.get("/projects/{pid}/floors/{floor_id}/plan")
 def get_plan_overlay(pid: str, floor_id: str, who: Principal):
     with session() as db:
@@ -61,27 +82,9 @@ def get_plan_overlay(pid: str, floor_id: str, who: Principal):
         raise HTTPException(409, "the source drawing's units could not be resolved")
     sc = f.get("scope")
     segs = _segments(doc, None if sc is None else set(sc["handles"]), k, (0.0, 0.0) if sc is None else tuple(sc["offset"]), settings)
-    # wall layers first, so a cut keeps the walls; then the rest in drawing order
-    walls = settings.wall_layers
-    segs.sort(key=lambda s: s[0].upper() not in walls)
-    cap = settings.plan_overlay_max_segments
     try:
         canon = json.loads(blob_path(f"{prefix}/model.canonical.json").read_text("utf-8"))
         fl = canon["buildings"][0]["floors"][0]
     except (OSError, ValueError, KeyError, IndexError) as e:
         raise HTTPException(409, "this floor's model data is missing or unreadable") from e
-    return {
-        "floor_id": floor_id,
-        "unit": "mm",
-        "source": {
-            "segments": [{"layer": s[0], "wall": s[0].upper() in walls, "p": [s[1], s[2], s[3], s[4]]} for s in segs[:cap]],
-            "total": len(segs),
-            "truncated": len(segs) > cap,
-        },
-        "model": {
-            "walls": [{"id": w["id"], "start": w["centreline"]["start"], "end": w["centreline"]["end"], "thickness": w["thickness"]["value"]} for w in fl["walls"]],
-            "junctions": [j["polygon"] for j in fl["junctions"]],
-            "openings": [{"id": o["id"], "kind": o["kind"], "start": o["span"]["start"], "end": o["span"]["end"], "inferred": o["width"]["source"] == "inferred"} for o in fl["openings"]],
-            "boundaries": [{"polygon": b["polygon"], "inferred": b.get("source") == "inferred"} for b in fl["boundaries"]],
-        },
-    }
+    return {"floor_id": floor_id, "unit": "mm", **overlay_of(fl, segs, settings)}

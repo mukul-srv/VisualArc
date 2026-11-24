@@ -1,4 +1,5 @@
 import { API_BASE, send, type FloorParams, type GenerationParams, type Issue, type Failure, type Result } from "./api";
+import type { OverlayData } from "./overlay";
 import type { Floor } from "./project";
 
 // Generation jobs: start one, poll its status, resolve with the same shape the synchronous
@@ -72,3 +73,17 @@ export const changeParametersJob = (projectId: string, values: Record<string, nu
 
 export const addFloorJob = (projectId: string, params: FloorParams, onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
   run<{ floor: Floor; generation_id: string; issues: Issue[] }>(startPost(`/projects/${projectId}/floors`, params, f), onProgress, f, intervalMs);
+
+// Guided review: nothing is stored; the result is per floor issues, stats and the plan overlay.
+export type DraftFloor = {
+  key: string | null;
+  name: string | null;
+  issues: Issue[];
+  stats: { walls: number; openings: number; rooms: number; area: number } | null; // area in mm2
+  overlay: Omit<OverlayData, "floor_id"> | null;
+};
+export type DraftResult = { floors: DraftFloor[]; blocking: boolean };
+export type DraftBody = Omit<GenerationParams, "upload_id"> & { floors?: unknown[]; conventions?: unknown };
+
+export const draftJob = (uploadId: string, body: DraftBody, onProgress?: (p: JobProgress) => void, f: Fetch = fetch, intervalMs = 500) =>
+  run<DraftResult>(startPost(`/uploads/${uploadId}/draft`, body, f), onProgress, f, intervalMs);

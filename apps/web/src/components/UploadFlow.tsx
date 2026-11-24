@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { addFloorJob, generateJob, STAGE_LABEL, type JobProgress } from "@/lib/jobs";
+import { addFloorJob, draftJob, generateJob, STAGE_LABEL, type DraftResult, type JobProgress } from "@/lib/jobs";
 import { useRouter } from "next/navigation";
 import { createProject, getPresets, getProject, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
@@ -9,11 +9,13 @@ import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventi
 import { buildRequest, unitsDoubtful, unresolvable, type FormValues } from "@/lib/params";
 import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache, targetAfterCreate, uploadStep } from "@/lib/upload-state";
 import { HELP } from "@/lib/help";
+import { focusSelector, type FixAction } from "@/lib/issues";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ConventionsPanel } from "./ConventionsPanel";
 import { IssueList } from "./IssueList";
+import { ReviewPanel } from "./ReviewPanel";
 import { UploadForm } from "./UploadForm";
 
 export function UploadFlow() {
@@ -28,6 +30,7 @@ export function UploadFlow() {
   const [rows, setRows] = useState<SplitRow[]>([]);
   const [projectName, setProjectName] = useState("");
   const [proj, setProj] = useState(NO_TARGET);
+  const [review, setReview] = useState<DraftResult | null>(null);
 
   const [presets, setPresets] = useState<Presets | null>(null);
   const [conv, setConv] = useState<ConventionsSpec>(DEFAULT_CONVENTIONS);
@@ -100,6 +103,7 @@ export function UploadFlow() {
     setPre(null);
     setFailure(null);
     setBlockedIssues(null);
+    setReview(null);
     setErrors([]);
     // everything typed or chosen for the previous file goes; a ?project= target stays
     const fresh = resetForNewFile(proj, addingTo !== null);
@@ -184,6 +188,43 @@ export function UploadFlow() {
     else setFailure(r);
   }
 
+  // Review: a draft read of the upload that stores nothing; Accept runs the normal generate/split calls.
+  async function onReview() {
+    if (!pre) return;
+    const split = (pre.floor_candidates?.length ?? 0) >= 2;
+    let body;
+    if (split) {
+      const req = buildSplitRequest(pre, form, rows, projectName);
+      if (!req.ok) return setErrors(req.errors);
+      const { project_name: _name, ...rest } = req.body; // the draft names no project
+      void _name;
+      body = { ...rest, conventions: conv };
+    } else {
+      const req = buildRequest(pre, form);
+      if (!req.ok) return setErrors(req.errors);
+      const { upload_id: _id, ...rest } = req.params; // the URL names the upload
+      void _id;
+      body = { ...rest, conventions: conv };
+    }
+    setErrors([]);
+    setFailure(null);
+    setBlockedIssues(null);
+    setBusy(true);
+    const r = await draftJob(pre.upload_id, body, setJob);
+    setBusy(false);
+    setJob(null);
+    if (r.ok) setReview(r);
+    else setFailure(r);
+  }
+
+  // Fix action: open what hides the control, then focus it (after React has rendered the open state).
+  function onFix(a: FixAction) {
+    const el = document.querySelector<HTMLElement>(focusSelector(a));
+    for (let d = el?.closest("details"); d; d = d.parentElement?.closest("details") ?? null) d.open = true;
+    el?.focus();
+    el?.scrollIntoView?.({ block: "center" });
+  }
+
   const splitting = (pre?.floor_candidates?.length ?? 0) >= 2;
   const setRow = (i: number, patch: Partial<SplitRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const shown = blockedIssues ?? pre?.issues ?? [];
@@ -235,8 +276,9 @@ export function UploadFlow() {
             setProj={changeProj}
             errors={errors}
             disabled={busy || blocked.length > 0}
-            onSubmit={splitting ? onSplit : onGenerate}
+            onSubmit={onReview}
           />
+          {review && <ReviewPanel draft={review} busy={busy} onFix={onFix} onRerun={onReview} onAccept={splitting ? onSplit : onGenerate} />}
           {blocked.length > 0 && <p>Fix the blocking issues in the drawing and upload it again.</p>}
         </>
       )}

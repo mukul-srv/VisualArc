@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fit, getPlanOverlay, LEGEND, overlayBounds, toScreen, wallCorners, type OverlayData } from "../lib/overlay";
 import type { Floor } from "../lib/project";
 import styles from "./dashboard.module.css";
@@ -10,15 +10,16 @@ const H = 520;
 type Layers = Record<"source" | "walls" | "openings" | "boundary", boolean>;
 
 // Read-only: the source drawing's lines (grey) under the built walls, openings and floor boundary (coloured).
-export function PlanOverlay({ projectId, floors, share }: { projectId: string; floors: Floor[]; share?: string | null }) {
+export function PlanOverlay({ projectId = "", floors = [], share, overlay }: { projectId?: string; floors?: Floor[]; share?: string | null; overlay?: Omit<OverlayData, "floor_id"> }) {
   const [floorId, setFloorId] = useState(floors[0]?.id ?? "");
-  const [data, setData] = useState<OverlayData | null>(null);
+  const [fetched, setData] = useState<OverlayData | null>(null);
+  const data = useMemo(() => (overlay ? { floor_id: "", ...overlay } : fetched) as OverlayData | null, [overlay, fetched]); // `overlay`: drawn from data, no fetch
   const [error, setError] = useState<string | null>(null);
   const [show, setShow] = useState<Layers>({ source: true, walls: true, openings: true, boundary: true });
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!floorId) return;
+    if (!floorId || overlay) return;
     let live = true;
     getPlanOverlay(projectId, floorId, fetch, share).then((r) => {
       if (!live) return;
@@ -33,7 +34,7 @@ export function PlanOverlay({ projectId, floors, share }: { projectId: string; f
     return () => {
       live = false;
     };
-  }, [projectId, floorId, share]);
+  }, [projectId, floorId, share, overlay]);
 
   useEffect(() => {
     const c = canvas.current;
@@ -96,18 +97,18 @@ export function PlanOverlay({ projectId, floors, share }: { projectId: string; f
     ctx.setLineDash([]);
   }, [data, show]);
 
-  if (!floors.length) return <p>No floors.</p>;
+  if (!overlay && !floors.length) return <p>No floors.</p>;
   return (
     <div>
       <div className={styles.row}>
-        <label>
+        {!overlay && <label>
           Floor{" "}
           <select value={floorId} onChange={(e) => setFloorId(e.target.value)}>
             {floors.map((f) => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
-        </label>
+        </label>}
         {(["source", "walls", "openings", "boundary"] as const).map((k) => (
           <label key={k}>
             <input type="checkbox" checked={show[k]} onChange={(e) => setShow({ ...show, [k]: e.target.checked })} /> {k}

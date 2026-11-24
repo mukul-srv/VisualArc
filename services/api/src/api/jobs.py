@@ -1,7 +1,7 @@
 """Background generation jobs: DB job table + one in-process worker thread (no broker).
 
 POST starts a job (access checked up front, the work runs on the single worker); the client polls
-GET /jobs/{id} for status/stage/progress and the final result or error. Kinds: generation, floor, parameters (regenerate every floor). Stages: queued, parsing,
+GET /jobs/{id} for status/stage/progress and the final result or error. Kinds: generation, floor, parameters (regenerate every floor), draft (review, stores nothing). Stages: queued, parsing,
 building-model, exporting, done. A blocking-issue outcome is a failed job whose `result` holds the
 issues. shortcut: a single runner in one API process; on startup `recover_jobs` fails whatever the
 previous process left queued or running. Move to a real queue before running several API workers.
@@ -19,6 +19,7 @@ from sqlalchemy import update
 from api.access import owned, project_role
 from api.auth import CurrentUser, current_user
 from api.db import JobRow, ProjectRow, UploadRow, session
+from api.draft import DraftRequest, run_draft
 from api.generations import GenerationRequest, result, run_generation
 from api.projects import (
     FloorRequest,
@@ -81,6 +82,8 @@ def execute(job_id: str) -> None:
         _set(job_id, status="running")
         if kind == "floor":
             out = add_floor(pid, FloorRequest(**request), None, owner, progress=progress)
+        elif kind == "draft":  # stores nothing; blocking issues are part of the result
+            out = run_draft(DraftRequest(**request), owner, progress=progress)
         elif kind == "parameters":
             out = regenerate(pid, request, owner, progress=progress)
         else:
@@ -129,6 +132,13 @@ def _start(user, kind: str, pid: str | None, req) -> JSONResponse:
 @router.post("/generations", status_code=202)
 def start_generation(req: GenerationRequest, user: CurrentUser):
     return _start(user, "generation", None, req)
+
+
+@router.post("/uploads/{upload_id}/draft", status_code=202)
+def start_draft(upload_id: str, req: DraftRequest, user: CurrentUser):
+    """Guided review before saving: per floor issues, stats and plan overlay; nothing is stored."""
+    req.upload_id = upload_id
+    return _start(user, "draft", None, req)
 
 
 @router.post("/projects/{pid}/floors", status_code=202)

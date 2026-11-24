@@ -35,6 +35,7 @@ export function UploadForm(p: Props) {
     <label style={block}>
       {label}{" "}
       <input
+        id={`f-${k}`}
         value={form[k]}
         inputMode="decimal"
         placeholder={preset ? `default ${preset[key]}` : undefined}
@@ -59,7 +60,7 @@ export function UploadForm(p: Props) {
           {pre.needs.includes("units")
             ? "What unit was this drawing made in?"
             : "The drawing's size looks wrong for the units in its header. If you know the real unit, choose it (it replaces the header):"}{" "}
-          <select value={form.units} onChange={(e) => setForm({ ...form, units: e.target.value })}>
+          <select id="f-units" value={form.units} onChange={(e) => setForm({ ...form, units: e.target.value })}>
             <option value="">{pre.needs.includes("units") ? "select (required)" : "keep the header's units"}</option>
             {UNITS.map((u) => (
               <option key={u}>{u}</option>
@@ -159,7 +160,7 @@ export function UploadForm(p: Props) {
         </ul>
       )}
       <button disabled={p.disabled} onClick={p.onSubmit}>
-        {splitting ? "Build floors" : "Generate 3D model"}
+        Review
       </button>
     </>
   );

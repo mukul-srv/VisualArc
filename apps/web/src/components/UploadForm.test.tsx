@@ -44,7 +44,7 @@ test("General shows only essentials: building type (Residential preselected) and
   expect(g.match(/<input[^>]*value="residential"[^>]*>/)?.[0]).toContain("checked");
   expect(g.match(/<input[^>]*value="commercial"[^>]*>/)?.[0]).not.toContain("checked");
   expect(g).toContain('value="commercial"');
-  expect(g).toContain("Generate 3D model");
+  expect(g).toContain("Review");
   expect(g).not.toMatch(/Wall height|Ceiling height|Door height|Window|elevation|Offset|Add to a project|<select/i);
 });
 
