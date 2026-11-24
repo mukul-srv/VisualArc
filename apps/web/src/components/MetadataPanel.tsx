@@ -1,7 +1,7 @@
 import { PROVENANCE_LABEL, type Panel } from "../lib/selection";
 
 // Provenance is always spelled out in text; assumed/inferred values are also emphasised.
-const EMPHASIS = { source_extracted: "#9fd29f", user_provided: "#9fc3ff", defaulted: "#ffcc66", inferred: "#ff9fd0" };
+const EMPHASIS = { source_extracted: "#9fd29f", user_provided: "#9fc3ff", defaulted: "#ffcc66", inferred: "#ff9fd0", user_modified: "#c9a0ff" };
 
 export function MetadataPanel({ panel }: { panel: Panel | null }) {
   if (!panel) return <aside aria-label="Selection">Click a wall, junction, floor or opening.</aside>;

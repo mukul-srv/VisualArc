@@ -28,9 +28,11 @@ from api.engine.settings import DEFAULTS
 # optional Slab.boundary_ids / holes of 0.7.1 stay readable ("holes" is always empty now).
 # 0.9.0: a floor boundary carries its provenance (`source_extracted` = drawn on the floor layer, `inferred` =
 # derived from the closed outer wall perimeter when the drawing has no floor outline). Older files read as drawn.
-SCHEMA_VERSION = "0.9.0"
+# 0.10.0: user edits (Section D). Provenance gains `user_modified` (a value or name the user changed in the
+# editor) and SourceRef.format gains "edit" (entity_handle = the edit op's id). Older files read unchanged.
+SCHEMA_VERSION = "0.10.0"
 
-Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred"]
+Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred", "user_modified"]
 Point2 = tuple[float, float]
 
 
@@ -46,7 +48,7 @@ class Measured(_Model):
 
 
 class SourceRef(_Model):
-    format: Literal["dxf"] = "dxf"
+    format: Literal["dxf", "edit"] = "dxf"
     layer: str
     entity_handle: str
 

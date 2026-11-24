@@ -3,9 +3,9 @@
 // else: every displayed value and provenance comes straight from that element, never
 // from a default or another element.
 
-export type Provenance = "source_extracted" | "user_provided" | "defaulted" | "inferred";
+export type Provenance = "source_extracted" | "user_provided" | "defaulted" | "inferred" | "user_modified";
 export type Measured = { value: number; unit: string; source: Provenance };
-export type SourceRef = { layer: string; entity_handle: string };
+export type SourceRef = { format?: "dxf" | "edit"; layer: string; entity_handle: string };
 type Pt = [number, number];
 
 export type OpeningData = {
@@ -73,6 +73,7 @@ export const PROVENANCE_LABEL: Record<Provenance, string> = {
   user_provided: "user-specified",
   defaulted: "ASSUMED DEFAULT (not in the drawing)",
   inferred: "INFERRED (not drawn)",
+  user_modified: "EDITED by you (differs from the drawing)",
 };
 
 export type Row = { label: string; value: string; provenance?: Provenance };

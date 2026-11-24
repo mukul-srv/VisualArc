@@ -81,6 +81,8 @@ def test_defaults_match_document_08():
             ("VINDUE", "window"), ("TÜR", "door"),
         ),
         "plan_overlay_max_segments": 6000,
+        "edit_match_tolerance_mm": 1.0,
+        "max_edits": 500,
         "bridge_unmarked_gaps": True,
         "bridged_opening_width_mm": (400.0, 2400.0),
         "role_face_tolerance_mm": 1.0,

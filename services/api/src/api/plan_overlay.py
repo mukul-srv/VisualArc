@@ -10,6 +10,7 @@ import json
 
 import ezdxf
 from fastapi import HTTPException
+from shapely.geometry import Polygon
 
 from api.access import owned
 from api.db import GenerationRow, ProjectConventionsRow, ProjectRow, session
@@ -51,9 +52,14 @@ def overlay_of(fl: dict, segs: list[tuple], settings) -> dict:
             "truncated": len(segs) > cap,
         },
         "model": {
-            "walls": [{"id": w["id"], "start": w["centreline"]["start"], "end": w["centreline"]["end"], "thickness": w["thickness"]["value"]} for w in fl["walls"]],
+            "walls": [{"id": w["id"], "start": w["centreline"]["start"], "end": w["centreline"]["end"], "thickness": w["thickness"]["value"],
+                       "handles": [s["entity_handle"] for s in w["sources"]], "provenance": w["thickness"]["source"]} for w in fl["walls"]],
             "junctions": [j["polygon"] for j in fl["junctions"]],
-            "openings": [{"id": o["id"], "kind": o["kind"], "start": o["span"]["start"], "end": o["span"]["end"], "inferred": o["width"]["source"] == "inferred"} for o in fl["openings"]],
+            "openings": [{"id": o["id"], "kind": o["kind"], "start": o["span"]["start"], "end": o["span"]["end"], "inferred": o["width"]["source"] == "inferred",
+                          "wall_id": o["wall_id"], "width": o["width"]["value"], "height": o["height"]["value"], "sill": o["sill_height"]["value"],
+                          "provenance": o["width"]["source"], "handles": [s["entity_handle"] for s in o["sources"]]} for o in fl["openings"]],
+            "rooms": [{"id": r["id"], "polygon": r["polygon"], "name": r["name"], "name_source": r["name_source"], "area": r["area"]["value"],
+                       "label_point": list(Polygon(r["polygon"], r.get("holes") or []).representative_point().coords[0])} for r in fl.get("rooms", [])],
             "boundaries": [{"polygon": b["polygon"], "inferred": b.get("source") == "inferred"} for b in fl["boundaries"]],
         },
     }
@@ -87,4 +93,4 @@ def get_plan_overlay(pid: str, floor_id: str, who: Principal):
         fl = canon["buildings"][0]["floors"][0]
     except (OSError, ValueError, KeyError, IndexError) as e:
         raise HTTPException(409, "this floor's model data is missing or unreadable") from e
-    return {"floor_id": floor_id, "unit": "mm", **overlay_of(fl, segs, settings)}
+    return {"floor_id": floor_id, "unit": "mm", **overlay_of(fl, segs, settings), "edits": f.get("edits", [])}

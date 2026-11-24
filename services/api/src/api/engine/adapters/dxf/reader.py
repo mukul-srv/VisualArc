@@ -7,6 +7,7 @@ $INSUNITS.
 """
 import math
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import replace
 from fnmatch import fnmatchcase
 from itertools import pairwise
@@ -43,6 +44,12 @@ from api.engine.canonical.model import (
     Wall,
 )
 from api.engine.conventions import layer_hint
+from api.engine.edits import (
+    apply_geometry_edits,
+    apply_room_edits,
+    edit_ref,
+    opening_dimensions,
+)
 from api.engine.geometry2d.balconies import find_balconies
 from api.engine.geometry2d.floor import closed_outer_perimeter, floor_issue
 from api.engine.geometry2d.openings import (
@@ -301,6 +308,7 @@ def read_dxf(
     elevation_assumed: str | None = None,  # why floor_elevation is an assumption, if it is
     params: dict[str, float | str] | None = None,  # user-given project parameters (parameters.py)
     roof: bool = True,  # False: not the top floor of its project, so no roof
+    edits: Sequence = (),  # the user's edits of this floor, in order (engine/edits.py)
 ) -> Project:
     if building_type is not None and building_type not in dict(settings.building_presets):
         raise ValueError(f"unknown building type {building_type!r}")
@@ -697,6 +705,10 @@ def read_dxf(
                 sources=[_ref(e) for e in ents[:ref_cap]],
             )
         )
+    edit_ids = {e.id for e in edits}
+    if edits:  # before openings are resolved, so everything downstream re-derives from the edited lines
+        segments, markers, edit_issues = apply_geometry_edits(segments, markers, edits, settings)
+        issues += edit_issues
     segments, cut_issues = cut_walls_at_markers(segments, markers, settings)
     issues += cut_issues
     res = resolve_openings(segments, markers, settings, tuple(arc_centres))
@@ -825,6 +837,7 @@ def read_dxf(
         {"door": (door_h, None), "window": (window_h, window_sill)},
         from_user,
         settings,
+        opening_dimensions(edits),
     )
     issues += opening_issues
     arcs = []
@@ -849,10 +862,11 @@ def read_dxf(
             centreline=LineGeometry(start=w.start, end=w.end),
             thickness=Measured(
                 value=w.thickness,
-                source="user_provided" if from_user else "source_extracted",
+                source="user_modified" if any(s.handle in edit_ids for s in w.sources)
+                else "user_provided" if from_user else "source_extracted",
             ),
             height=height,
-            sources=[s.ref for s in w.sources],
+            sources=[edit_ref(s.ref, edit_ids) for s in w.sources],
             role=(roles[w.id] or (None, None))[0],
             role_source=(roles[w.id] or (None, None))[1],
         )
@@ -973,6 +987,8 @@ def read_dxf(
         )
         for p in found
     ]
+    rooms, rename_issues = apply_room_edits(rooms, edits)
+    issues += rename_issues
     columns = []
     for n, c in enumerate(sorted(cols, key=lambda c: (c[2][1], c[2][0])), 1):  # y, then x
         ref = c[0]

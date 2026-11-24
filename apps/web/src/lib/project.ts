@@ -12,7 +12,7 @@ export type Role = "owner" | "editor" | "viewer";
 export type Manifest = { id: string; name: string; floors: Floor[]; role?: Role };
 
 const HEX32 = /^[0-9a-f]{32}$/;
-const PROVENANCES = ["source_extracted", "user_provided", "defaulted", "inferred"];
+const PROVENANCES = ["source_extracted", "user_provided", "defaulted", "inferred", "user_modified"];
 
 /** Validate an untrusted manifest; null when malformed (the viewer shows an error). */
 export function parseManifest(x: unknown): Manifest | null {
