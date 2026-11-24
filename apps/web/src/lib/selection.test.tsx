@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MetadataPanel } from "../components/MetadataPanel";
 import { pickElement } from "./pick";
-import { describeElement, describeOpening, describeRoom, pickOpening, type ElementData, type OpeningData } from "./selection";
+import { PROVENANCE_LABEL, describeElement, describeOpening, describeRoom, pickOpening, type ElementData, type OpeningData } from "./selection";
 
 const root = path.resolve(__dirname, "../../../..");
 type Canon = {
@@ -245,4 +245,8 @@ test("describeElement shows a roof's type and pitch with provenance, and a fallb
   const flat = describeElement({ id: "roof-002", type: "roof", kind: "flat", requested: "hip", outline_source: "walls", thickness: m(200, "defaulted"), sources: [] });
   expect(flat.rows.find((r) => r.label === "Requested type")?.value).toContain("hip");
   expect(flat.rows.find((r) => r.label === "Pitch")?.value).toBe("not used (flat)");
+});
+
+test("an edited value is labelled user_modified, never as extracted", () => {
+  expect(PROVENANCE_LABEL.user_modified).toMatch(/EDITED/);
 });

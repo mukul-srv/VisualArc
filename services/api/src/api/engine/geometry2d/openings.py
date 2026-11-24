@@ -563,12 +563,16 @@ def build_openings(
     heights: dict[str, tuple[float | None, float | None]],
     from_user: bool,
     settings: Settings = DEFAULTS,
+    edited: dict[str, tuple[float | None, float | None, bool, bool]] | None = None,
 ) -> tuple[list[Opening], list[Issue]]:
     """Canonical Openings with ADR-002 §5/§7 provenance.
 
     `heights`: kind -> (height flag, sill flag); None = use the Settings default.
     Door sill has no flag (always defaulted).
+    `edited`: marker handle -> (height, sill the user gave in an edit (None = not given), width changed, offset
+    changed). Only those values are `user_modified`; the rest keep their provenance.
     """
+    edited = edited or {}
     s, cap = settings, settings.unmapped_ref_cap
     defaults = {
         "door": (s.default_door_height_mm, s.default_door_sill_mm),
@@ -580,28 +584,33 @@ def build_openings(
     openings, issues = [], []
     for kind in ("door", "window"):
         mine = [o for o in found if o.kind == kind]
+        # openings whose height and sill were both given in an edit are not "defaulted"
+        mine_d = [o for o in mine if None in edited.get(o.marker.ref.entity_handle, (None, None))[:2]]
         given = heights.get(kind, (None, None))
-        (h, h_src), (sill, sill_src) = (
+        (h0, h0_src), (sill0, sill0_src) = (
             (v, "user_provided") if v is not None else (d, "defaulted")
             for v, d in zip(given, defaults[kind], strict=True)
         )
         dflt = [
             f"{name} {v:g} mm"
-            for name, v, src in (("height", h, h_src), ("sill", sill, sill_src))
+            for name, v, src in (("height", h0, h0_src), ("sill", sill0, sill0_src))
             if src == "defaulted"
         ]
-        if mine and dflt:
-            more = f"; first {cap} of {len(mine)} listed" if len(mine) > cap else ""
+        if mine_d and dflt:
+            more = f"; first {cap} of {len(mine_d)} listed" if len(mine_d) > cap else ""
             issues.append(
                 Issue(
                     code="opening_dimension_defaulted",
                     severity="warning",
-                    message=f"{len(mine)} {kind} opening(s): {', '.join(dflt)} from "
+                    message=f"{len(mine_d)} {kind} opening(s): {', '.join(dflt)} from "
                     f"provisional Settings defaults (not in the DXF){more}",
-                    sources=[o.marker.ref for o in mine[:cap]],
+                    sources=[o.marker.ref for o in mine_d[:cap]],
                 )
             )
         for o in mine:
+            ov = edited.get(o.marker.ref.entity_handle, (None, None))[:2]
+            h, h_src = (ov[0], "user_modified") if ov[0] is not None else (h0, h0_src)
+            sill, sill_src = (ov[1], "user_modified") if ov[1] is not None else (sill0, sill0_src)
             if wall_height is not None and sill + h > wall_height + s.tolerance_mm:
                 issues.append(
                     Issue(
@@ -640,8 +649,8 @@ def build_openings(
             kind=o.kind,
             wall_id=o.wall_id,
             span=LineGeometry(start=ends[0], end=ends[1]),
-            offset=Measured(value=o.offset, source="inferred" if o.marker.inferred else measured_default),
-            width=Measured(value=o.hi - o.lo, source="inferred" if o.marker.inferred else measured_default),
+            offset=Measured(value=o.offset, source=_span_source(o, measured_default, edited, 3)),
+            width=Measured(value=o.hi - o.lo, source=_span_source(o, measured_default, edited, 2)),
             height=Measured(value=h, source=h_src),
             sill_height=Measured(value=sill, source=sill_src),
             sources=[o.marker.ref] + [j.ref for j in o.jambs],
@@ -649,6 +658,13 @@ def build_openings(
         )
         for n, ((o, ends, h, h_src, sill, sill_src), d) in enumerate(zip(openings, details, strict=True), 1)
     ], issues
+
+
+def _span_source(o: FoundOpening, measured_default: str, edited: dict, flag: int) -> str:
+    if o.marker.inferred:
+        return "inferred"
+    changed = edited.get(o.marker.ref.entity_handle, (None, None, False, False))[flag]
+    return "user_modified" if changed else measured_default
 
 
 def _detail(o: FoundOpening, height: float, sill: float, s: Settings) -> OpeningDetail | None:

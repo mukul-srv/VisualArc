@@ -30,6 +30,7 @@ from api.db import (
 )
 from api.engine.adapters.dxf.split import FloorScope
 from api.engine.canonical.model import Issue, Measured
+from api.engine.edits import EditsRequest
 from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS
 from api.generations import (
@@ -492,7 +493,7 @@ def _replay(db: Session, pid: str, f: dict, overrides: dict, roof: bool, user_id
     gid, found = run_generation(
         req, user_id, db=db, floor_id=f["id"], floor_name=f["name"],
         floor_elevation=f["elevation"]["value"], elevation_assumed=f.get("elevation_assumed"),
-        scope=scope, progress=progress, roof=roof,
+        scope=scope, progress=progress, roof=roof, edits=EditsRequest(edits=f.get("edits", [])).edits,
         check_upload=False)  # editor access to the project covers its stored uploads
     if gid is None:
         return None, found
@@ -530,3 +531,27 @@ def regenerate(pid: str, overrides: dict, user_id: str, progress=None):
     except _Blocked:
         return blocked_response(issues)
     return {"project_id": pid, "version": number, "floors": floors, "issues": issues}
+
+
+def apply_edits(pid: str, floor_id: str, edits: list[dict], user_id: str, progress=None):
+    """Replace one floor's stored edits and regenerate only that floor, as one new version. A blocking
+    result (e.g. an edit that makes a bad opening) changes nothing and returns the 409 response."""
+    class _Blocked(Exception):
+        pass
+
+    try:
+        with session() as db, db.begin():
+            row = owned(db, ProjectRow, pid, user_id, "unknown project", lock=True, need="editor")
+            manifest = row.data
+            f = _floor(row, floor_id)
+            top = max(g["elevation"]["value"] for g in manifest["floors"])
+            moved, issues = _replay(db, pid, {**f, "edits": edits}, {}, f["elevation"]["value"] == top,
+                                    user_id, progress)
+            if moved is None:
+                raise _Blocked  # leaving the transaction by exception rolls it back
+            row.data = {**manifest, "floors": [moved if g["id"] == floor_id else g for g in manifest["floors"]]}
+            v = _version(db, row, user_id, f"Edited {f['name']}: {len(edits)} changes"[:200])
+            number = v.number
+    except _Blocked:
+        return blocked_response(issues)
+    return {"project_id": pid, "version": number, "floor": moved, "issues": issues}

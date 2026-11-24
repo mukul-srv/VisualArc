@@ -136,6 +136,11 @@ class Settings:
     # cut, wall layers kept first, and the response says it was cut.
     plan_overlay_max_segments: int = 6000
 
+    # User edits (engine/edits.py): an edit's target (a wall or opening snapshot taken from the model) is matched to the
+    # drawing's lines within this distance (mm), and at most this many edits are accepted per floor.
+    edit_match_tolerance_mm: float = 1.0
+    max_edits: int = 500
+
     # Words that suggest what an unmapped layer holds (upper case substring -> role text). Only ever shown as a
     # suggestion next to the unmapped layer, never applied. Kept short on purpose.
     layer_name_hints: tuple[tuple[str, str], ...] = (

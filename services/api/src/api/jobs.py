@@ -1,7 +1,7 @@
 """Background generation jobs: DB job table + one in-process worker thread (no broker).
 
 POST starts a job (access checked up front, the work runs on the single worker); the client polls
-GET /jobs/{id} for status/stage/progress and the final result or error. Kinds: generation, floor, parameters (regenerate every floor), draft (review, stores nothing). Stages: queued, parsing,
+GET /jobs/{id} for status/stage/progress and the final result or error. Kinds: generation, floor, parameters (regenerate every floor), draft (review, stores nothing), edits (one floor's user edits). Stages: queued, parsing,
 building-model, exporting, done. A blocking-issue outcome is a failed job whose `result` holds the
 issues. shortcut: a single runner in one API process; on startup `recover_jobs` fails whatever the
 previous process left queued or running. Move to a real queue before running several API workers.
@@ -20,11 +20,14 @@ from api.access import owned, project_role
 from api.auth import CurrentUser, current_user
 from api.db import JobRow, ProjectRow, UploadRow, session
 from api.draft import DraftRequest, run_draft
+from api.engine.edits import EditsRequest
 from api.generations import GenerationRequest, result, run_generation
 from api.projects import (
     FloorRequest,
     ParametersRequest,
+    _floor,
     add_floor,
+    apply_edits,
     check_regenerable,
     parameter_overrides,
     regenerate,
@@ -84,6 +87,8 @@ def execute(job_id: str) -> None:
             out = add_floor(pid, FloorRequest(**request), None, owner, progress=progress)
         elif kind == "draft":  # stores nothing; blocking issues are part of the result
             out = run_draft(DraftRequest(**request), owner, progress=progress)
+        elif kind == "edits":
+            out = apply_edits(pid, request["floor_id"], request["edits"], owner, progress=progress)
         elif kind == "parameters":
             out = regenerate(pid, request, owner, progress=progress)
         else:
@@ -155,6 +160,17 @@ def start_parameters(pid: str, req: ParametersRequest, user: CurrentUser):
     with session() as db, db.begin():
         check_regenerable(db, pid, user.id)
         jid = _create(db, user, "parameters", pid, overrides).id
+    submit(jid)
+    return JSONResponse(status_code=202, content={"job_id": jid})
+
+
+@router.put("/projects/{pid}/floors/{floor_id}/edits", status_code=202)
+def start_edits(pid: str, floor_id: str, req: EditsRequest, user: CurrentUser):
+    """Replace the floor's edits (the full ordered list) and regenerate that floor, as a job."""
+    with session() as db, db.begin():
+        check_regenerable(db, pid, user.id)
+        _floor(owned(db, ProjectRow, pid, user.id, "unknown project", need="editor"), floor_id)
+        jid = _create(db, user, "edits", pid, {"floor_id": floor_id, "edits": req.model_dump(mode="json")["edits"]}).id
     submit(jid)
     return JSONResponse(status_code=202, content={"job_id": jid})
 
