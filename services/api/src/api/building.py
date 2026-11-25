@@ -336,12 +336,12 @@ def put_materials(pid: str, req: MaterialsRequest, user: CurrentUser):
     return {"materials": req.materials, "version": v.number}
 
 
+MAX_LIGHTS = 10  # same cap as the viewer (apps/web lib/site-lighting.ts)
+
+
 # Lighting setting (Phase 1/19): site location, building north and artificial lights, saved in the
 # manifest (snapshotted per version). Date, time, sun intensity and quality are viewer-local, not saved.
 # The whole setting is replaced on PUT (last write wins).
-MAX_LIGHTS = 10  # same cap as the viewer
-
-
 class Location(BaseModel):
     model_config = ConfigDict(extra="forbid")
     latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)

@@ -7,6 +7,7 @@ type Props = {
   onQuality: (q: QualityId) => void;
   site: SiteLighting;
   onSite: (s: SiteLighting) => void;
+  droppedLights: number; // saved lights beyond the limit that are not shown (saving removes them)
   sunInfo: string | null; // where the sun is now at the saved location, e.g. "azimuth 120 deg, elevation 35 deg"
   canSave: boolean; // editor+ on a current version: the location, north and lights can be saved
   dirty: boolean;
@@ -66,6 +67,11 @@ export function LightingPanel(p: Props) {
         <legend>
           Lights ({p.site.lights.length}/{MAX_LIGHTS})
         </legend>
+        {p.droppedLights > 0 && (
+          <div role="alert" style={{ color: "#ffcc66" }}>
+            {p.droppedLights} saved light{p.droppedLights === 1 ? "" : "s"} beyond the {MAX_LIGHTS} limit {p.droppedLights === 1 ? "is" : "are"} not shown; saving will remove {p.droppedLights === 1 ? "it" : "them"}.
+          </div>
+        )}
         <LightPlan projectId={p.projectId} floors={p.planFloors} share={p.share} lights={p.site.lights} selectedId={p.selectedId} onSelect={p.onSelect} onChange={(lights) => p.onSite({ ...p.site, lights })} canEdit={edit} />
         <ul style={{ margin: 0, paddingLeft: 18 }}>
           {p.site.lights.map((l) => (
@@ -92,16 +98,6 @@ export function LightingPanel(p: Props) {
               <label>
                 Intensity {light.intensity.toFixed(1)}{" "}
                 <input aria-label="Light intensity" type="range" min={0} max={10} step={0.1} disabled={!edit} value={light.intensity} onChange={(e) => patch({ intensity: Number(e.target.value) })} />
-              </label>
-            </div>
-            <div>
-              <label>
-                Plan x (mm){" "}
-                <input aria-label="Light x" type="number" step={50} style={{ width: 80 }} disabled={!edit} value={light.x_mm} onChange={(e) => patch({ x_mm: Math.round(num(e.target.value, light.x_mm)) })} />
-              </label>{" "}
-              <label>
-                y (mm){" "}
-                <input aria-label="Light y" type="number" step={50} style={{ width: 80 }} disabled={!edit} value={light.y_mm} onChange={(e) => patch({ y_mm: Math.round(num(e.target.value, light.y_mm)) })} />
               </label>
             </div>
             <label>
