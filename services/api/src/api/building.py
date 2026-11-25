@@ -11,6 +11,7 @@ offsets and regenerated floors. Nothing is guessed silently: mismatches become e
 import itertools
 import json
 from dataclasses import dataclass, field
+from typing import Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,7 +21,7 @@ from api.access import owned, project_role
 from api.auth import CurrentUser
 from api.db import GenerationRow, ProjectRow, session
 from api.engine.canonical.model import Floor, Project
-from api.projects import _floor, _latest, _version, public_router, router
+from api.projects import NO_LIGHTING, _floor, _latest, _version, public_router, router
 from api.sharing import Principal
 from api.storage import blob_path
 
@@ -240,7 +241,8 @@ def get_building(pid: str, who: Principal):
         del out["_floors"]
         v = _latest(db, pid)
         return {"project_id": pid, "version": v.number if v else 0, "role": project_role(db, row, who),
-                "materials": row.data.get("materials", {}), **out}
+                "materials": row.data.get("materials", {}),
+                "lighting": row.data.get("lighting", NO_LIGHTING), **out}
 
 
 class Offset(BaseModel):
@@ -332,3 +334,48 @@ def put_materials(pid: str, req: MaterialsRequest, user: CurrentUser):
         row.data = {**row.data, "materials": req.materials}
         v = _version(db, row, user.id, f"Materials set on {len(req.materials)} elements")
     return {"materials": req.materials, "version": v.number}
+
+
+# Lighting setting (Phase 1/19): site location, building north and artificial lights, saved in the
+# manifest (snapshotted per version). Date, time, sun intensity and quality are viewer-local, not saved.
+# The whole setting is replaced on PUT (last write wins).
+class Location(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+
+
+class ArtificialLight(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=64)
+    kind: Literal["point", "spot"]
+    floor_id: str = Field(min_length=1, max_length=200)
+    x_mm: float = Field(ge=-1e7, le=1e7, allow_inf_nan=False, description="plan x, before the floor offset")
+    y_mm: float = Field(ge=-1e7, le=1e7, allow_inf_nan=False)
+    height_mm: float = Field(ge=0, le=1e5, allow_inf_nan=False, description="above the floor's elevation")
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    intensity: float = Field(ge=0, le=100, allow_inf_nan=False)
+
+
+class LightingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    location: Location | None = None
+    north_deg: float = Field(0.0, ge=0, lt=360, allow_inf_nan=False,
+                             description="clockwise angle from plan +Y to true north")
+    lights: list[ArtificialLight] = Field(default_factory=list, max_length=50)
+
+
+@router.put("/projects/{pid}/lighting")
+def put_lighting(pid: str, req: LightingRequest, user: CurrentUser):
+    """Replace the project's lighting setting; a new version."""
+    if len({x.id for x in req.lights}) != len(req.lights):
+        raise HTTPException(422, "duplicate light id")
+    lighting = req.model_dump(mode="json")
+    with session() as db, db.begin():
+        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
+        known = {f["id"] for f in row.data["floors"]}
+        if any(x.floor_id not in known for x in req.lights):
+            raise HTTPException(422, "light on an unknown floor")
+        row.data = {**row.data, "lighting": lighting}
+        v = _version(db, row, user.id, f"Lighting set ({len(req.lights)} lights)")
+    return {"lighting": lighting, "version": v.number}

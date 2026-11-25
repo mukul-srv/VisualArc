@@ -23,7 +23,12 @@ import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distance
 import { collectSupports, dampTo, fall, groundLevel, stepOnto, stepUpLimit } from "@/lib/ground";
 import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
 import { createTapGate } from "@/lib/tap";
-import { setWalkFill, SKY_LIGHT, SUN_LIGHT, WALK_FILL } from "@/lib/lighting";
+import { setWalkFill, WALK_FILL } from "@/lib/lighting";
+import { LightingPanel, type SunSettings } from "@/components/LightingPanel";
+import { DEFAULT_QUALITY, QUALITY, type QualityId } from "@/lib/quality";
+import { createRig } from "@/lib/rig";
+import { daylight, defaultUtcOffset, localToUtcMs, sunDirection, sunPosition } from "@/lib/solar";
+import { nextLightId, NO_LIGHTING, putLighting, type SiteLighting } from "@/lib/site-lighting";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, describeRoom, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel, type RoomData } from "@/lib/selection";
@@ -52,6 +57,21 @@ export default function ViewerPage() {
   const [materials, setMaterials] = useState<MaterialMap>({}); // "<floor>/<element>" -> library id
   const materialsRef = useRef<MaterialMap>({});
   const applyMats = useRef<(m: MaterialMap) => void>(() => {});
+  const [quality, setQuality] = useState<QualityId>(DEFAULT_QUALITY);
+  const [site, setSite] = useState<SiteLighting>(NO_LIGHTING); // edited copy; `savedSite` is what the project holds
+  const [savedSite, setSavedSite] = useState<SiteLighting>(NO_LIGHTING);
+  const [sun, setSun] = useState<SunSettings>({ date: "2024-06-21", hours: 12, utcOffset: 0, intensity: 1 });
+  const offsetTouched = useRef(false);
+  const [addMode, setAddMode] = useState(false);
+  const [selLight, setSelLight] = useState<string | null>(null);
+  const lightState = useRef({ site, sun, quality, selLight });
+  const addModeRef = useRef(false);
+  const manifestRef = useRef<Manifest | null>(null);
+  useEffect(() => {
+    manifestRef.current = manifest;
+  }, [manifest]);
+  const applyLighting = useRef<() => void>(() => {});
+  const addLightAt = useRef<(floorId: string, x_mm: number, y_mm: number, height_mm: number) => void>(() => {});
   const [picked, setPicked] = useState<{ floor: string | null; id: string; type: string } | null>(null);
   const [viewing, setViewing] = useState<number | null>(null); // past version number, read-only
   // what to load: every floor's GLB of a project (id = floor id), or one model (id null)
@@ -95,6 +115,8 @@ export default function ViewerPage() {
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
         setManifest(m);
         setMaterials(m.materials ?? {});
+        setSite(m.lighting ?? NO_LIGHTING);
+        setSavedSite(m.lighting ?? NO_LIGHTING);
         setBuilding(br?.ok ? br.building : manifestBuilding(m));
         // ?floor= keeps showing just that floor (as before); without it the whole building
         setView({ mode: query.get("floor") ? "isolate" : "whole", activeId: f.id, gap: GAP.default, ghost: false });
@@ -127,8 +149,25 @@ export default function ViewerPage() {
   // the scene reads the current view and building through refs; changing either re-places the floors
   useEffect(() => {
     materialsRef.current = materials;
-    applyMats.current(materials);
-  }, [materials]);
+    applyMats.current(QUALITY[quality].textures ? materials : {}); // accuracy: no textures, plain palette
+  }, [materials, quality]);
+
+  useEffect(() => {
+    lightState.current = { site, sun, quality, selLight };
+    addModeRef.current = addMode;
+    applyLighting.current();
+  }, [site, sun, quality, selLight, addMode]);
+
+  // the UTC offset follows the longitude until the user sets it
+  const lon = site.location?.longitude;
+  useEffect(() => {
+    if (lon !== undefined && !offsetTouched.current) queueMicrotask(() => setSun((s) => ({ ...s, utcOffset: defaultUtcOffset(lon) })));
+  }, [lon]);
+
+  // today's date for the sun (not in the initial state: it must match the server render)
+  useEffect(() => {
+    queueMicrotask(() => setSun((s) => ({ ...s, date: new Date().toISOString().slice(0, 10) })));
+  }, []);
 
   useEffect(() => {
     viewRef.current = view;
@@ -154,10 +193,8 @@ export default function ViewerPage() {
     const controls = new OrbitControls(persp as THREE.Camera, renderer.domElement);
 
     // the lights are data (lib/lighting.ts); walk mode adds a fill so the roof underside and ceilings show
-    scene.add(new THREE.HemisphereLight(SKY_LIGHT.sky, SKY_LIGHT.ground, SKY_LIGHT.intensity));
-    const sun = new THREE.DirectionalLight(SUN_LIGHT.color, SUN_LIGHT.intensity);
-    sun.position.set(...SUN_LIGHT.dir);
-    scene.add(sun);
+    const rig = createRig(scene, renderer); // sky, sun + shadows, reflections, ambient occlusion, user lights
+    rig.resize(el.clientWidth, el.clientHeight);
     const fill = new THREE.AmbientLight(WALK_FILL.color, WALK_FILL.intensity);
     let grid = new THREE.GridHelper(20, 20); // 1 cell = 1 m; resized to the model once loaded
     scene.add(grid);
@@ -299,6 +336,16 @@ export default function ViewerPage() {
         camera,
       );
       const ray = raycaster.ray.clone();
+      if (addModeRef.current) {
+        const hit = pickElement(pickable(), ray);
+        const root = hit && rootOf(hit.mesh);
+        const fid = root?.userData.floorId as string | null | undefined;
+        if (!hit || !root || !fid) return;
+        const local = root.worldToLocal(hit.point.clone());
+        const elev = manifestRef.current?.floors.find((f) => f.id === fid)?.elevation.value ?? 0;
+        const h = local.y * 1000 - elev;
+        return addLightAt.current(fid, local.x * 1000, -local.z * 1000, h < 500 ? 2400 : h); // on the floor: a ceiling light
+      }
       if (measureOn) {
         const pick = pickElement(pickable(), ray);
         return pick && measureClick(pick.mesh, pick.point);
@@ -529,6 +576,7 @@ export default function ViewerPage() {
       center = box.getCenter(new THREE.Vector3());
       size = Math.max(s.x, s.z);
       planBox = box;
+      rig.fit(box);
       // grid extends well past the model (3x its larger side, min 20 m, even cell count)
       const cells = Math.max(20, Math.ceil((size * 3) / 2) * 2);
       scene.remove(grid);
@@ -558,6 +606,27 @@ export default function ViewerPage() {
       setPanel(null);
       frame(reframe);
     };
+    applyLighting.current = () => {
+      const { site: st, sun: sn, quality: ql, selLight: sel } = lightState.current;
+      const q = QUALITY[ql];
+      let sunDir: [number, number, number] | null = null;
+      let day = { sun: 1, sky: 1 };
+      if (q.artificial && st.location) {
+        const p = sunPosition(st.location.latitude, st.location.longitude, localToUtcMs(sn.date, sn.hours, sn.utcOffset));
+        sunDir = sunDirection(p.azimuth, p.elevation, st.north_deg);
+        day = daylight(p.elevation);
+      }
+      rig.update(
+        { quality: q, sunDir, sunStrength: day.sun * (q.artificial ? sn.intensity : 1), skyStrength: day.sky, lights: st.lights, selectedLight: sel },
+        { rootOf: (id) => roots.get(id), elevationMm: (id) => manifestRef.current?.floors.find((f) => f.id === id)?.elevation.value ?? 0 },
+      );
+    };
+    addLightAt.current = (floorId, x, y, h) => {
+      const id = nextLightId(lightState.current.site.lights);
+      setSite((st) => ({ ...st, lights: [...st.lights, { id, kind: "point", floor_id: floorId, x_mm: Math.round(x), y_mm: Math.round(y), height_mm: Math.round(h), color: "#ffe9c4", intensity: 3 }] }));
+      setSelLight(id);
+      setAddMode(false);
+    };
     const applyAll = () => roots.forEach((r, id) => applyMaterials(r, id, materialsRef.current, cache));
     const loader = new GLTFLoader();
     Promise.all(loads.map((l) => loader.loadAsync(l.url)))
@@ -573,6 +642,7 @@ export default function ViewerPage() {
           group.add(root);
           roots.set(loads[i].id, root);
           layerCeilings(root);
+          rig.prepare(root);
           doors.push(...buildDoors(root));
           applyCeilingVisibility(root, true); // ceilings share the roof's underside plane: the roof shows instead
         });
@@ -584,6 +654,7 @@ export default function ViewerPage() {
             applyCeilingVisibility(r, on); // roof off: open to the sky, so no ceilings either
           });
         applyAll();
+        applyLighting.current();
         applyView.current(viewRef.current, false);
         const s = frame(true).getSize(new THREE.Vector3());
         setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
@@ -595,19 +666,21 @@ export default function ViewerPage() {
       animateDoors(doors, Math.min(0.05, (t - lastFrame) / 1000));
       lastFrame = t;
       stepWalk();
-      renderer.render(scene, camera);
+      rig.render(scene, camera, persp);
     });
     const onResize = () => {
       persp.aspect = el.clientWidth / el.clientHeight;
       persp.updateProjectionMatrix();
       if (camera === ortho) fitPlan();
-      renderer.setSize(el.clientWidth, el.clientHeight);
+      rig.resize(el.clientWidth, el.clientHeight);
     };
     window.addEventListener("resize", onResize);
     return () => {
       disposed = true;
       applyView.current = () => {};
       applyMats.current = () => {};
+      applyLighting.current = () => {};
+      addLightAt.current = () => {};
       window.removeEventListener("resize", onResize);
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointerup", onUp);
@@ -630,6 +703,7 @@ export default function ViewerPage() {
         (m.userData?.originalMaterial as THREE.Material | undefined)?.dispose();
       });
       cache.dispose();
+      rig.dispose();
       renderer.setAnimationLoop(null);
       controls.dispose();
       renderer.dispose();
@@ -647,6 +721,12 @@ export default function ViewerPage() {
         const m = r.ok ? parseManifest(r.manifest) : null;
         if (!m || !br.ok || m.floors.length === 0) return;
         setBuilding((old) => (sameBuilding(old, br.building) ? old : br.building)); // only when offsets or pairings changed
+        const lt = m.lighting ?? NO_LIGHTING;
+        setSavedSite((old) => {
+          if (JSON.stringify(old) === JSON.stringify(lt)) return old;
+          setSite((cur) => (JSON.stringify(cur) === JSON.stringify(old) ? lt : cur)); // unsaved edits are kept
+          return lt;
+        });
         setMaterials((old) => (JSON.stringify(old) === JSON.stringify(m.materials ?? {}) ? old : (m.materials ?? {})));
         if (key(m) === key(manifest)) return;
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
@@ -680,6 +760,14 @@ export default function ViewerPage() {
   };
   const activeFloor = building?.floors.find((f) => f.id === floorId);
   const canEdit = !!manifest && viewing === null && shared === false && (manifest.role === "owner" || manifest.role === "editor");
+  const siteDirty = JSON.stringify(site) !== JSON.stringify(savedSite);
+  const saveSite = async () => {
+    if (!manifest) return;
+    const r = await putLighting(manifest.id, site);
+    if (r.ok) setSavedSite(r.lighting);
+    else setHint(`Could not save lighting: ${r.message}`);
+  };
+  const sunPos = site.location && QUALITY[quality].artificial ? sunPosition(site.location.latitude, site.location.longitude, localToUtcMs(sun.date, sun.hours, sun.utcOffset)) : null;
   const changeMaterial = async (key: string, lib: string | null) => {
     if (!manifest) return;
     const old = materials;
@@ -754,6 +842,26 @@ export default function ViewerPage() {
         )}
         {building && <BuildingStats building={building} active={activeFloor} />}
         <RoomList rooms={rooms} onSelect={(r) => setPanel(describeRoom(r, current?.id))} />
+        <LightingPanel
+          quality={quality}
+          onQuality={setQuality}
+          site={site}
+          onSite={setSite}
+          sun={sun}
+          onSun={(s) => {
+            if (s.utcOffset !== sun.utcOffset) offsetTouched.current = true;
+            setSun(s);
+          }}
+          sunInfo={sunPos ? `Sun: azimuth ${sunPos.azimuth.toFixed(0)} deg, elevation ${sunPos.elevation.toFixed(0)} deg${sunPos.elevation <= 0 ? " (night)" : ""}` : null}
+          canSave={canEdit && manifest !== null}
+          dirty={siteDirty}
+          onSave={saveSite}
+          addMode={addMode}
+          onAddMode={setAddMode}
+          selectedId={selLight}
+          onSelect={setSelLight}
+          floorName={(id) => manifest?.floors.find((f) => f.id === id)?.name ?? id}
+        />
         <MetadataPanel panel={panel} />
         {panel && picked && picked.id === panel.id && picked.floor && manifest && (
           <MaterialPicker

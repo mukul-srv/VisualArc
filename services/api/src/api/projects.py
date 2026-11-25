@@ -71,6 +71,9 @@ def _params(req: GenerationRequest) -> dict:
     }
 
 
+NO_LIGHTING = {"location": None, "north_deg": 0.0, "lights": []}  # lighting setting when none was saved
+
+
 def _version(db: Session, row: ProjectRow, user_id: str | None, message: str) -> ProjectVersionRow:
     """Append a version holding the row's current manifest. Caller holds the project row lock."""
     floors = row.data["floors"]
@@ -81,7 +84,8 @@ def _version(db: Session, row: ProjectRow, user_id: str | None, message: str) ->
         snapshot={"floors": floors, "generation_ids": [f["generation_id"] for f in floors],
                   "params": row.data.get("params", {}), "parameters": row.data.get("parameters", {}),
                   "pairings": row.data.get("pairings", []),
-                  "materials": row.data.get("materials", {})},
+                  "materials": row.data.get("materials", {}),
+                  "lighting": row.data.get("lighting", NO_LIGHTING)},
     )
     db.add(v)
     db.flush()
@@ -231,6 +235,7 @@ def _manifest(row: ProjectRow, v: ProjectVersionRow, role: str) -> dict:
         "params": v.snapshot.get("params", {}), "parameters": v.snapshot.get("parameters", {}),
         "pairings": v.snapshot.get("pairings", []),
         "materials": v.snapshot.get("materials", {}),
+        "lighting": v.snapshot.get("lighting", NO_LIGHTING),
         "version": v.number,
         "updated_at": v.created_at.isoformat(),
     }
@@ -391,7 +396,10 @@ def remove_floor(pid: str, floor_id: str, user: CurrentUser):
         pairings = [p for p in row.data.get("pairings", []) if floor_id not in (
             p["lower_floor"], p["upper_floor"])]
         materials = {k: m for k, m in row.data.get("materials", {}).items() if not k.startswith(f"{floor_id}/")}
-        row.data = {**row.data, "params": params, "floors": left, "pairings": pairings, "materials": materials}
+        lighting = row.data.get("lighting", NO_LIGHTING)
+        lighting = {**lighting, "lights": [x for x in lighting["lights"] if x["floor_id"] != floor_id]}
+        row.data = {**row.data, "params": params, "floors": left, "pairings": pairings,
+                    "materials": materials, "lighting": lighting}
         _version(db, row, user.id, f"Removed floor {gone['name']}")
     if issues:  # nothing is lost silently: the removal went through, the roof did not move
         return JSONResponse({"issues": issues})
@@ -433,7 +441,8 @@ def restore_version(pid: str, number: int, user: CurrentUser):
                     "params": old.snapshot.get("params", {}),
                     "parameters": old.snapshot.get("parameters", {}),
                     "pairings": old.snapshot.get("pairings", []),
-                    "materials": old.snapshot.get("materials", {})}
+                    "materials": old.snapshot.get("materials", {}),
+                    "lighting": old.snapshot.get("lighting", NO_LIGHTING)}
         return _info(_version(db, row, user.id, f"Restored version {number}"))
 
 
