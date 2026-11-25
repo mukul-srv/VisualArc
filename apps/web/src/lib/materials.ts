@@ -65,6 +65,9 @@ export function applyMaterials(root: THREE.Object3D, floorId: string | null, map
     }
     if (applied?.userData.libraryId === def.id) return;
     mesh.userData.originalMaterial ??= mesh.material;
+    // the GLB may carry no NORMAL (GLTFLoader then flat-shades the original material); a lit material
+    // with no normals renders black, so compute them (vertices are unmerged, so this is flat shading)
+    if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({ ...cache.get(def), roughness: 1, metalness: def.metalness ?? 0 });
     mat.userData.libraryId = def.id;
     mesh.material = mat;
