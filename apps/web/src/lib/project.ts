@@ -35,13 +35,13 @@ export function parseManifest(x: unknown): Manifest | null {
   return { id: m.id, name: m.name, floors: m.floors, ...role, ...(m.materials ? { materials: parseMaterials(m.materials) } : {}), ...lightingPart(m.lighting) };
 }
 
-/** Lowest floor first; does not mutate the input. */
 const lightingPart = (x: unknown) => {
   if (!x) return {};
   const r = parseLightingReport(x);
   return { lighting: r.lighting, ...(r.dropped ? { lightingDropped: r.dropped } : {}) };
 };
 
+/** Lowest floor first; does not mutate the input. */
 export const sortFloors = (floors: Floor[]): Floor[] =>
   [...floors].sort((a, b) => a.elevation.value - b.elevation.value);
 

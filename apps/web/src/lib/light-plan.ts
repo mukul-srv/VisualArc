@@ -63,6 +63,14 @@ export function setLightCoord(lights: ArtificialLight[], id: string, axis: "x" |
   return axis === "x" ? moveLight(lights, id, v, l.y_mm, sq, canEdit) : moveLight(lights, id, l.x_mm, v, sq, canEdit);
 }
 
+/** Commit what was typed in an x/y box (on blur or Enter): the new list and the text the box should show
+ *  afterwards (the clamped value; the current one again when the text was blank or not a number). */
+export function commitCoord(lights: ArtificialLight[], id: string, axis: "x" | "y", draft: string, sq: Bounds, canEdit: boolean): { lights: ArtificialLight[]; text: string } {
+  const next = setLightCoord(lights, id, axis, draft, sq, canEdit);
+  const l = next.find((k) => k.id === id);
+  return { lights: next, text: l ? String(axis === "x" ? l.x_mm : l.y_mm) : "" };
+}
+
 export const nudgeLight = (lights: ArtificialLight[], id: string, dx: number, dy: number, sq: Bounds, canEdit: boolean) => {
   const l = lights.find((x) => x.id === id);
   return l ? moveLight(lights, id, l.x_mm + dx, l.y_mm + dy, sq, canEdit) : lights;

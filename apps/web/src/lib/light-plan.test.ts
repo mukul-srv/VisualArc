@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { arrowStep, canPlace, clampTo, clickToPlan, moveLight, nudgeLight, placeLight, planToScreen, setLightCoord, squareBounds, squareFit } from "./light-plan";
+import { arrowStep, canPlace, clampTo, clickToPlan, moveLight, nudgeLight, placeLight, commitCoord, planToScreen, setLightCoord, squareBounds, squareFit } from "./light-plan";
 import { MAX_LIGHTS, type ArtificialLight } from "./site-lighting";
 
 const sq = squareBounds({ minX: 0, minY: 0, maxX: 10000, maxY: 4000 });
@@ -87,4 +87,19 @@ test("typed x/y are clamped to the plan square like a drag; junk and viewers cha
   expect(setLightCoord(ls, "a", "x", "", sq, true)).toBe(ls);
   expect(setLightCoord(ls, "a", "x", "abc", sq, true)).toBe(ls);
   expect(setLightCoord(ls, "a", "x", "5", sq, false)).toBe(ls);
+});
+
+test("committing a typed box: blank keeps the value, '-5' works, out-of-range clamps and shows the clamp", () => {
+  const ls = [light("a", 1000, 1000)];
+  const blank = commitCoord(ls, "a", "x", "", sq, true);
+  expect(blank.lights).toBe(ls);
+  expect(blank.text).toBe("1000"); // the box goes back to the current value
+  const dash = commitCoord(ls, "a", "x", "-", sq, true); // "-" alone is a draft, never a commit
+  expect(dash.lights).toBe(ls);
+  expect(dash.text).toBe("1000");
+  const neg = commitCoord(ls, "a", "y", "-5", sq, true);
+  expect(neg.lights[0].y_mm).toBe(Math.max(-5, Math.round(sq.minY)));
+  const big = commitCoord(ls, "a", "x", "99999999", sq, true);
+  expect(big.lights[0].x_mm).toBe(Math.round(sq.maxX));
+  expect(big.text).toBe(String(Math.round(sq.maxX)));
 });

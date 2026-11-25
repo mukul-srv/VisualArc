@@ -1,11 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { arrowStep, canPlace, clickToPlan, moveLight, nudgeLight, placeLight, planToScreen, setLightCoord, squareBounds, squareFit } from "../lib/light-plan";
+import { arrowStep, canPlace, clickToPlan, moveLight, nudgeLight, commitCoord, placeLight, planToScreen, squareBounds, squareFit } from "../lib/light-plan";
 import { getPlanOverlay, overlayBounds, wallCorners, type OverlayData } from "../lib/overlay";
 import { MAX_LIGHTS, type ArtificialLight } from "../lib/site-lighting";
 
 const S = 300; // the square, px
+
+/** A number box that keeps what is typed as text ("", "-" are fine while typing) and commits, clamped, on blur or
+ *  Enter. The parent re-keys it when the light's value changes (drag, nudge), which resets the text. */
+function CoordInput({ label, value, disabled, onCommit }: { label: string; value: number; disabled: boolean; onCommit: (text: string) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  return (
+    <input
+      aria-label={label}
+      type="text"
+      inputMode="numeric"
+      style={{ width: 80 }}
+      disabled={disabled}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        onCommit(draft);
+        setDraft(String(value)); // blank or junk: show the current value again (a valid commit re-keys this input)
+      }}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
+  );
+}
 
 type Props = {
   projectId: string | null; // null: not a project, no plan to draw
@@ -145,11 +167,11 @@ export function LightPlan({ projectId, floors, share, lights, selectedId, onSele
         <div>
           <label>
             Plan x (mm){" "}
-            <input aria-label="Light x" type="number" step={50} style={{ width: 80 }} disabled={!canEdit} value={sel.x_mm} onChange={(e) => onChange(setLightCoord(lights, sel.id, "x", e.target.value, sq, canEdit))} />
+            <CoordInput key={`x-${sel.id}-${sel.x_mm}`} label="Light x" value={sel.x_mm} disabled={!canEdit} onCommit={(t) => onChange(commitCoord(lights, sel.id, "x", t, sq, canEdit).lights)} />
           </label>{" "}
           <label>
             y (mm){" "}
-            <input aria-label="Light y" type="number" step={50} style={{ width: 80 }} disabled={!canEdit} value={sel.y_mm} onChange={(e) => onChange(setLightCoord(lights, sel.id, "y", e.target.value, sq, canEdit))} />
+            <CoordInput key={`y-${sel.id}-${sel.y_mm}`} label="Light y" value={sel.y_mm} disabled={!canEdit} onCommit={(t) => onChange(commitCoord(lights, sel.id, "y", t, sq, canEdit).lights)} />
           </label>
         </div>
       )}
