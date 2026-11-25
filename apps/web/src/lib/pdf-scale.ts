@@ -5,6 +5,7 @@ export type PdfPage = {
   vector_objects: number;
   images: number;
   raster_only: boolean;
+  too_complex?: boolean; // more vector objects than the limit: cannot be converted
   groups: { layer: string; objects: number }[];
   scale_candidates: { ratio: number; source: "note" | "dimensions"; text: string; count: number }[];
 };

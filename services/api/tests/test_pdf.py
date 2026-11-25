@@ -147,3 +147,54 @@ def test_raster_pdf_and_garbage_are_rejected_with_a_message(client):
     r = _upload(client, RASTER)
     assert r.status_code == 422 and "trace-assist" in r.json()["detail"]
     assert client.post("/api/v1/uploads", content=b"%PDF-1.4\ngarbage").status_code == 422
+
+
+def test_limits_are_enforced_and_reported(monkeypatch, tmp_path):
+    from api.engine.adapters.pdf import reader
+
+    monkeypatch.setattr(reader, "MAX_PAGES", 1)
+    with pytest.raises(InputError, match="2 pages, limit 1"):
+        inspect_pdf(PLAN)
+    monkeypatch.undo()
+    monkeypatch.setattr(reader, "MAX_OBJECTS", 5)
+    page = inspect_pdf(PLAN)["pages"][0]
+    assert page["too_complex"] and page["groups"] == [] and page["scale_candidates"] == []  # reported, not analysed
+    with pytest.raises(InputError, match="limit 5"):
+        convert_pdf(PLAN, tmp_path / "x.dxf", 1, 1.0)
+
+
+def test_dimension_matching_is_bounded(monkeypatch):
+    from api.engine.adapters.pdf import scale
+
+    monkeypatch.setattr(scale, "MAX_DIM_TEXTS", 2)
+    monkeypatch.setattr(scale, "MAX_DIM_SEGMENTS", 2)
+    segs = [((0.0, 100.0 * i), (60.0 + 10 * i, 100.0 * i)) for i in range(6)]
+    texts = [_text(str(round(math.dist(a, b) * MM_PER_PT_AT_1 * 100)), (a[0] + b[0]) / 2, a[1] + 5) for a, b in segs]
+    assert scale.detect_scale_candidates(texts, segs) == []  # only 2 texts x 2 segments are looked at: under the minimum
+
+
+def test_library_errors_become_input_errors_not_500s(monkeypatch, tmp_path):
+    from api.engine.adapters.pdf import reader
+
+    def boom(*a, **k):
+        raise RuntimeError("pdfminer exploded")
+
+    monkeypatch.setattr(reader.pdfplumber, "open", boom)
+    with pytest.raises(InputError, match="could not be read"):
+        inspect_pdf(PLAN)
+    with pytest.raises(InputError, match="could not be read"):
+        convert_pdf(PLAN, tmp_path / "x.dxf", 1, 1.0)
+
+
+def test_outlined_and_filled_shapes_are_reported(tmp_path):
+    src = tmp_path / "filled.pdf"
+    from importlib import util
+
+    spec = util.spec_from_file_location("mk", INPUT.parents[1] / "scripts" / "make_fixture_pdf.py")
+    mk = util.module_from_spec(spec)
+    spec.loader.exec_module(mk)
+    content = b"0 0 0 RG 1 0 0 rg 1 w 100 100 200 100 re B"  # B = fill and stroke
+    src.write_bytes(mk.pdf([b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R >>", mk.stream(content)]))
+    notes = convert_pdf(src, tmp_path / "f.dxf", 1, 1.0)
+    assert [n.code for n in notes] == ["pdf_fill_ignored"]

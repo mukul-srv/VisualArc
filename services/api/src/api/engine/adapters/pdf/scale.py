@@ -15,6 +15,8 @@ MIN_DIM_AGREE = 3
 DIM_AGREE_TOL = 0.02  # implied scales within 2 % agree
 DIM_NEAR_PT = 40.0  # a dimension text belongs to a segment whose midpoint is this close
 DIM_MIN_SEGMENT_PT = 20.0
+MAX_DIM_TEXTS = 500  # bounds the text x segment matching to MAX_DIM_TEXTS * MAX_DIM_SEGMENTS pairs
+MAX_DIM_SEGMENTS = 2000  # the longest segments are kept
 
 _RATIO = re.compile(r"(?<![\d.])1\s*[:/]\s*(\d{1,5})(?![\d.])")
 _IMPERIAL = re.compile(r"""(\d+)\s*/\s*(\d+)\s*(?:"|in)\s*=\s*1\s*(?:'|ft)""", re.IGNORECASE)
@@ -55,15 +57,13 @@ def _notes(texts: list[dict]) -> list[ScaleCandidate]:
 def _dimensions(texts: list[dict], segments) -> ScaleCandidate | None:
     """Plain integers of 3-5 digits read as mm, matched to the nearest long segment's midpoint."""
     implied = []
-    for t in texts:
-        if not re.fullmatch(r"\d{3,5}", t["text"]):
-            continue
+    long = sorted(((math.dist(a, b), a, b) for a, b in segments if math.dist(a, b) >= DIM_MIN_SEGMENT_PT),
+                  key=lambda x: -x[0])[:MAX_DIM_SEGMENTS]
+    numeric = [t for t in texts if re.fullmatch(r"\d{3,5}", t["text"])][:MAX_DIM_TEXTS]
+    for t in numeric:
         value = float(t["text"])
         best = None
-        for (a, b) in segments:
-            length = math.dist(a, b)
-            if length < DIM_MIN_SEGMENT_PT:
-                continue
+        for length, a, b in long:
             d = math.dist(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), (t["x"], t["y"]))
             if d <= max(DIM_NEAR_PT, length / 2 + DIM_NEAR_PT) and (best is None or d < best[0]):
                 best = (d, length)

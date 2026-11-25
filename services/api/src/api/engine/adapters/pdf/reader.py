@@ -56,10 +56,10 @@ def _open(path: Path):
         doc = pdfium.PdfDocument(str(path))
     except pdfium.PdfiumError as e:
         raise InputError(f"not a readable PDF (corrupt, or password protected): {e}") from e
-    if len(doc) == 0:
-        raise InputError("the PDF has no pages")
-    if len(doc) > MAX_PAGES:
-        raise InputError(f"the PDF has {len(doc)} pages, limit {MAX_PAGES}")
+    n = len(doc)
+    if n == 0 or n > MAX_PAGES:
+        doc.close()
+        raise InputError("the PDF has no pages" if n == 0 else f"the PDF has {n} pages, limit {MAX_PAGES}")
     return doc
 
 
@@ -86,32 +86,66 @@ def text_lines(page) -> list[dict]:
     return out
 
 
-def inspect_pdf(path: Path) -> dict:
-    """Per page: size, vector object count, images, colour/width groups and scale candidates (never applied)."""
+def _page_info(n: int, page, rotation: int) -> dict:
+    return {"number": n, "width_pt": float(page.width), "height_pt": float(page.height), "rotation": rotation,
+            "images": len(page.images)}
+
+
+def _inspect(path: Path) -> dict:
     from api.engine.adapters.pdf.scale import detect_scale_candidates
 
     doc = _open(path)
+    try:
+        rotations = [doc[n].get_rotation() for n in range(len(doc))]
+    finally:
+        doc.close()
     pages = []
     with pdfplumber.open(str(path)) as pdf:
         for n, page in enumerate(pdf.pages, 1):
             objs = _objects(page)
-            groups = Counter(_layer(o) for o in objs)
+            info = _page_info(n, page, rotations[n - 1])
+            if len(objs) > MAX_OBJECTS:  # reported, not analysed: converting this page is refused
+                pages.append({**info, "vector_objects": len(objs), "text_lines": 0, "raster_only": False,
+                              "too_complex": True, "groups": [], "scale_candidates": []})
+                continue
             texts = text_lines(page)
             pages.append({
-                "number": n, "width_pt": float(page.width), "height_pt": float(page.height),
-                "rotation": doc[n - 1].get_rotation(), "vector_objects": len(objs), "images": len(page.images),
-                "text_lines": len(texts), "raster_only": not objs and bool(page.images),
-                "groups": [{"layer": k, "objects": v} for k, v in sorted(groups.items())],
+                **info, "vector_objects": len(objs), "text_lines": len(texts),
+                "raster_only": not objs and bool(page.images), "too_complex": False,
+                "groups": [{"layer": k, "objects": v} for k, v in sorted(Counter(_layer(o) for o in objs).items())],
                 "scale_candidates": [c.to_dict() for c in detect_scale_candidates(texts, _segments(page))],
             })
     return {"kind": "pdf", "pages": pages}
 
 
+def _guarded(fn, *args):
+    """pdfminer / pdfplumber raise all sorts on broken files: always an InputError, never a 500."""
+    try:
+        return fn(*args)
+    except InputError:
+        raise
+    except Exception as e:
+        raise InputError(f"the PDF could not be read ({type(e).__name__}: {e})") from e
+
+
+def inspect_pdf(path: Path) -> dict:
+    """Per page: size, vector object count, images, colour/width groups and scale candidates (never applied)."""
+    return _guarded(_inspect, path)
+
+
 def convert_pdf(src: Path, dst: Path, page_number: int, mm_per_pt: float) -> list[Issue]:
     """Write page `page_number` as a millimetre DXF at `mm_per_pt` (paper point -> real mm) to `dst`."""
+    return _guarded(_convert, src, dst, page_number, mm_per_pt)
+
+
+def _convert(src: Path, dst: Path, page_number: int, mm_per_pt: float) -> list[Issue]:
     if not (mm_per_pt > 0 and mm_per_pt < float("inf")):
         raise InputError("the scale must be a positive number")
     pdoc = _open(src)
+    try:
+        rotation = pdoc[page_number - 1].get_rotation() if 1 <= page_number <= len(pdoc) else 0
+    finally:
+        pdoc.close()
     issues: list[Issue] = []
     with pdfplumber.open(str(src)) as pdf:
         if not 1 <= page_number <= len(pdf.pages):
@@ -129,7 +163,7 @@ def convert_pdf(src: Path, dst: Path, page_number: int, mm_per_pt: float) -> lis
         doc.units = ezdxf.units.MM
         msp = doc.modelspace()
         xy = lambda p: (p[0] * mm_per_pt, (h - p[1]) * mm_per_pt)
-        curves = 0
+        curves = both = 0
         for o in objs:
             layer = _layer(o)
             if layer not in doc.layers:
@@ -137,6 +171,7 @@ def convert_pdf(src: Path, dst: Path, page_number: int, mm_per_pt: float) -> lis
             pts = [xy(p) for p in o["pts"]]
             if any(op[0] == "c" for op in o.get("path", ())):
                 curves += 1  # the Bezier is kept as the polyline through its anchor points
+            both += bool(o.get("stroke", True) and o.get("fill"))  # drawn by its stroke; the fill is not kept
             closed = len(pts) > 2 and pts[0] == pts[-1]
             if len(pts) == 2:
                 msp.add_line(pts[0], pts[1], dxfattribs={"layer": layer})
@@ -145,12 +180,15 @@ def convert_pdf(src: Path, dst: Path, page_number: int, mm_per_pt: float) -> lis
         if curves:
             issues.append(Issue(code="pdf_curve_approximated", severity="warning",
                                 message=f"{curves} curved path(s) were read as straight segments between their anchor points"))
+        if both:
+            issues.append(Issue(code="pdf_fill_ignored", severity="warning",
+                                message=f"{both} shape(s) are both outlined and filled; only the outline is kept"))
         if page.images:
             issues.append(Issue(code="pdf_images_ignored", severity="warning",
                                 message=f"{len(page.images)} image(s) on this page are not reconstructed (raster content)"))
-        if rot := pdoc[page_number - 1].get_rotation():
+        if rotation:
             issues.append(Issue(code="pdf_page_rotated", severity="warning",
-                                message=f"the page is rotated {rot} degrees; coordinates are used as drawn, unrotated"))
+                                message=f"the page is rotated {rotation} degrees; coordinates are used as drawn, unrotated"))
         doc.layers.add("PDF-TEXT")
         for t in text_lines(page):
             if re.search(r"\S", t["text"]):

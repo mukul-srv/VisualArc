@@ -8,7 +8,7 @@ type Props = { pages: PdfPage[]; busy: boolean; onConvert: (body: PdfBody) => vo
 /** A PDF has no units: the user picks the page and confirms a scale. Suggestions (from a note or the
  *  dimension text) only fill the field; nothing is converted until the confirmation box is ticked. */
 export function PdfScalePanel({ pages, busy, onConvert }: Props) {
-  const usable = pages.filter((p) => !p.raster_only);
+  const usable = pages.filter((p) => !p.raster_only && !p.too_complex);
   const [f, setF] = useState<PdfScaleForm>({ ...EMPTY_PDF_FORM, page: usable[0]?.number ?? 1 });
   const [errors, setErrors] = useState<string[]>([]);
   const page = pages.find((p) => p.number === f.page);
@@ -27,8 +27,8 @@ export function PdfScalePanel({ pages, busy, onConvert }: Props) {
           Page{" "}
           <select value={f.page} disabled={busy} onChange={(e) => set({ page: Number(e.target.value), ratio: "" })}>
             {pages.map((p) => (
-              <option key={p.number} value={p.number} disabled={p.raster_only}>
-                {p.number}: {p.raster_only ? "scanned image (not supported yet)" : `${p.vector_objects} vector objects`}
+              <option key={p.number} value={p.number} disabled={p.raster_only || p.too_complex}>
+                {p.number}: {p.raster_only ? "scanned image (not supported yet)" : p.too_complex ? `too complex (${p.vector_objects} vector objects)` : `${p.vector_objects} vector objects`}
               </option>
             ))}
           </select>
