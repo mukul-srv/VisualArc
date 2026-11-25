@@ -5,7 +5,7 @@
 
 export type Provenance = "source_extracted" | "user_provided" | "defaulted" | "inferred" | "user_modified";
 export type Measured = { value: number; unit: string; source: Provenance };
-export type SourceRef = { format?: "dxf" | "edit"; layer: string; entity_handle: string };
+export type SourceRef = { format?: "dxf" | "edit" | "ifc"; layer: string; entity_handle: string };
 type Pt = [number, number];
 
 export type OpeningData = {

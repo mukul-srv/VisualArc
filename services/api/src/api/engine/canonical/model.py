@@ -30,7 +30,8 @@ from api.engine.settings import DEFAULTS
 # derived from the closed outer wall perimeter when the drawing has no floor outline). Older files read as drawn.
 # 0.10.0: user edits (Section D). Provenance gains `user_modified` (a value or name the user changed in the
 # editor) and SourceRef.format gains "edit" (entity_handle = the edit op's id). Older files read unchanged.
-SCHEMA_VERSION = "0.10.0"
+# 0.11.0: IFC import. SourceRef.format gains "ifc" (layer = the IFC class, entity_handle = the GlobalId). Older files read unchanged.
+SCHEMA_VERSION = "0.11.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred", "user_modified"]
 Point2 = tuple[float, float]
@@ -48,7 +49,7 @@ class Measured(_Model):
 
 
 class SourceRef(_Model):
-    format: Literal["dxf", "edit"] = "dxf"
+    format: Literal["dxf", "edit", "ifc"] = "dxf"
     layer: str
     entity_handle: str
 
