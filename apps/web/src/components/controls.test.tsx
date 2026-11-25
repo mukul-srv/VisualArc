@@ -75,3 +75,11 @@ test("a hint is visible text linked to its mark (hover and keyboard focus), not 
   expect(html).toContain("What this does");
   expect(html).toContain('tabindex="0"'); // reachable by keyboard
 });
+
+test("viewer toolbar offers OBJ and IFC export only when the model has an API source", () => {
+  const props = { walking: false, top: false, measuring: false, roofPresent: false, roofOn: false, onWalk: () => {}, onRoof: () => {}, onTop: () => {}, onMeasure: () => {} };
+  expect(renderToStaticMarkup(<ViewerToolbar {...props} />)).not.toContain("Export");
+  const html = renderToStaticMarkup(<ViewerToolbar {...props} exports={{ obj: "/x/obj", ifc: "/x/ifc" }} />);
+  expect(html).toContain('href="/x/obj"');
+  expect(html).toContain("Export IFC");
+});

@@ -9,6 +9,8 @@ export const HELP = {
   versions: "Every change makes a new version. Open one to look at it, or restore it to make it current again.",
   parameters: "Values used to build the model where the drawing is silent. Change one and every floor is rebuilt as a new version.",
   more: "Less common actions",
+  exportObj: "Download the model as OBJ (metres, Y up, like the GLB).",
+  exportIfc: "Download the model as IFC4 (millimetres) with typed elements and provenance properties.",
   account: "Your profile and log out",
   provenance: "Where a value comes from: read from your drawing, given by you, or assumed as a default.",
   walk: "Walk through the building with W A S D or the arrow keys; drag to look; E opens a nearby door.",

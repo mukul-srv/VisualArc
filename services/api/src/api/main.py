@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from api import building as _building  # noqa: F401  (registers its routes on the projects routers)
+from api import exports as _exports  # noqa: F401
 from api import plan_overlay as _plan_overlay  # noqa: F401
 from api.auth import router as auth_router
 from api.generations import public_router as generations_public
