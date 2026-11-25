@@ -6,7 +6,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { SKY_LIGHT, SUN_LIGHT } from "./lighting";
 import { frameUsable, probePoints } from "./ao-probe";
-import { ensureNormals } from "./normals";
+import { ensureNormals, ensureUVs } from "./normals";
 import { setAspect } from "./render-gl";
 import { shadowFrustum, type Quality } from "./quality";
 import type { ArtificialLight } from "./site-lighting";
@@ -150,6 +150,7 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     /** Meshes cast and receive shadows (glass casts none: it would black out the room behind it). */
     prepare(root: THREE.Object3D) {
       ensureNormals(root); // GLBs from before the engine wrote NORMAL would turn black under GTAO
+      ensureUVs(root); // old GLBs have no UVs: textures would show one flat texel
       root.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
