@@ -6,7 +6,7 @@ import { saveEditsJob, STAGE_LABEL, type JobProgress } from "../lib/jobs";
 import { fit, getPlanOverlay, overlayBounds, panBy, toPlan, toScreen, wallCorners, zoomAt, type Fit, type OverlayData } from "../lib/overlay";
 import type { Floor } from "../lib/project";
 import {
-  EDIT, EMPTY_HISTORY, addOpeningOp, addWallOp, applyOps, canAdd, dragEndpoint, dragged, isNoop, snapMove, endpointAt, hitTest, moveWall, nextId, orthogonal, push, pxToMm, redo,
+  EDIT, EMPTY_HISTORY, addWallOp, dragOpeningOp, openingDims, applyOps, canAdd, dragEndpoint, dragged, isNoop, snapMove, endpointAt, hitTest, moveWall, nextId, orthogonal, push, pxToMm, redo,
   removeOpeningOp, removeWallOp, setOpeningOp, setWallOp, slideOpening, snap, toEditModel, undo, type EditModel, type EditOp, type EditOpening, type EditWall, type Pt, type Selection,
 } from "../lib/plan-edit";
 import { IssueList } from "./IssueList";
@@ -17,11 +17,13 @@ const H = 520;
 type Drag =
   | { kind: "move" | "start" | "end"; wall: EditWall; origin: Pt; cur: Pt }
   | { kind: "slide"; opening: EditOpening; host: EditWall; origin: Pt; cur: Pt }
+  | { kind: "draw"; host: EditWall; open: "door" | "window"; dims: { height?: number; sill_height?: number }; origin: Pt; cur: Pt }
   | { kind: "pan"; last: [number, number] };
 
 /** The transient op of a drag, from the committed model: the same op that is saved when the pointer is released. */
 function dragOp(d: Drag, committed: EditModel, id: string, scale: number): EditOp | null {
   if (d.kind === "pan" || !dragged(d.origin, d.cur, scale)) return null; // a click is not a drag: nothing is snapped or saved
+  if (d.kind === "draw") return dragOpeningOp(id, d.host, d.open, d.origin, d.cur, committed.openings, d.dims);
   if (d.kind === "slide") {
     const g = slideOpening(d.opening, d.host, [d.cur[0] - d.origin[0], d.cur[1] - d.origin[1]]);
     return g && setOpeningOp(id, d.opening, g);
@@ -44,7 +46,8 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   const [anchor, setAnchor] = useState<Pt | null>(null);
   const [hover, setHover] = useState<Pt | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [width, setWidth] = useState(String(EDIT.defaultWidthMm.door));
+  const [height, setHeight] = useState("");
+  const [sill, setSill] = useState("");
   const [thickness, setThickness] = useState(String(EDIT.defaultThicknessMm));
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<JobProgress | null>(null);
@@ -165,8 +168,14 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
       return setAnchor(null);
     }
     if (tool === "door" || tool === "window") {
-      const host = hostOf(hit);
-      if (host) commit(addOpeningOp(id, host, tool, p, Number(width)));
+      const host = hit?.kind === "wall" ? hostOf(hit) : undefined; // press on a bare wall; an opening there is edited with Select
+      const dims = openingDims(tool, height, sill);
+      if (!dims.ok) return setError(dims.error);
+      setError(null);
+      if (host) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDrag({ kind: "draw", host, open: tool, dims: dims.value, origin: p, cur: p });
+      }
       return;
     }
     if (tool === "delete") {
@@ -228,9 +237,9 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   return (
     <section aria-label={`Edit plan: ${floor.name}`}>
       <h3>Edit plan: {floor.name} <button type="button" onClick={() => discardOk() && onClose()} disabled={busy}>Close</button></h3>
-      <p><small>Orthogonal walls, doors, windows and room names. Rooms and everything built from them update when you save; the 3D viewer shows the saved version.</small></p>
-      <EditorToolbar tool={tool} setTool={(t) => { setTool(t); setAnchor(null); if (t === "door" || t === "window") setWidth(String(EDIT.defaultWidthMm[t])); }}
-        width={width} setWidth={setWidth} thickness={thickness} setThickness={setThickness}
+      <p><small>Orthogonal walls, doors, windows (drawn by dragging along a wall) and room names. Rooms and everything built from them update when you save; the 3D viewer shows the saved version.</small></p>
+      <EditorToolbar tool={tool} setTool={(t) => { setTool(t); setAnchor(null); }}
+        height={height} setHeight={setHeight} sill={sill} setSill={setSill} thickness={thickness} setThickness={setThickness}
         canUndo={hist.done.length > 0} canRedo={hist.undone.length > 0} onUndo={() => setHist(undo(hist))} onRedo={() => setHist(redo(hist))}
         pending={hist.done.length} busy={busy} onSave={save} onDiscard={() => { if (!discardOk()) return; setHist(EMPTY_HISTORY); setSel(null); setAnchor(null); }} />
       {busy && <p role="status">{job ? `${STAGE_LABEL[job.stage] ?? job.stage} (${job.progress}%)` : "Saving…"}</p>}

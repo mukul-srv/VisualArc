@@ -12,7 +12,7 @@ export const EDIT = {
   hitPx: 6, // click tolerance in screen pixels
   minWallMm: 50, // UI guard only; the server's limits live in services/api/src/api/engine/settings.py
   defaultThicknessMm: 200,
-  defaultWidthMm: { door: 900, window: 1200 }, // prefilled when adding; shown as the user's own entry
+  minOpeningMm: 300, // UI guard for a dragged opening; the server validates the rest
   maxEdits: 500, // mirrors Settings.max_edits (services/api/src/api/engine/settings.py)
   tolMm: 1, // mirrors Settings.edit_match_tolerance_mm (same file)
   dragMinPx: 3, // a click that moves less than this is a click, not a drag
@@ -196,15 +196,32 @@ export const removeOpeningOp = (id: string, o: EditOpening): EditOp => ({ op: "r
 export const renameRoomOp = (id: string, r: EditRoom, name: string): EditOp | null =>
   name.trim() ? { op: "rename_room", id, point: r.label_point, name: name.trim() } : null;
 
-/** A door/window of `width` centred on `at` (plan mm), moved inside the host wall. Null when it does not fit. */
-export function addOpeningOp(id: string, host: EditWall, kind: Kind, at_: Pt, width: number, dims: Dims = {}): EditOp | null {
-  const a = axisOf(host.start, host.end);
-  if (!a || !(width > 0)) return null;
-  const [lo, hi] = span(a, host.start, host.end);
-  if (width > hi - lo) return null;
-  const s = Math.min(Math.max(along(a, at_) - width / 2, lo), hi - width);
-  const c = cross(a, host.start);
-  return { op: "add_opening", id, wall: wallRef(host), kind, start: at(a, s, c), end: at(a, s + width, c), ...dims };
+/** Opening drawn by dragging along `host` from `a` to `b` (plan mm): snapped to the grid, clamped to the wall and to the
+ *  free gap (between the host's other openings) that holds the press point; null when shorter than the minimum. */
+export function dragOpeningOp(id: string, host: EditWall, kind: Kind, a: Pt, b: Pt, others: EditOpening[], dims: Dims = {}): EditOp | null {
+  const ax = axisOf(host.start, host.end);
+  if (!ax) return null;
+  const g = (v: number) => Math.round(v / EDIT.gridMm) * EDIT.gridMm;
+  let [lo, hi] = span(ax, host.start, host.end);
+  const press = along(ax, a);
+  for (const o of others.filter((x) => x.wall_id === host.id)) {
+    const [olo, ohi] = span(ax, o.start, o.end);
+    if (press >= olo - EDIT.tolMm && press <= ohi + EDIT.tolMm) return null; // pressed on an opening
+    if (ohi <= press) lo = Math.max(lo, ohi);
+    else if (olo >= press) hi = Math.min(hi, olo);
+  }
+  const s = Math.min(Math.max(Math.min(g(along(ax, a)), g(along(ax, b))), lo), hi);
+  const e = Math.min(Math.max(Math.max(g(along(ax, a)), g(along(ax, b))), lo), hi);
+  if (e - s < EDIT.minOpeningMm) return null;
+  const c = cross(ax, host.start);
+  return { op: "add_opening", id, wall: wallRef(host), kind, start: at(ax, s, c), end: at(ax, e, c), ...dims };
+}
+
+/** Height and sill fields of the tool (empty = the project's default, set by the server). Door sill is always 0. */
+export function openingDims(kind: Kind, height: string, sill: string): Parsed<Dims> {
+  const h = height.trim() === "" ? undefined : parse(height), s = sill.trim() === "" || kind === "door" ? undefined : parse(sill);
+  if (h === null || s === null || (h !== undefined && !(h > 0)) || (s !== undefined && s < 0)) return { ok: false, error: "Height must be above 0 and the sill 0 or more." };
+  return { ok: true, value: { ...(h === undefined ? {} : { height: h }), ...(kind === "door" ? { sill_height: 0 } : s === undefined ? {} : { sill_height: s }) } };
 }
 
 // --- undo / redo ---------------------------------------------------------------------------------------------------------

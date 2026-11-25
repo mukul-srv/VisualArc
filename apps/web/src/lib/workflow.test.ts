@@ -174,6 +174,13 @@ test("plan editing: the overlay feeds the editor model, a saved edit is replayed
   const bad = await jobs.saveEditsJob(pid, fid, [edit.setOpeningOp("e1", o, { height: 3500 })], undefined, fetch, 100);
   expect(bad).toMatchObject({ ok: false, kind: "blocked" });
   expect((await load()).edits).toEqual([]);
+  // a dragged window taller than its wall is refused with the blocking issue; a fitting one is saved
+  const host = model!.walls.find((w) => w.id === o.wall_id)!;
+  const free = (h: number) => edit.dragOpeningOp("e1", host, "window", [host.start[0] + 1700, host.start[1]], [host.start[0] + 2900, host.start[1]], model!.openings, { height: h, sill_height: 900 })!;
+  const tall = await jobs.saveEditsJob(pid, fid, [free(3500)], undefined, fetch, 100);
+  expect(tall).toMatchObject({ ok: false, kind: "blocked" });
+  expect(!tall.ok && tall.issues.map((i) => i.code)).toContain("opening_exceeds_wall_height");
+  expect((await load()).edits).toEqual([]);
   // removing an opening is saved, replayed and visible in the next overlay
   const ok = await jobs.saveEditsJob(pid, fid, [edit.removeOpeningOp("e1", o)], undefined, fetch, 100);
   expect(ok.ok).toBe(true);
