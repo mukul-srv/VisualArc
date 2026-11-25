@@ -18,8 +18,8 @@ type Props = {
   canEdit: boolean;
 };
 
-/** Square 2D plan of one floor for placing lights: click an empty spot to add one, drag a marker to move it,
- *  click a marker to select it, arrow keys nudge the selected one (shift: 500 mm), Delete removes it.
+/** Square 2D plan of one floor for placing lights: "Add light source" puts a new dot at the centre of the plan
+ *  (selected), drag a marker to move it, click a marker to select it, arrow keys nudge the selected one (shift: 500 mm), Delete removes it.
  *  Viewers see the markers only. The plan is the floor's own data (the plan overlay), drawn faintly. */
 export function LightPlan({ projectId, floors, share, lights, selectedId, onSelect, onChange, canEdit }: Props) {
   const [tab, setTab] = useState<string | null>(null);
@@ -66,23 +66,29 @@ export function LightPlan({ projectId, floors, share, lights, selectedId, onSele
           </button>
         ))}
       </div>
+      {canEdit && (
+        <button
+          disabled={!canPlace(canEdit, lights.length)}
+          onClick={() => {
+            const r = placeLight(lights, floorId, (sq.minX + sq.maxX) / 2, (sq.minY + sq.maxY) / 2, sq, canEdit);
+            if (r.id) {
+              onChange(r.lights);
+              onSelect(r.id);
+            }
+          }}
+        >
+          {lights.length >= MAX_LIGHTS ? `Add light source (${lights.length}/${MAX_LIGHTS})` : "Add light source"}
+        </button>
+      )}
       <svg
         width={S}
         height={S}
         viewBox={`0 0 ${S} ${S}`}
         tabIndex={0}
         role="group"
-        aria-label={`Light plan, square view of the floor. ${canEdit ? "Click to add a light, drag a marker to move it, arrow keys move the selected light, Delete removes it." : "Read only."}`}
-        style={{ background: "#16181d", border: "1px solid #444", cursor: canEdit ? "crosshair" : "default", touchAction: "none", maxWidth: "100%" }}
-        onPointerDown={(e) => {
-          if (!canEdit || !canPlace(canEdit, lights.length)) return;
-          const [x, y] = at(e);
-          const r = placeLight(lights, floorId, x, y, sq, canEdit);
-          if (r.id) {
-            onChange(r.lights);
-            onSelect(r.id);
-          }
-        }}
+        aria-label={`Light plan, square view of the floor. ${canEdit ? "Use Add light source, drag a marker to move it, arrow keys move the selected light, Delete removes it." : "Read only."}`}
+        style={{ background: "#16181d", border: "1px solid #444", cursor: "default", touchAction: "none", maxWidth: "100%" }}
+        onPointerDown={() => onSelect(null)}
         onPointerMove={(e) => {
           if (!drag.current) return;
           const [x, y] = at(e);

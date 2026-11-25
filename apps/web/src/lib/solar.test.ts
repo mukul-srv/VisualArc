@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { daylight, defaultUtcOffset, localToUtcMs, sunDirection, sunPosition } from "./solar";
+import { daylight, sunDirection, sunPosition } from "./solar";
 
 const utc = (s: string) => Date.parse(s);
 
@@ -26,12 +26,6 @@ test("morning sun is in the east, afternoon in the west, southern hemisphere fac
   const s = sunPosition(-33.9, 151.2, utc("2024-06-21T02:10:00Z")); // Sydney local noon
   expect(Math.min(s.azimuth, 360 - s.azimuth)).toBeLessThan(5);
   expect(s.elevation).toBeCloseTo(90 - 33.9 - 23.44, 0);
-});
-
-test("local time to UTC and default offset", () => {
-  expect(localToUtcMs("2024-06-21", 14, 2)).toBe(utc("2024-06-21T12:00:00Z"));
-  expect(defaultUtcOffset(-74)).toBe(-5);
-  expect(defaultUtcOffset(151.2)).toBe(10);
 });
 
 test("sun direction follows the north angle (plan +Y is -Z in the viewer)", () => {

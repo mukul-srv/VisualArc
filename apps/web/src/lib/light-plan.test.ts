@@ -58,3 +58,21 @@ test("arrow keys step 100 mm (500 with shift), plan up is +y", () => {
   expect(arrowStep("ArrowLeft", true)).toEqual([-500, 0]);
   expect(arrowStep("a", false)).toBeNull();
 });
+
+test("Add light source: a new light at the centre of the plan square, selected by its id", () => {
+  const cx = (sq.minX + sq.maxX) / 2, cy = (sq.minY + sq.maxY) / 2;
+  const r = placeLight([light("a")], "f2", cx, cy, sq, true);
+  expect(r.id).toBe("light-1");
+  expect(r.lights.at(-1)).toMatchObject({ floor_id: "f2", x_mm: Math.round(cx), y_mm: Math.round(cy) });
+  // the centre is inside the square, so it is visible at once
+  const f = squareFit(sq, 300);
+  const [sx, sy] = planToScreen(f, cx, cy);
+  expect(sx).toBeGreaterThan(0);
+  expect(sx).toBeLessThan(300);
+  expect(sy).toBeGreaterThan(0);
+  expect(sy).toBeLessThan(300);
+  // the tenth light is allowed, the eleventh is not
+  const nine = Array.from({ length: 9 }, (_, i) => light(`l${i}`));
+  expect(placeLight(nine, "f1", cx, cy, sq, true).lights).toHaveLength(10);
+  expect(placeLight([...nine, light("l9")], "f1", cx, cy, sq, true).id).toBeNull();
+});

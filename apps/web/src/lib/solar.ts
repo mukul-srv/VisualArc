@@ -24,15 +24,6 @@ export function sunPosition(lat: number, lon: number, utcMs: number): { azimuth:
   return { azimuth, elevation: deg(Math.asin(Math.max(-1, Math.min(1, sinEl)))) };
 }
 
-/** UTC offset (hours) a place on this longitude would have by default; the user may override it. */
-export const defaultUtcOffset = (lon: number) => Math.max(-12, Math.min(14, Math.round(lon / 15)));
-
-/** UTC instant of `hours` (0..24, local clock) on `date` (yyyy-mm-dd) in a zone `utcOffset` hours from UTC. */
-export function localToUtcMs(date: string, hours: number, utcOffset: number): number {
-  const [y, m, d] = date.split("-").map(Number);
-  return Date.UTC(y, m - 1, d) + (hours - utcOffset) * 3600000;
-}
-
 /** Unit vector from the scene origin towards the sun in viewer axes (X = plan x, Y up, Z = -plan y).
  *  `northDeg` is the clockwise angle from plan +Y to true north, so the sun's plan bearing is azimuth - northDeg. */
 export function sunDirection(azimuth: number, elevation: number, northDeg: number): [number, number, number] {
