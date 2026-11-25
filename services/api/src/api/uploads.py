@@ -76,8 +76,8 @@ async def _pdf_upload(path, upload_id: str, user, filename: str | None) -> dict:
     """A PDF body: describe its pages (vector groups, scale suggestions); POST /uploads/{id}/pdf converts it."""
     info = await run_in_threadpool(inspect_pdf, path)
     if all(p["raster_only"] for p in info["pages"]):
-        raise InputError("this PDF is a scanned image with no vector drawing. Raster scans need the trace-assist "
-                         "feature (coming soon); a PDF exported from CAD works now.")
+        raise InputError("this PDF is a scanned image with no vector drawing. A scan can be traced by hand "
+                         "instead (trace-assist: on the project Floors tab, Trace a floor from an image); a PDF exported from CAD converts directly.")
     with session() as db:
         name = (filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:255] or None
         db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id), owner_id=user.id, filename=name))

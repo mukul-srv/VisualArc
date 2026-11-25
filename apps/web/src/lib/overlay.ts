@@ -1,4 +1,5 @@
 import { API_BASE, send } from "./api";
+import type { Underlay } from "./underlay";
 
 // Plan overlay: the source drawing's linework (grey) under what the engine built (coloured), one floor.
 // Everything is in the floor's plan millimetres; plan y points up, the screen's y down.
@@ -16,6 +17,7 @@ export type OverlayData = {
     rooms?: { id: string; polygon: [number, number][]; name: string; name_source: string; area: number; label_point: [number, number] }[];
   };
   edits?: unknown[]; // the floor's stored edit ops, in order
+  underlay?: Underlay | null; // a floor made from an image to trace over
 };
 
 export const getPlanOverlay = (pid: string, floorId: string, f: Fetch = fetch, share?: string | null) =>

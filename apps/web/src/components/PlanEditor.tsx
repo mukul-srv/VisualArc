@@ -10,6 +10,9 @@ import {
   removeOpeningOp, removeWallOp, setOpeningOp, setWallOp, slideOpening, snap, toEditModel, undo, type EditModel, type EditOp, type EditOpening, type EditWall, type Pt, type Selection,
 } from "../lib/plan-edit";
 import { IssueList } from "./IssueList";
+import { UnderlayPanel, type Calibrating } from "./UnderlayPanel";
+import { API_BASE } from "../lib/api";
+import { calibrationScale, imageRect, planToPx, putCalibration, pxToPlan } from "../lib/underlay";
 import { EditorToolbar, PlanInspector, type Tool } from "./PlanEditorParts";
 
 const W = 720;
@@ -54,13 +57,25 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   const [blocked, setBlocked] = useState<Issue[] | null>(null);
   const [saved, setSaved] = useState<Issue[] | null>(null); // issues of the last successful save (skipped edits show here)
   const canvas = useRef<HTMLCanvasElement>(null);
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  const [opacity, setOpacity] = useState(0.5);
+  const [hideImg, setHideImg] = useState(false);
+  const [locked, setLocked] = useState(true);
+  const [calib, setCalib] = useState<Calibrating | null>(null);
+  const [calibError, setCalibError] = useState<string | null>(null);
+  const under = data?.underlay ?? null;
+  const needsScale = under !== null && under.calibration === null; // nothing can be traced before the scale is known
 
   const load = useCallback(async () => {
     const r = await getPlanOverlay(projectId, floor.id);
     if (!r.ok) return setError(r.message);
     setError(null);
     setData(r.overlay);
-    const b = overlayBounds(r.overlay);
+    let b = overlayBounds(r.overlay);
+    if (r.overlay.underlay) {
+      const q = imageRect(r.overlay.underlay);
+      b = b ? { minX: Math.min(b.minX, q.x0), minY: Math.min(b.minY, q.y0), maxX: Math.max(b.maxX, q.x1), maxY: Math.max(b.maxY, q.y1) } : { minX: q.x0, minY: q.y0, maxX: q.x1, maxY: q.y1 };
+    }
     if (b) setView(fit(b, W, H));
   }, [projectId, floor.id]);
   useEffect(() => {
@@ -91,6 +106,14 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
     return () => c.removeEventListener("wheel", onWheel);
   }, [data]);
 
+  const underUrl = under?.url;
+  useEffect(() => {
+    if (!underUrl) return queueMicrotask(() => setImg(null));
+    const im = new Image();
+    im.onload = () => setImg(im);
+    im.src = `${API_BASE}${underUrl}`;
+  }, [underUrl]);
+
   // draw
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
@@ -101,6 +124,26 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
       pts.forEach((p, i) => (i ? ctx.lineTo(...S(p)) : ctx.moveTo(...S(p))));
       if (close) ctx.closePath();
     };
+    if (under && img && !hideImg) {
+      const q = imageRect(under);
+      const [x, y] = S([q.x0, q.y1]);
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(img, x, y, (q.x1 - q.x0) * view.scale, (q.y1 - q.y0) * view.scale);
+      ctx.globalAlpha = 1;
+    }
+    if (under && calib) {
+      ctx.strokeStyle = "#d4006a";
+      ctx.lineWidth = 2;
+      for (const [px, py] of calib.pts) {
+        const [cx, cy] = S(pxToPlan(under, px, py));
+        ctx.beginPath();
+        ctx.moveTo(cx - 8, cy);
+        ctx.lineTo(cx + 8, cy);
+        ctx.moveTo(cx, cy - 8);
+        ctx.lineTo(cx, cy + 8);
+        ctx.stroke();
+      }
+    }
     ctx.lineWidth = 1;
     ctx.strokeStyle = "#c4c4c4";
     ctx.beginPath();
@@ -143,7 +186,7 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-  }, [data, now, base, view, sel, tool, anchor, hover, allOps]);
+  }, [data, now, base, view, sel, tool, anchor, hover, allOps, under, img, hideImg, opacity, calib]);
 
   const point = (e: RPointerEvent<HTMLCanvasElement>): { s: [number, number]; p: Pt } | null => {
     const c = canvas.current;
@@ -157,6 +200,11 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
     const q = point(e);
     if (!q || !committed || !view || busy) return;
     const { s, p } = q;
+    if (under && calib) { // picking the two calibration points: nothing else happens meanwhile
+      if (calib.pts.length < 2) setCalib({ ...calib, pts: [...calib.pts, planToPx(under, p[0], p[1])] });
+      return;
+    }
+    if (needsScale) return setError("Set the scale of the underlay first (Set scale).");
     const tol = pxToMm(EDIT.hitPx, view.scale);
     const hit = hitTest(committed, p, tol);
     const hostOf = (h: Selection | null) => (h?.kind === "wall" ? committed.walls.find((w) => w.id === h.id) : h?.kind === "opening" ? committed.walls.find((w) => w.id === committed.openings.find((o) => o.id === h.id)?.wall_id) : undefined);
@@ -212,6 +260,21 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
     setDrag(null);
   }
 
+  async function saveCalibration() {
+    if (!under || !calib || calib.pts.length < 2) return;
+    const c = calibrationScale(calib.pts[0], calib.pts[1], Number(calib.distance));
+    if (!c.ok) return setCalibError(c.error);
+    setCalibError(null);
+    setBusy(true);
+    const r = await putCalibration(projectId, floor.id, calib.pts[0], calib.pts[1], Number(calib.distance));
+    setBusy(false);
+    if (!r.ok) return setCalibError(r.message);
+    setCalib(null);
+    setLocked(true);
+    await load();
+    onSaved();
+  }
+
   async function save() {
     setBusy(true);
     setBlocked(null);
@@ -238,6 +301,10 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
     <section aria-label={`Edit plan: ${floor.name}`}>
       <h3>Edit plan: {floor.name} <button type="button" onClick={() => discardOk() && onClose()} disabled={busy}>Close</button></h3>
       <p><small>Orthogonal walls, doors, windows (drawn by dragging along a wall) and room names. Rooms and everything built from them update when you save; the 3D viewer shows the saved version.</small></p>
+      {under && (
+        <UnderlayPanel underlay={under} opacity={opacity} setOpacity={setOpacity} hidden={hideImg} setHidden={setHideImg} locked={locked} setLocked={setLocked}
+          calib={calib} setCalib={(c) => { setCalib(c); setCalibError(null); }} onSaveCalibration={saveCalibration} busy={busy} error={calibError} />
+      )}
       <EditorToolbar tool={tool} setTool={(t) => { setTool(t); setAnchor(null); }}
         height={height} setHeight={setHeight} sill={sill} setSill={setSill} thickness={thickness} setThickness={setThickness}
         canUndo={hist.done.length > 0} canRedo={hist.undone.length > 0} onUndo={() => setHist(undo(hist))} onRedo={() => setHist(redo(hist))}

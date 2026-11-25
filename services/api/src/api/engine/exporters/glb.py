@@ -6,6 +6,8 @@ its canonical id; its non-geometry fields (type, provenance, sources) ride
 along as glTF mesh `extras` so the viewer can show them.
 """
 
+import struct
+
 import numpy as np
 import trimesh
 
@@ -113,6 +115,15 @@ def build_scene(project: Project) -> trimesh.Scene:
                 box_uv(mesh)
                 scene.add_geometry(mesh, node_name=pid, geom_name=pid)
     return scene
+
+
+def export_glb(scene: trimesh.Scene) -> bytes:
+    """GLB bytes; a scene without geometry (a floor not traced yet) is a valid empty glTF, which trimesh refuses to write."""
+    if scene.geometry:
+        return scene.export(file_type="glb")
+    body = b'{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[]}]}'
+    body += b" " * (-len(body) % 4)
+    return b"glTF" + struct.pack("<III", 2, 12 + 8 + len(body), len(body)) + b"JSON" + body
 
 
 def build_meta(project: Project, scene: trimesh.Scene) -> dict:

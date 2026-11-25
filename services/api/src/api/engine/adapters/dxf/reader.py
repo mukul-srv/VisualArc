@@ -82,6 +82,18 @@ USER_UNITS = {
 }
 
 
+BLANK_TRACE = "visual_arc:blank-trace"  # $PROJECTNAME of the empty DXF a trace-from-image floor starts from
+
+
+def make_blank_dxf(path: Path) -> None:
+    """The source of a floor that is traced over an underlay: an empty mm drawing, marked as such. Without
+    the mark an empty drawing stays a blocking `no_plan_geometry`."""
+    doc = ezdxf.new("R2018", setup=False)
+    doc.units = ezdxf.units.MM
+    doc.header["$PROJECTNAME"] = BLANK_TRACE
+    doc.saveas(path)
+
+
 class InputError(ValueError):
     """Expected bad input (not a DXF, corrupt, too large): report, don't traceback."""
 
@@ -340,6 +352,7 @@ def read_dxf(
         raise ValueError("slab thickness must be > 0 mm")
     doc = load_doc(path, settings.max_dxf_bytes if max_bytes is None else max_bytes)
     check_complexity(doc, settings)
+    blank = doc.header.get("$PROJECTNAME") == BLANK_TRACE and len(doc.modelspace()) == 0  # see make_blank_dxf
     wall_layers, floor_layers = settings.wall_layers, settings.floor_layers
     ignored = set(settings.ignore_layers)
     ref_cap = settings.unmapped_ref_cap
@@ -763,7 +776,10 @@ def read_dxf(
                     "and generate again",
                 )
             )
-    if not paired:
+    if not paired and blank:  # a floor made from an image to trace over: empty until the user draws walls
+        issues.append(Issue(code="trace_floor_empty", severity="warning",
+                            message="nothing is traced on this floor yet: draw the walls over the underlay in the plan editor"))
+    elif not paired:
         issues += _no_plan_geometry(doc, settings)
         issues.append(
             Issue(

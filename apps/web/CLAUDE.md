@@ -14,4 +14,5 @@ Fresh worktree: don't `npm ci` unless the lockfile differs from main. If `apps/w
 `next build` needs a real `npm ci` — Turbopack does not follow the junction.
 
 ## Plan editor
+- Trace-assist: a floor made from an image (`TraceFloorForm`, Floors tab) opens in `PlanEditor` with an underlay (`UnderlayPanel`: opacity, hide, lock, two-point calibration, `lib/underlay.ts`); tracing tools stay off until the scale is saved. The picture is only a guide, nothing is detected.
 - `PlanEditor` (project Floors tab, editor+) edits walls, doors/windows and room names; doors and windows are drawn by dragging along a wall (height/sill tool fields, empty = project default). All logic is pure in `lib/plan-edit.ts` (hit-test, snap, drag, op builders mirroring `engine/edits.py`, undo/redo, local preview); the preview only moves edited rectangles, the server re-derives everything on save (`saveEditsJob`) and a block saves nothing.

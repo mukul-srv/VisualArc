@@ -195,6 +195,12 @@ class Settings:
     # File size is a backstop (~170 B/entity in the fixtures); CLI --max-mb overrides.
     max_dxf_bytes: int = 5 * 1024 * 1024
     dwg_convert_timeout_s: float = 120.0  # ODA File Converter run; PROVISIONAL, a round value
+    # Trace-assist underlay images (PROVISIONAL, round values): input bytes and pixels (the decompression-bomb
+    # guard), the longest side kept after downscaling, and the render resolution of a PDF page.
+    underlay_max_bytes: int = 15 * 1024 * 1024
+    underlay_max_pixels: int = 40_000_000
+    underlay_max_side_px: int = 4096
+    underlay_pdf_dpi: float = 150.0
     max_entities: int = 5000  # all modelspace entities; backstop
     max_wall_segments: int = 600  # LINEs + polyline edges on the wall layer (~7 s)
     max_opening_markers: int = 120  # LWPOLYLINEs on door/window layers (ratio-derived)
