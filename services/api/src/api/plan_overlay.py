@@ -93,4 +93,7 @@ def get_plan_overlay(pid: str, floor_id: str, who: Principal):
         fl = canon["buildings"][0]["floors"][0]
     except (OSError, ValueError, KeyError, IndexError) as e:
         raise HTTPException(409, "this floor's model data is missing or unreadable") from e
-    return {"floor_id": floor_id, "unit": "mm", **overlay_of(fl, segs, settings), "edits": f.get("edits", [])}
+    u = f.get("underlay")
+    under = None if u is None else {"url": f"/api/v1/projects/{pid}/floors/{floor_id}/underlay", "width_px": u["width_px"],
+                                    "height_px": u["height_px"], "calibration": u.get("calibration")}
+    return {"floor_id": floor_id, "unit": "mm", **overlay_of(fl, segs, settings), "edits": f.get("edits", []), "underlay": under}

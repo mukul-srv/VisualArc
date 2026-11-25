@@ -156,7 +156,7 @@ def _convert(src: Path, dst: Path, page_number: int, mm_per_pt: float) -> list[I
         if not objs:
             raise InputError(
                 "this page has no vector drawing" + (" (it is a scanned image)" if page.images else "")
-                + ". Raster scans need the trace-assist feature (coming soon); a PDF exported from CAD works now.")
+                + ". A scan can be traced by hand instead (trace-assist: on the project Floors tab, Trace a floor from an image); a PDF exported from CAD converts directly.")
         if len(objs) > MAX_OBJECTS:
             raise InputError(f"the page has {len(objs)} vector objects, limit {MAX_OBJECTS}")
         doc = ezdxf.new("R2018", setup=False)

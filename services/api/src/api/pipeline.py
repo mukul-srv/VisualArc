@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from api.engine.canonical.model import Project
-from api.engine.exporters.glb import build_meta, build_scene
+from api.engine.exporters.glb import build_meta, build_scene, export_glb
 from api.engine.exporters.report import build_report
 
 
@@ -25,7 +25,7 @@ def write_artifacts(
         if progress:
             progress("exporting")
         scene = build_scene(project)
-        (out / f"{stem}.glb").write_bytes(scene.export(file_type="glb"))
+        (out / f"{stem}.glb").write_bytes(export_glb(scene))
         meta = json.dumps(build_meta(project, scene), indent=2) + "\n"
         (out / f"{stem}.meta.json").write_text(meta, "utf-8")
         names += [f"{stem}.glb", f"{stem}.meta.json"]

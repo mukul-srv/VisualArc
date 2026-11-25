@@ -11,6 +11,7 @@ import { AccessPanel } from "./AccessPanel";
 import { HELP } from "../lib/help";
 import { BuildingPanel } from "./BuildingPanel";
 import { PlanEditor } from "./PlanEditor";
+import { TraceFloorForm } from "./TraceFloorForm";
 import { PlanOverlay } from "./PlanOverlay";
 import { ParametersPanel } from "./ParametersPanel";
 import { AppNav } from "./AppNav";
@@ -115,6 +116,12 @@ export function ProjectView({ id }: { id: string }) {
               onEditPlan={setEditingPlan} />
             {editingPlan && manifest.floors.some((f) => f.id === editingPlan) && (
               <PlanEditor key={editingPlan} projectId={id} floor={manifest.floors.find((f) => f.id === editingPlan)!} onSaved={load} onClose={() => setEditingPlan(null)} />
+            )}
+            {edit && (
+              <details>
+                <summary>Trace a floor from an image (scan or photo)</summary>
+                <TraceFloorForm projectId={id} onCreated={(fid) => { load().then(() => setEditingPlan(fid)); }} />
+              </details>
             )}
             <p><small>{edit ? "Use Edit plan on a floor to change its walls, doors, windows and room names, or fix the DXF and add it as a new floor." : "To change the geometry, fix the DXF and add it as a new floor."}</small></p>
             <details>
