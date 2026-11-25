@@ -5,10 +5,10 @@ const light = (id: string): ArtificialLight => ({ id, kind: "point", floor_id: "
 
 test("parseLighting keeps valid parts and drops malformed ones", () => {
   expect(parseLighting(undefined)).toEqual(NO_LIGHTING);
-  const got = parseLighting({ location: { latitude: 95, longitude: 0 }, north_deg: -90, lights: [light("a"), { ...light("b"), color: "red" }, { ...light("c"), kind: "laser" }, { ...light("d"), intensity: 50 }] });
+  const got = parseLighting({ location: { latitude: 95, longitude: 0 }, north_deg: -90, lights: [light("a"), { ...light("b"), color: "red" }, { ...light("c"), kind: "laser" }, { ...light("d"), intensity: 50 }, { ...light("e"), intensity: -2 }] });
   expect(got.location).toBeNull();
   expect(got.north_deg).toBe(270);
-  expect(got.lights.map((l) => l.id)).toEqual(["a"]);
+  expect(got.lights.map((l) => [l.id, l.intensity])).toEqual([["a", 2], ["d", 10], ["e", 0]]); // out-of-range intensity is clamped, not dropped
   expect(parseLighting({ location: { latitude: 51.5, longitude: -0.1 } }).location).toEqual({ latitude: 51.5, longitude: -0.1 });
 });
 

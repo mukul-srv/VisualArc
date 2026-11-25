@@ -27,8 +27,8 @@ export function parseLighting(x: unknown): SiteLighting {
   const location = loc && num(loc.latitude) && num(loc.longitude) && Math.abs(loc.latitude) <= 90 && Math.abs(loc.longitude) <= 180 ? { latitude: loc.latitude, longitude: loc.longitude } : null;
   const lights = (Array.isArray(v.lights) ? v.lights : []).filter(
     (l): l is ArtificialLight =>
-      !!l && typeof l.id === "string" && (l.kind === "point" || l.kind === "spot") && typeof l.floor_id === "string" && num(l.x_mm) && num(l.y_mm) && num(l.height_mm) && /^#[0-9a-fA-F]{6}$/.test(l.color) && num(l.intensity) && l.intensity >= 0 && l.intensity <= 10,
-  );
+      !!l && typeof l.id === "string" && (l.kind === "point" || l.kind === "spot") && typeof l.floor_id === "string" && num(l.x_mm) && num(l.y_mm) && num(l.height_mm) && /^#[0-9a-fA-F]{6}$/.test(l.color) && num(l.intensity),
+  ).map((l) => ({ ...l, intensity: Math.min(10, Math.max(0, l.intensity)) })); // old saves allowed up to 100: clamp, never drop
   return { location, north_deg: num(v.north_deg) ? ((v.north_deg % 360) + 360) % 360 : 0, lights: lights.slice(0, MAX_LIGHTS) };
 }
 

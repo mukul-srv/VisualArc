@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -29,6 +29,7 @@ import { DEFAULT_QUALITY, QUALITY, type QualityId } from "@/lib/quality";
 import { createRig } from "@/lib/rig";
 import { IDLE_RENDER, RenderPanel, type RenderState } from "@/components/RenderPanel";
 import { beginStill, maxRenderDim, type Still } from "@/lib/render-gl";
+import { cancelToken, CANCELLED } from "@/lib/pathtrace";
 import { clampTrace, DEFAULT_TRACE, outputSize, stillName, type ResolutionId, type TraceSettings } from "@/lib/render-settings";
 import { daylight, defaultUtcOffset, localToUtcMs, sunDirection, sunPosition } from "@/lib/solar";
 import { nextLightId, NO_LIGHTING, putLighting, type SiteLighting } from "@/lib/site-lighting";
@@ -61,8 +62,8 @@ export default function ViewerPage() {
   const materialsRef = useRef<MaterialMap>({});
   const applyMats = useRef<(m: MaterialMap) => void>(() => {});
   const [quality, setQuality] = useState<QualityId>(DEFAULT_QUALITY);
-  const [site, setSite] = useState<SiteLighting>(NO_LIGHTING); // edited copy; `savedSite` is what the project holds
-  const [savedSite, setSavedSite] = useState<SiteLighting>(NO_LIGHTING);
+  const [site, setSiteState] = useState<SiteLighting>(NO_LIGHTING); // edited copy; `savedSite` is what the project holds
+  const [savedSite, setSavedState] = useState<SiteLighting>(NO_LIGHTING);
   const [sun, setSun] = useState<SunSettings>({ date: "2024-06-21", hours: 12, utcOffset: 0, intensity: 1 });
   const offsetTouched = useRef(false);
   const [addMode, setAddMode] = useState(false);
@@ -81,6 +82,15 @@ export default function ViewerPage() {
   const renderApi = useRef<{ start: (s: TraceSettings) => void; stop: () => void; shot: (r: ResolutionId) => void; reset: () => void }>({ start() {}, stop() {}, shot() {}, reset() {} });
   const siteRef = useRef(site);
   const savedSiteRef = useRef(savedSite);
+  // the refs change together with the state, so a poll callback never reads a stale copy
+  const setSite = useCallback((s: SiteLighting) => {
+    siteRef.current = s;
+    setSiteState(s);
+  }, []);
+  const setSavedSite = useCallback((s: SiteLighting) => {
+    savedSiteRef.current = s;
+    setSavedState(s);
+  }, []);
   const [picked, setPicked] = useState<{ floor: string | null; id: string; type: string } | null>(null);
   const [viewing, setViewing] = useState<number | null>(null); // past version number, read-only
   // what to load: every floor's GLB of a project (id = floor id), or one model (id null)
@@ -139,7 +149,7 @@ export default function ViewerPage() {
       if (name === null) return queueMicrotask(() => setStatus("error: invalid model name (allowed: letters, digits, _ and -)"));
       queueMicrotask(() => setTarget({ stem: name, loads: [{ id: null, url: `/models/${name}.glb` }] }));
     }
-  }, []);
+  }, [setSite, setSavedSite]);
 
   // Rooms live in the canonical JSON, not the GLB: list them for the loaded model (API models only).
   const roomsUrl = (target?.loads.find((l) => l.id === floorId) ?? target?.loads[0])?.url;
@@ -639,6 +649,7 @@ export default function ViewerPage() {
     };
     // --- render panel: path-traced still and realtime screenshot of the current view
     let still: Still | null = null;
+    const epoch = cancelToken(); // closing the panel cancels a start that is still building
     let resultUrl: string | null = null;
     const dropResult = () => {
       if (resultUrl) URL.revokeObjectURL(resultUrl);
@@ -656,7 +667,8 @@ export default function ViewerPage() {
     };
     renderApi.current = {
       reset: () => {
-        still?.dispose();
+        epoch.cancel();
+        still?.dispose(); // stops the sampling loop first
         still = null;
         dropResult();
         setRenderState(IDLE_RENDER);
@@ -675,6 +687,8 @@ export default function ViewerPage() {
       },
       start: async (raw) => {
         if (still) return;
+        const mine = epoch.next();
+        const cancelled = () => !epoch.isCurrent(mine);
         const settings = clampTrace(raw);
         clearSelection();
         dropResult();
@@ -684,16 +698,20 @@ export default function ViewerPage() {
           const st = await beginStill({
             scene, camera, settings, size: sz, accuracy: lightState.current.quality === "accuracy", skyStrength: lastSky,
             hide: [grid, axes, rig.hemi, fill],
+            isCancelled: cancelled,
             onStatus: (status) => setRenderState((r) => (r.phase === "building" || r.phase === "running" ? { ...r, phase: "running", status } : r)),
           });
           still = st;
           setRenderState((r) => ({ ...r, phase: "running", canvas: st.canvas }));
           await st.done;
+          if (cancelled()) return; // closed meanwhile: reset() already disposed it
           const blob = await st.png();
           st.dispose();
           still = null;
+          if (cancelled()) return;
           finishWith(blob, sz, "render", note);
         } catch (e) {
+          if (e === CANCELLED || cancelled()) return; // closed while building: beginStill restored the scene
           still?.dispose();
           still = null;
           setRenderState({ ...IDLE_RENDER, phase: "error", size: sz, message: `Path tracing failed: ${e instanceof Error ? e.message : String(e)}` });
@@ -701,8 +719,9 @@ export default function ViewerPage() {
       },
     };
     addLightAt.current = (floorId, x, y, h) => {
-      const id = nextLightId(lightState.current.site.lights);
-      setSite((st) => ({ ...st, lights: [...st.lights, { id, kind: "point", floor_id: floorId, x_mm: Math.round(x), y_mm: Math.round(y), height_mm: Math.round(h), color: "#ffe9c4", intensity: 3 }] }));
+      const cur = siteRef.current;
+      const id = nextLightId(cur.lights);
+      setSite({ ...cur, lights: [...cur.lights, { id, kind: "point", floor_id: floorId, x_mm: Math.round(x), y_mm: Math.round(y), height_mm: Math.round(h), color: "#ffe9c4", intensity: 3 }] });
       setSelLight(id);
       setAddMode(false);
     };
@@ -790,7 +809,7 @@ export default function ViewerPage() {
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
-  }, [target]);
+  }, [target, setSite]);
 
   // The model of a project floor can be regenerated elsewhere (Parameters tab, another tab): when this
   // tab regains focus, reload the manifest and building, and reload the models if a floor changed.
@@ -821,7 +840,7 @@ export default function ViewerPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [manifest, viewing]);
+  }, [manifest, viewing, setSite, setSavedSite]);
 
   const floors = manifest ? sortFloors(manifest.floors) : [];
   const current = floors.find((f) => f.id === floorId);

@@ -63,3 +63,45 @@ export function runTrace(tracer: Tracer, settings: TraceSettings, schedule: Sche
     },
   };
 }
+
+/** Thrown when the panel was closed while the tracer was still being built. */
+export const CANCELLED = new Error("path tracing was cancelled");
+export const checkpoint = (isCancelled: () => boolean) => {
+  if (isCancelled()) throw CANCELLED;
+};
+
+/** Cancel token: `next()` starts an operation, `cancel()` makes every earlier one report cancelled. */
+export function cancelToken() {
+  let n = 0;
+  return { next: () => ++n, cancel: () => void n++, isCurrent: (id: number) => id === n };
+}
+
+export type Session = { done: Promise<StopReason>; stop: () => void; dispose: () => void };
+
+/** Build, then sample. `dispose` always stops the sampling loop first, so a closed panel never leaves a
+ *  frame loop running on freed GPU resources. If cancelled while `prepare` was awaiting, everything it made
+ *  is freed and nothing starts. */
+export async function startTrace(
+  prepare: () => Promise<{ tracer: Tracer; free: () => void }>,
+  settings: TraceSettings,
+  schedule: Schedule,
+  onStatus: (s: TraceStatus) => void,
+  isCancelled: () => boolean,
+): Promise<Session> {
+  const built = await prepare();
+  if (isCancelled()) {
+    built.free();
+    throw CANCELLED;
+  }
+  const run = runTrace(built.tracer, settings, schedule, onStatus);
+  let freed = false;
+  return {
+    done: run.done,
+    stop: run.stop,
+    dispose: () => {
+      run.stop();
+      if (!freed) built.free();
+      freed = true;
+    },
+  };
+}

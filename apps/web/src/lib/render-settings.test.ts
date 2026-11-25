@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { runTrace, type Schedule, type Tracer } from "./pathtrace";
+import { cancelToken, CANCELLED, checkpoint, runTrace, startTrace, type Schedule, type Tracer } from "./pathtrace";
 import { clampTrace, DEFAULT_TRACE, outputSize, progressOf, SAMPLE_LIMITS, stillName, stopReason } from "./render-settings";
 
 test("output size keeps the viewport aspect and clamps to the GPU maximum", () => {
@@ -86,4 +86,47 @@ test("stop() ends it as 'user'; a tracer that throws rejects done", async () => 
   const r2 = runTrace(bad, DEFAULT_TRACE, b.schedule, () => {});
   b.step(16);
   await expect(r2.done).rejects.toThrow("float textures");
+});
+
+test("dispose stops the frame loop before freeing: no sample runs on a freed tracer", async () => {
+  const { schedule, step } = fake();
+  let freed = false;
+  const tracer: Tracer & { samples: number } = { samples: 0, renderSample() { if (freed) throw new Error("sampled after free"); tracer.samples++; } };
+  const free = vi.fn(() => void (freed = true));
+  const s = await startTrace(async () => ({ tracer, free }), DEFAULT_TRACE, schedule, () => {}, () => false);
+  step(16);
+  s.dispose();
+  s.dispose(); // twice is safe
+  step(16);
+  step(16);
+  expect(free).toHaveBeenCalledTimes(1);
+  expect(tracer.samples).toBe(1);
+  expect(await s.done).toBe("user");
+});
+
+test("closing while the tracer is still being built frees it and never starts sampling", async () => {
+  const { schedule, step } = fake();
+  const token = cancelToken();
+  const id = token.next();
+  const free = vi.fn();
+  const renderSample = vi.fn();
+  const slow = new Promise<void>((r) => setTimeout(r, 5));
+  const starting = startTrace(
+    async () => {
+      await slow; // the dynamic import / pause
+      checkpoint(() => !token.isCurrent(id));
+      return { tracer: { samples: 0, renderSample }, free };
+    },
+    DEFAULT_TRACE, schedule, () => {}, () => !token.isCurrent(id),
+  );
+  token.cancel(); // the panel is closed meanwhile
+  await expect(starting).rejects.toBe(CANCELLED);
+  step(16);
+  expect(renderSample).not.toHaveBeenCalled();
+  // cancelled after the last checkpoint (build returned): startTrace itself frees it
+  const id2 = token.next();
+  const free2 = vi.fn();
+  const late = startTrace(async () => { token.cancel(); return { tracer: { samples: 0, renderSample }, free: free2 }; }, DEFAULT_TRACE, schedule, () => {}, () => !token.isCurrent(id2));
+  await expect(late).rejects.toBe(CANCELLED);
+  expect(free2).toHaveBeenCalledTimes(1);
 });
