@@ -250,10 +250,10 @@ export function UploadFlow() {
       <Breadcrumbs trail={addingTo
         ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
-      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Floor plan (DXF or IFC) to 3D"}</h1>
+      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Floor plan (DXF, DWG or IFC) to 3D"}</h1>
       <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null)}</strong></p>
       <p><small>Values your drawing lacks use defaults, and every one is reported as assumed.</small></p>
-      <input type="file" accept=".dxf,.ifc" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
+      <input type="file" accept=".dxf,.dwg,.ifc" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
         <p role="status">
           {job && "Large drawings can take a minute; keep this page open. "}
