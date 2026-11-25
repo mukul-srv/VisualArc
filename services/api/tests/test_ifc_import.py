@@ -100,14 +100,18 @@ def test_unmapped_entities_are_issues_not_silence(tmp_path):
     assert "IfcBuildingElementProxy" in " ".join(i.message for i in issues)
 
 
-def _bare(tmp_path, units=True, storey=True, beam=False) -> Path:
+def _bare(tmp_path, units=True, storey=True, beam=False, elevation=0.0, wall_outside=False, area_unit_only=False) -> Path:
     f = ifcopenshell.file(schema="IFC4")
     ifcopenshell.api.root.create_entity(f, ifc_class="IfcProject", name="p")
     if units:
         ifcopenshell.api.unit.assign_unit(f)
+    if area_unit_only:  # a unit assignment without a LENGTHUNIT
+        ifcopenshell.api.unit.assign_unit(f, units=[ifcopenshell.api.unit.add_si_unit(f, unit_type="AREAUNIT")])
+    if wall_outside:
+        ifcopenshell.api.root.create_entity(f, ifc_class="IfcWall", name="loose")
     if storey:
         st = ifcopenshell.api.root.create_entity(f, ifc_class="IfcBuildingStorey", name="G")
-        st.Elevation = 0.0
+        st.Elevation = elevation
         if beam:
             b = ifcopenshell.api.root.create_entity(f, ifc_class="IfcBeam", name="b")
             ifcopenshell.api.spatial.assign_container(f, products=[b], relating_structure=st)
@@ -164,3 +168,20 @@ def test_ifc_upload_rejects_garbage_and_blocked(client, tmp_path):
     assert up["storeys"] == [] and up["issues"][0]["code"] == "ifc_units_missing"
     r = client.post(f"/api/v1/uploads/{up['upload_id']}/ifc", json={"project_name": "x"})
     assert r.status_code == 409 and r.json()["issues"][0]["severity"] == "blocking"
+
+
+def test_no_length_unit_is_blocking_even_with_a_unit_assignment(tmp_path):
+    q = read_ifc(_bare(units=False, area_unit_only=True, tmp_path=tmp_path))
+    assert [(i.code, i.severity) for i in q.issues] == [("ifc_units_missing", "blocking")]
+
+
+def test_element_outside_any_storey_is_an_issue(tmp_path):
+    q = read_ifc(_bare(tmp_path, wall_outside=True))
+    assert [i.code for i in q.issues if i.sources and i.sources[0].layer == "IfcWall"] == ["ifc_not_in_storey"]
+
+
+def test_storey_without_elevation_is_inferred_and_reported(tmp_path):
+    q = read_ifc(_bare(tmp_path, elevation=None))
+    f = q.buildings[0].floors[0]
+    assert f.elevation.source == "inferred" and f.elevation.value == 0.0
+    assert "ifc_elevation_inferred" in {i.code for i in q.issues}

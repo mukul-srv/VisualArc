@@ -72,7 +72,7 @@ async def create_upload(request: Request, user: CurrentUser, filename: str | Non
     path = request.state.path = upload_path(upload_id)
     try:
         if not await _save(request, DEFAULTS.max_dxf_bytes):
-            raise HTTPException(422, "empty upload: send the DXF as the request body")
+            raise HTTPException(422, "empty upload: send the file as the request body")
         if is_ifc(path):
             return await _ifc_upload(path, upload_id, user, filename)
         inventory = build_inventory(path)

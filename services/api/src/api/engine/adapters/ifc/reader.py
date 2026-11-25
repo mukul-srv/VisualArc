@@ -154,6 +154,12 @@ def _wall(ctx: _Ctx, el, n: int):
     return s, e, t, z0, z1
 
 
+def _has_length_unit(model) -> bool:
+    """A LENGTHUNIT in the project's unit assignment: without it the file's numbers have no unit and none is assumed."""
+    return any(getattr(u, "UnitType", None) == "LENGTHUNIT"
+               for a in model.by_type("IfcUnitAssignment") for u in a.Units or ())
+
+
 def storeys(path: Path) -> list[dict]:
     """The file's storeys, lowest first: key (GlobalId), name, elevation in mm (None when the file has none)."""
     model = ifcopenshell.open(str(path))
@@ -176,7 +182,7 @@ def read_ifc(path: Path, storey: str | None = None, floor_id: str | None = None,
         raise InputError(f"not a readable IFC file: {e}") from e
     if model.schema not in ("IFC2X3", "IFC4", "IFC4X3_ADD2", "IFC4X3"):
         raise InputError(f"IFC schema {model.schema} is not supported")
-    if not model.by_type("IfcProject") or not model.by_type("IfcUnitAssignment"):
+    if not model.by_type("IfcProject") or not _has_length_unit(model):
         return Project(**project, issues=[Issue(
             code="ifc_units_missing", severity="blocking",
             message="the IFC file has no length unit (IfcProject.UnitsInContext); refusing to guess")])
@@ -198,7 +204,9 @@ def read_ifc(path: Path, storey: str | None = None, floor_id: str | None = None,
                              floor_elevation, unit_mm, elevation_assumed))
     if storey is None:  # elements outside every storey, once for the whole file
         placed = {e.id() for st in model.by_type("IfcBuildingStorey") for e in uel.get_decomposition(st)}
-        _unsupported(ctx, [e for e in model.by_type("IfcElement") if e.id() not in placed], "not in any storey")
+        for e in [*model.by_type("IfcElement"), *model.by_type("IfcSpace")]:  # handled types too: none is dropped
+            if e.id() not in placed:
+                ctx.issue("ifc_not_in_storey", f"{e.is_a()} {e.GlobalId} is not in any storey; not imported", [e])
     return Project(**project, buildings=[Building(id="bldg-0", floors=floors)], issues=ctx.issues,
                    parameters={"ifc_schema": Param(value=model.schema, unit="none", source="source_extracted")})
 
@@ -246,6 +254,9 @@ def _floor(ctx: _Ctx, st, fid: str, name: str, forced_elev: float | None, unit_m
     slab_models = [Slab(id=f"slab-{n:03d}", polygon=list(p.exterior.coords)[:-1], holes=[],
                         thickness=_m(z1 - z0), sources=[_ref(e)])
                    for n, (e, (p, z0, z1)) in enumerate(slab_fp, 1) if z1 - z0 > 0]
+    for e, (_, z0, z1) in slab_fp:
+        if z1 - z0 <= 0:
+            ctx.issue("ifc_slab_no_thickness", f"IfcSlab {e.GlobalId} has no thickness; not imported", [e])
     finished = elev + max((sl.thickness.value for sl in slab_models), default=0.0)
 
     wall_models, wall_of = [], {}
