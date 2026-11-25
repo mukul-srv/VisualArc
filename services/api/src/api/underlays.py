@@ -1,7 +1,7 @@
 """Trace-assist underlays (Phase 1/25): a raster image under an empty floor, to trace over by hand.
 
 Nothing is detected or vectorised: the image is only a picture. A floor made from it starts empty (an empty
-mm DXF marked `trace-blank`, see `make_blank_dxf`), the user calibrates the scale with two clicks and a real
+mm DXF marked `visual_arc:blank-trace`, see `make_blank_dxf`), the user calibrates the scale with two clicks and a real
 distance (`user_provided`), and draws walls, doors and windows with the normal plan editor. The image is
 checked by content (never by name or declared type), pixel- and byte-capped, re-encoded as PNG (metadata
 dropped) and stored as a blob; the manifest floor keeps `underlay = {blob, width_px, height_px, calibration}`.
@@ -129,6 +129,9 @@ async def create_trace_floor(request: Request, user: CurrentUser, floor_name: An
         png, w, h = await run_in_threadpool(normalize, raw)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
+    if project_id is not None:  # before anything is written: only an editor of the project may add to it
+        with session() as chk:
+            owned(chk, ProjectRow, project_id, user.id, "unknown project", need="editor")
     uid, blob = new_id(), new_id()
     src = upload_path(uid)
     make_blank_dxf(src)

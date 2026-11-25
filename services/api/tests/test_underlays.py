@@ -128,3 +128,33 @@ def test_access_and_bad_input(client):
     # a second traced floor joins the project
     again = client.post("/api/v1/trace/floors", params={"floor_name": "First", "project_id": pid, "elevation": 3000}, content=_png())
     assert again.status_code == 201 and len(client.get(f"{P}/{pid}").json()["floors"]) == 2
+
+
+def test_an_empty_floor_builds_a_loadable_glb(tmp_path):
+    import trimesh
+
+    from api.engine.adapters.dxf.reader import make_blank_dxf, read_dxf
+    from api.pipeline import write_artifacts
+
+    src = tmp_path / "blank.dxf"
+    make_blank_dxf(src)
+    names = write_artifacts(read_dxf(src, 3000, ceiling_height=2700), tmp_path / "out", "model")
+    assert "model.glb" in names
+    assert len(trimesh.load(tmp_path / "out" / "model.glb", file_type="glb").geometry) == 0
+    # an unmarked empty drawing still blocks
+    import ezdxf
+
+    plain = tmp_path / "plain.dxf"
+    doc = ezdxf.new("R2018", setup=False)
+    doc.units = ezdxf.units.MM
+    doc.saveas(plain)
+    assert {i.code for i in read_dxf(plain, 3000).issues} >= {"no_walls", "no_plan_geometry"}
+
+
+def test_a_stranger_cannot_add_a_traced_floor_and_leaves_nothing_behind(client, tmp_path):
+    pid = _trace(client).json()["project_id"]
+    before = sorted(p.name for p in tmp_path.glob("*.dxf"))
+    other = TestClient(app)
+    r = other.post("/api/v1/trace/floors", params={"floor_name": "G", "project_id": pid}, content=_png())
+    assert r.status_code == 404
+    assert sorted(p.name for p in tmp_path.glob("*.dxf")) == before  # no blank DXF written for the refused request
