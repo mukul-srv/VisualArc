@@ -10,6 +10,7 @@ Plan (mm), walls 200 thick: outer face (0,0)-(6400,4400); clear room (200,200)-(
   bottom wall   block WIN_1200 (3 parallel lines 1200 long, 100 apart) at x 4400..5600 -> window marker
   room          block STAIR_RUN (6 parallel lines, 250 apart) -> recognised stair outline (no arrow:
                 direction missing is reported); block STAIR_NOTE (name only) -> ambiguous
+  (anon=True adds block XQ7: window lines, no name hint, across the left wall, rotated 90)
   DIMENSION     linear 6000 between the clear faces, text `dim_text` (default "6000" = consistent)
 All blocks are inserted on layer BLOCKS (not an opening layer), floor = closed LWPOLYLINE on A-FLOR.
 """
@@ -21,7 +22,7 @@ import ezdxf
 OUT = Path(__file__).resolve().parents[1] / "fixtures" / "input" / "fixture_interpret.dxf"
 
 
-def build(path: Path, dim_text: str = "6000", blocks: bool = True, units=ezdxf.units.MM) -> Path:
+def build(path: Path, dim_text: str = "6000", blocks: bool = True, units=ezdxf.units.MM, anon: bool = False) -> Path:
     doc = ezdxf.new("R2018", setup=False)
     doc.units = units
     for name in ("A-WALL", "A-FLOR", "BLOCKS", "A-ANNO-DIMS"):
@@ -57,6 +58,11 @@ def build(path: Path, dim_text: str = "6000", blocks: bool = True, units=ezdxf.u
         msp.add_blockref("WIN_1200", (4400, 0), dxfattribs=at)
         msp.add_blockref("STAIR_RUN", (500, 700), dxfattribs=at)
         msp.add_blockref("STAIR_NOTE", (3000, 2500), dxfattribs=at)
+    if blocks and anon:  # a window symbol whose name says nothing, across the left wall (geometry only)
+        anon_win = doc.blocks.new("XQ7")
+        for y in (0, 100, 200):
+            anon_win.add_line((0, y), (1200, y))
+        msp.add_blockref("XQ7", (200, 1500), dxfattribs={"layer": "BLOCKS", "rotation": 90})
     path.parent.mkdir(parents=True, exist_ok=True)
     doc.saveas(path)
     return path

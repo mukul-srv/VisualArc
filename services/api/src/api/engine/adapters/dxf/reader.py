@@ -151,6 +151,19 @@ def _block_rect(e, mm, settings: Settings):
     return (x0, y0, x1, y1) if x1 - x0 > tol and y1 - y0 > tol else None
 
 
+def _recognise(doc, e, k: float, cache: dict, settings: Settings):
+    """Block symbol recognition for an INSERT, classified once per (block, scale) from the block definition,
+    so every rotated copy of a block gets the same answer. Non-uniform scaling is not read."""
+    sx, sy = abs(e.dxf.get("xscale", 1.0)), abs(e.dxf.get("yscale", 1.0))
+    if abs(sx - sy) > settings.block_rel_tolerance * max(sx, sy, 1e-9):
+        return None
+    key = (e.dxf.name, round(sx, 6))
+    if key not in cache:
+        block = doc.blocks.get(e.dxf.name)
+        cache[key] = None if block is None else classify_block(list(block), e.dxf.name, k * sx, settings)
+    return cache[key]
+
+
 def load_doc(path: Path, max_bytes: int = DEFAULTS.max_dxf_bytes):
     if not path.is_file():
         raise InputError(f"not a readable file: {path}")
@@ -470,6 +483,7 @@ def read_dxf(
     outlines: list[Outline] = []
     arrows: list[Arrow] = []
     roof_polys: list[tuple] = []  # (ref, ring) on the roof-plan layer
+    rec_cache: dict[tuple, object] = {}  # (block name, scale) -> its recognition, classified once
     symbols: dict[tuple, list] = {}  # (block name, layer, recognition) -> its INSERTs
     for e in doc.modelspace():
         if scope and e.dxf.handle not in scope.handles:
@@ -483,7 +497,7 @@ def read_dxf(
         elif kind == "ARC" and layer in settings.door_layers:
             arc_centres.append(mm(e.ocs().to_wcs(e.dxf.center)))
         if kind == "INSERT" and layer not in opening_kind and layer not in ignored and (
-            rec := classify_block(e, k, settings)
+            rec := _recognise(doc, e, k, rec_cache, settings)
         ):  # a door/window/stair symbol on any other layer (26a): mapped or reported, never dropped
             symbols.setdefault((e.dxf.name, e.dxf.layer, rec), []).append(e)
             continue
@@ -688,17 +702,18 @@ def read_dxf(
     for (bname, blayer, rec), ents in symbols.items():
         refs = [_ref(e) for e in ents]
         if rec.confident:
-            placed = 0
+            placed_refs: list[SourceRef] = []
             for e in ents:
                 rect = _block_rect(e, mm, settings)
                 if rec.kind == "stair" and rect:
                     outlines.append(Outline("stair", _ref(e), rect))
-                    placed += 1
+                    placed_refs.append(_ref(e))
                 elif rec.kind in ("door", "window") and rect:
                     markers.append(Marker(rec.kind, _ref(e), rect))
                     block_markers.setdefault(e.dxf.name, []).append(_ref(e))
-                    placed += 1
+                    placed_refs.append(_ref(e))
             conf = "high (geometry and name agree)" if rec.name else "medium (geometry only, the name says nothing)"
+            placed = len(placed_refs)
             how = (f"{placed} mapped from the block's bounding box (source = block)" if placed else
                    "none placed as a marker (no rectangular footprint)" + (
                        "; the opening comes from the wall gap it sits in, if any" if rec.kind == "door" else ""))
@@ -707,6 +722,15 @@ def read_dxf(
                 message=f"{len(ents)} INSERT(s) of block {bname!r} on {blayer} recognised as {rec.kind}, "
                 f"confidence {conf}; {rec.why}; {how}. Check them; map the layer to override",
                 sources=refs[:ref_cap]))
+            if not rec.name:  # placed on geometry alone: one note per element, with a way to confirm or remove it
+                issues += [Issue(
+                    code="block_element_inferred", severity="warning",
+                    message=f"{rec.kind} from block {bname!r} ({r.entity_handle}) was inferred from block geometry "
+                    f"alone, confidence medium (the block name says nothing); confirm it or remove it",
+                    sources=[r],
+                    suggestions=[Suggestion(kind="confirm_inferred", value=rec.kind,
+                                            label=f"confirm the {rec.kind}, or delete it in the plan editor")])
+                    for r in placed_refs]
         else:
             cands = rec.candidates
             issues.append(Issue(

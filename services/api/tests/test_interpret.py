@@ -43,7 +43,8 @@ def test_block_symbols_recognised_with_provenance_and_confidence(tmp_path):
     kinds = sorted(o.kind for o in _floor(p).openings)
     assert kinds == ["door", "window"]  # window from the block box, door from the gap its swing marks
     assert _by(p, "opening_from_block") and _by(p, "unmarked_gap_bridged")
-    assert _floor(p).stairs or _by(p, "stair_direction_missing")  # stair outline made; direction not guessed
+    assert len(_floor(p).stairs) == 1 and len(_by(p, "stair_direction_missing")) == 1  # outline made, direction not guessed
+    assert not _by(p, "block_element_inferred")  # every placed block here has a name that agrees
 
 
 def test_name_only_block_is_ambiguous_with_a_candidate_not_placed(tmp_path):
@@ -117,3 +118,49 @@ def test_local_drawings_interpret_without_crash(name):
     p = read_dxf(LOCAL / name, 2700, ceiling_height=2700, user_units="mm")
     for i in _by(p, "block_symbol_recognised") + _by(p, "wall_gap_healed"):
         assert i.sources  # nothing recognised or healed without provenance
+
+
+def test_geometry_only_block_is_placed_but_reported_per_element(tmp_path):
+    p = _read(tmp_path, anon=True)  # XQ7: window lines, rotated, no name hint
+    (i,) = _by(p, "block_element_inferred")
+    assert i.severity == "warning" and "XQ7" in i.message and "medium" in i.message and len(i.sources) == 1
+    assert [(s.kind, s.value) for s in i.suggestions] == [("confirm_inferred", "window")]
+    assert sorted(o.kind for o in _floor(p).openings) == ["door", "window", "window"]
+
+
+def test_blocks_are_classified_once_per_block(tmp_path, monkeypatch):
+    from api.engine.adapters.dxf import reader
+
+    path = _mk.build(tmp_path / "c.dxf")
+    doc = ezdxf.readfile(path)
+    doc.modelspace().add_blockref("STAIR_RUN", (3500, 700), dxfattribs={"layer": "BLOCKS"})
+    doc.saveas(path)
+    calls = []
+    real = reader.classify_block
+    monkeypatch.setattr(reader, "classify_block", lambda *a, **k: calls.append(a[1]) or real(*a, **k))
+    read_dxf(path, 3000, ceiling_height=3000)
+    assert sorted(calls) == ["DOOR_900", "STAIR_NOTE", "STAIR_RUN", "WIN_1200"]  # two STAIR_RUN inserts, one call
+
+
+@pytest.mark.parametrize("text", ["6000 MM", "6000mm", "6 m", "600 cm", "236.22 in"])
+def test_dimension_text_with_unit_suffix_is_read_in_that_unit(tmp_path, text):
+    p = _read(tmp_path, dim_text=text)
+    assert not any(i.code.startswith("dimension_") for i in p.issues)
+
+
+@pytest.mark.parametrize("text, unit", [("600", "cm"), ("6", "m"), ("236.22", "in")])
+def test_unitless_text_that_only_fits_another_unit_is_reported(tmp_path, text, unit):
+    (i,) = _by(_read(tmp_path, dim_text=text), "dimension_unit_interpreted")
+    assert f"in {unit}" in i.message and i.sources
+
+
+def test_dimension_suffix_that_contradicts_the_drawing_is_a_mismatch(tmp_path):
+    (i,) = _by(_read(tmp_path, dim_text="6000 ft"), "dimension_scale_mismatch")
+    assert i.severity == "warning"
+
+
+def test_unreadable_dimension_text_is_counted_in_one_issue(tmp_path):
+    p = _read(tmp_path, dim_text="about 6000")
+    (i,) = _by(p, "dimension_text_unreadable")
+    assert "1 DIMENSION" in i.message and len(i.sources) == 1
+    assert not _by(p, "dimension_scale_mismatch")
