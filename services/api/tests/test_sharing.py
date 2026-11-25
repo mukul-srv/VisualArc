@@ -190,3 +190,29 @@ def test_no_per_user_project_share_limit(owner, tmp_path, monkeypatch):
         assert _grant(owner, pid, email, "viewer").status_code == 200
         tokens.add(owner.post(f"{P}/{pid}/link").json()["token"])
     assert len(tokens) == 3
+
+
+def test_export_access_roles_link_and_missing_models(proj, owner, tmp_path, monkeypatch):
+    from api.db import GenerationRow, session
+    from api.storage import blob_path
+
+    viewer, ve = _user(tmp_path, monkeypatch)
+    stranger, _ = _user(tmp_path, monkeypatch)
+    anon = _anon(tmp_path, monkeypatch)
+    assert _grant(owner, proj, ve, "viewer").status_code == 200
+    gid = _gid(owner, proj)
+    tok = owner.post(f"{P}/{proj}/link").json()["token"]
+    for fmt in ("obj", "ifc"):
+        assert viewer.get(f"{P}/{proj}/export/{fmt}").status_code == 200
+        assert anon.get(f"{P}/{proj}/export/{fmt}", params={"share": tok}).status_code == 200
+        assert anon.get(f"/api/v1/generations/{gid}/export/{fmt}", params={"share": tok}).status_code == 200
+        assert stranger.get(f"{P}/{proj}/export/{fmt}").status_code == 404
+        assert stranger.get(f"{P}/{proj}/export/{fmt}", params={"share": tok}).status_code == 200  # the link is the access
+        assert anon.get(f"{P}/{proj}/export/{fmt}").status_code in (401, 404)
+    # a blocked generation stores nothing: unknown id; a generation whose model file is gone: 404
+    assert owner.get(f"/api/v1/generations/{'0' * 32}/export/obj").status_code == 404
+    with session() as db:
+        prefix = db.get(GenerationRow, gid).blob_prefix
+    blob_path(f"{prefix}/model.canonical.json").unlink()
+    assert owner.get(f"/api/v1/generations/{gid}/export/ifc").status_code == 404
+    assert owner.get(f"{P}/{proj}/export/ifc").status_code == 404

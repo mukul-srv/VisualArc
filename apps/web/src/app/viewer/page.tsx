@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { canonicalUrl, getProject, glbUrl, isGenerationId } from "@/lib/api";
+import { canonicalUrl, exportUrl, getProject, glbUrl, isGenerationId } from "@/lib/api";
 import { getBuilding, sameBuilding, type Building } from "@/lib/building";
 import { blockedHint, blockedStairAt, blockedStairs, floorAtHeight, floorState, GAP, manifestBuilding, placements, walkableFloors, type View } from "@/lib/building-view";
 import { setGhost } from "@/lib/ghost";
@@ -58,6 +58,7 @@ export default function ViewerPage() {
   const [result, setResult] = useState<{ m: Measurement; a: SnapKind; b: SnapKind } | null>(null);
 
   const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [generationId, setGenerationId] = useState<string | null>(null); // a standalone model (?generation=)
   const [materials, setMaterials] = useState<MaterialMap>({}); // "<floor>/<element>" -> library id
   const materialsRef = useRef<MaterialMap>({});
   const applyMats = useRef<(m: MaterialMap) => void>(() => {});
@@ -143,6 +144,7 @@ export default function ViewerPage() {
       });
     } else if (generation !== null) {
       if (!isGenerationId(generation)) return queueMicrotask(() => setStatus("error: invalid generation id"));
+      queueMicrotask(() => setGenerationId(generation));
       queueMicrotask(() => setTarget({ stem: `generation ${generation.slice(0, 8)}`, loads: [{ id: null, url: glbUrl(generation) }] }));
     } else {
       const name = resolveStem(query.get("model"));
@@ -858,6 +860,8 @@ export default function ViewerPage() {
     }
   };
 
+  // exports are the current state, so not offered while looking at an older version
+  const exportTarget = viewing !== null ? null : manifest ? { project: manifest.id } : generationId ? { generation: generationId } : null;
   return (
     <div style={{ position: "fixed", inset: 0 }}>
       <div ref={mount} style={{ width: "100%", height: "100%" }} />
@@ -878,6 +882,7 @@ export default function ViewerPage() {
             setTop.current(!top);
           }}
           onMeasure={() => toggleMeasure.current()}
+          exports={exportTarget && { obj: exportUrl(exportTarget, "obj", shareToken), ifc: exportUrl(exportTarget, "ifc", shareToken) }}
         />
         {walking ? "WASD/arrows move, drag to look, E opens a door" : status}
         {hint && <div role="status" style={{ color: "#ffcc66" }}>{hint}</div>}

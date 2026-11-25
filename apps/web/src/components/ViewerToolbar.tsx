@@ -11,6 +11,8 @@ type Props = {
   onRoof: () => void;
   onTop: () => void;
   onMeasure: () => void;
+  /** OBJ and IFC download links (absent for local /models files, which have no API model). */
+  exports?: { obj: string; ifc: string } | null;
 };
 
 /** The viewer's essentials are always visible: walk and roof (when the model has one). The less
@@ -30,6 +32,8 @@ export function ViewerToolbar(p: Props) {
           <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
             <button disabled={p.walking} onClick={p.onTop} aria-pressed={p.top} {...about(HELP.topdown)}>Top-down</button>
             <button disabled={p.walking} onClick={p.onMeasure} aria-pressed={p.measuring} {...about(HELP.measure)}>Measure</button>
+            {p.exports && <a href={p.exports.obj} download {...about(HELP.exportObj)}>Export OBJ</a>}
+            {p.exports && <a href={p.exports.ifc} download {...about(HELP.exportIfc)}>Export IFC</a>}
           </div>
         </details>
       </div>
