@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { OverlayData } from "./overlay";
 import {
-  EDIT, EMPTY_HISTORY, addOpeningOp, addWallOp, applyOps, axisOf, canAdd, dragEndpoint, endpointAt, dragged, hitTest, inspectorRows, isNoop, moveWall, nextId,
+  EDIT, EMPTY_HISTORY, dragOpeningOp, openingDims, addOpeningOp, addWallOp, applyOps, axisOf, canAdd, dragEndpoint, endpointAt, dragged, hitTest, inspectorRows, isNoop, moveWall, nextId,
   openingFromFields, orthogonal, push, redo, removeOpeningOp, removeWallOp, renameRoomOp, setOpeningOp, setWallOp, slideOpening, snap, snapMove, toEditModel,
   undo, wallFromFields, type EditModel, type EditWall,
 } from "./plan-edit";
@@ -69,11 +69,11 @@ test("op builders capture the target snapshot and refuse non-orthogonal geometry
 
 test("a door goes where clicked, kept inside its wall, and does not fit a short wall", () => {
   const host = m.walls[0];
-  expect(addOpeningOp("e1", host, "door", [3000, 100], EDIT.defaultWidthMm.door)).toMatchObject({ op: "add_opening", kind: "door", start: [2550, 100], end: [3450, 100] });
+  expect(addOpeningOp("e1", host, "door", [3000, 100], 900)).toMatchObject({ op: "add_opening", kind: "door", start: [2550, 100], end: [3450, 100] });
   expect(addOpeningOp("e1", host, "door", [-300, 100], 900)).toMatchObject({ start: [0, 100], end: [900, 100] });
   expect(addOpeningOp("e1", host, "door", [7999, 100], 900)).toMatchObject({ start: [7100, 100], end: [8000, 100] });
   expect(addOpeningOp("e1", { ...host, end: [500, 100] }, "door", [250, 100], 900)).toBeNull();
-  expect(addOpeningOp("e1", host, "window", [3000, 100], EDIT.defaultWidthMm.window, { height: 1100 })).toMatchObject({ height: 1100, end: [3600, 100] });
+  expect(addOpeningOp("e1", host, "window", [3000, 100], 1200, { height: 1100 })).toMatchObject({ height: 1100, end: [3600, 100] });
 });
 
 test("ids continue after the highest existing one", () => {
@@ -179,4 +179,23 @@ test("a wall move snaps by whichever end snaps nearest", () => {
   expect(snapMove(near, [0, 0], m, 0.5)).toEqual([0, -3]);
   const far = { ...w, start: [4000, 112] as [number, number], end: [4000, 4704] as [number, number] };
   expect(snapMove(far, [0, 0], m, 0.5)).toEqual([0, -4]);
+});
+
+test("dragging along a wall draws an opening: snapped, clamped to the wall and the free gap, minimum size", () => {
+  const host = m.walls[0]; // x 0..8000, window at 1000..2200
+  expect(dragOpeningOp("e1", host, "door", [3003, 100], [3907, 100], m.openings)).toMatchObject({ op: "add_opening", kind: "door", start: [3000, 100], end: [3910, 100] });
+  expect(dragOpeningOp("e1", host, "door", [3900, 100], [3000, 100], m.openings)).toMatchObject({ start: [3000, 100], end: [3900, 100] }); // either direction
+  expect(dragOpeningOp("e1", host, "window", [2500, 100], [-500, 100], m.openings)).toMatchObject({ start: [2200, 100], end: [2500, 100] }); // stops at the window
+  expect(dragOpeningOp("e1", host, "door", [7500, 100], [9000, 100], m.openings)).toMatchObject({ start: [7500, 100], end: [8000, 100] }); // wall end
+  expect(dragOpeningOp("e1", host, "door", [1500, 100], [1900, 100], m.openings)).toBeNull(); // pressed on an opening
+  expect(dragOpeningOp("e1", host, "door", [3000, 100], [3100, 100], m.openings)).toBeNull(); // too short
+  expect(dragOpeningOp("e1", host, "window", [3000, 100], [4000, 100], [], { height: 1100, sill_height: 900 })).toMatchObject({ height: 1100, sill_height: 900 });
+});
+
+test("tool height/sill fields: empty = project default, a door's sill is 0, bad numbers refused", () => {
+  expect(openingDims("window", "", "")).toEqual({ ok: true, value: {} });
+  expect(openingDims("window", "1100", "900")).toEqual({ ok: true, value: { height: 1100, sill_height: 900 } });
+  expect(openingDims("door", "2000", "500")).toEqual({ ok: true, value: { height: 2000, sill_height: 0 } });
+  expect(openingDims("window", "-1", "")).toMatchObject({ ok: false });
+  expect(openingDims("window", "1100", "x")).toMatchObject({ ok: false });
 });

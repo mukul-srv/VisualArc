@@ -10,14 +10,14 @@ export type Tool = "select" | "wall" | "door" | "window" | "delete";
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "select", label: "Select / move", hint: "Click to select; drag a wall to move it, drag a wall end to change its length, drag an opening along its wall; drag empty space to pan; wheel to zoom." },
   { id: "wall", label: "Add wall", hint: "Click the start, then the end: walls are horizontal or vertical." },
-  { id: "door", label: "Add door", hint: "Click on a wall: a door of the width below is centred there." },
-  { id: "window", label: "Add window", hint: "Click on a wall: a window of the width below is centred there." },
+  { id: "door", label: "Add door", hint: "Press on a wall, drag along it and release: the door spans the dragged length." },
+  { id: "window", label: "Add window", hint: "Press on a wall, drag along it and release: the window spans the dragged length." },
   { id: "delete", label: "Delete", hint: "Click a wall or an opening to remove it (a wall takes its openings with it)." },
 ];
 
 export function EditorToolbar(p: {
   tool: Tool; setTool: (t: Tool) => void;
-  width: string; setWidth: (s: string) => void; thickness: string; setThickness: (s: string) => void;
+  height: string; setHeight: (s: string) => void; sill: string; setSill: (s: string) => void; thickness: string; setThickness: (s: string) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   pending: number; busy: boolean; onSave: () => void; onDiscard: () => void;
 }) {
@@ -31,10 +31,11 @@ export function EditorToolbar(p: {
         <label>Thickness (mm) <input aria-label="New wall thickness" inputMode="decimal" value={p.thickness} onChange={(e) => p.setThickness(e.target.value)} size={5} /></label>
       )}
       {(p.tool === "door" || p.tool === "window") && (
-        <label>
-          Width (mm) <input aria-label="New opening width" inputMode="decimal" value={p.width} onChange={(e) => p.setWidth(e.target.value)} size={5} />{" "}
-          <small>your value; suggested {EDIT.defaultWidthMm[p.tool]}</small>
-        </label>
+        <>
+          <label>{p.tool === "door" ? "Door" : "Window"} height (mm) <input aria-label="New opening height" inputMode="decimal" value={p.height} placeholder="project default" onChange={(e) => p.setHeight(e.target.value)} size={8} /></label>{" "}
+          {p.tool === "window" && <label>Sill above floor (mm) <input aria-label="New window sill" inputMode="decimal" value={p.sill} placeholder="project default" onChange={(e) => p.setSill(e.target.value)} size={8} /></label>}{" "}
+          <small>Empty uses the project default; values you enter are marked as yours. Drag along a wall to draw it.</small>
+        </>
       )}
       <p><small>{hint}</small></p>
       <button type="button" disabled={!p.canUndo || p.busy} onClick={p.onUndo}>Undo</button>{" "}

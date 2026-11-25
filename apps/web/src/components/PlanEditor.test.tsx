@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { addWallOp, applyOps, setWallOp, type EditModel } from "../lib/plan-edit";
-import { EditorToolbar, PlanInspector, type Tool } from "./PlanEditorParts";
+import { EditorToolbar, PlanInspector } from "./PlanEditorParts";
 
 const model: EditModel = {
   walls: [{ id: "wall-001", start: [0, 100], end: [8000, 100], thickness: 200, handles: ["A"], provenance: "source_extracted" }],
@@ -10,7 +10,7 @@ const model: EditModel = {
 };
 const noop = () => {};
 const bar = (o: Partial<Parameters<typeof EditorToolbar>[0]> = {}) =>
-  renderToStaticMarkup(<EditorToolbar tool="select" setTool={noop} width="900" setWidth={noop} thickness="200" setThickness={noop} canUndo={false} canRedo={false} onUndo={noop} onRedo={noop} pending={0} busy={false} onSave={noop} onDiscard={noop} {...o} />);
+  renderToStaticMarkup(<EditorToolbar tool="select" setTool={noop} height="" setHeight={noop} sill="" setSill={noop} thickness="200" setThickness={noop} canUndo={false} canRedo={false} onUndo={noop} onRedo={noop} pending={0} busy={false} onSave={noop} onDiscard={noop} {...o} />);
 
 test("toolbar: every tool, the pressed one marked; undo, save and discard wait for a change", () => {
   const html = bar();
@@ -24,13 +24,15 @@ test("toolbar: every tool, the pressed one marked; undo, save and discard wait f
   expect(pending).not.toMatch(/<button type="button" disabled="">Save/);
 });
 
-test("the opening width is prefilled and shown as the user's own value with the suggestion", () => {
-  const tool: Tool = "door";
-  const html = bar({ tool, width: "900" });
-  expect(html).toContain('aria-label="New opening width"');
-  expect(html).toContain('value="900"');
-  expect(html).toContain("your value; suggested 900");
-  expect(bar({ tool: "window", width: "1200" })).toContain("suggested 1200");
+test("door and window tools show height (and a window's sill), empty meaning the project default", () => {
+  const w = bar({ tool: "window" });
+  expect(w).toContain('aria-label="New opening height"');
+  expect(w).toContain('aria-label="New window sill"');
+  expect(w).toContain("project default");
+  expect(w).toContain("Press on a wall, drag along it");
+  const d = bar({ tool: "door" });
+  expect(d).toContain('aria-label="New opening height"');
+  expect(d).not.toContain("New window sill");
   expect(bar({ tool: "wall" })).toContain("New wall thickness");
 });
 
