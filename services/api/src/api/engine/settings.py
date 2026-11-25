@@ -194,6 +194,7 @@ class Settings:
     # what drives cost. Rejected before interpretation, as InputError (exit 3 / 422).
     # File size is a backstop (~170 B/entity in the fixtures); CLI --max-mb overrides.
     max_dxf_bytes: int = 5 * 1024 * 1024
+    dwg_convert_timeout_s: float = 120.0  # ODA File Converter run; PROVISIONAL, a round value
     max_entities: int = 5000  # all modelspace entities; backstop
     max_wall_segments: int = 600  # LINEs + polyline edges on the wall layer (~7 s)
     max_opening_markers: int = 120  # LWPOLYLINEs on door/window layers (ratio-derived)

@@ -1,4 +1,4 @@
-"""POST /api/v1/uploads: store a DXF and run inventory + interpretation (T15).
+"""POST /api/v1/uploads: store a DXF (a DWG is converted first) and run inventory + interpretation (T15).
 
 The body is the raw DXF (Content-Type application/octet-stream), not
 multipart: that keeps the dependency set unchanged. The filename is never
@@ -9,12 +9,14 @@ used; the file is stored under a server-generated id.
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.access import owned
 from api.auth import CurrentUser, current_user
 from api.db import UploadRow, session
+from api.engine.adapters.dwg.convert import convert_in_place, is_dwg
 from api.engine.adapters.dxf.inspect import build_inventory
 from api.engine.adapters.dxf.reader import InputError, load_doc, read_dxf, resolve_scale
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, excluded_issue
@@ -73,6 +75,8 @@ async def create_upload(request: Request, user: CurrentUser, filename: str | Non
     try:
         if not await _save(request, DEFAULTS.max_dxf_bytes):
             raise HTTPException(422, "empty upload: send the file as the request body")
+        if is_dwg(path):  # converted to DXF in place; everything after is the DXF pipeline
+            await run_in_threadpool(convert_in_place, path)
         if is_ifc(path):
             return await _ifc_upload(path, upload_id, user, filename)
         inventory = build_inventory(path)

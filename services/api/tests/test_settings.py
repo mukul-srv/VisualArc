@@ -92,6 +92,7 @@ def test_defaults_match_document_08():
         "ifc_circle_fill": 0.97,
         "extrusion_tolerance": 1e-6,
         "max_dxf_bytes": 5 * 2**20,
+        "dwg_convert_timeout_s": 120.0,
         "max_entities": 5000,
         "max_wall_segments": 600,
         "max_opening_markers": 120,
