@@ -41,6 +41,7 @@ test("applyMaterials swaps, keeps the original, restores when the choice goes", 
   const original = new THREE.MeshStandardMaterial({ color: 0x123456 });
   const wall = new THREE.Mesh(new THREE.BoxGeometry(), original);
   wall.userData = { id: "w-1" };
+  wall.geometry.deleteAttribute("normal"); // as in a GLB without NORMAL
   const other = new THREE.Mesh(new THREE.BoxGeometry(), original);
   other.userData = { id: "w-2" };
   const root = new THREE.Group().add(wall, other);
@@ -51,6 +52,7 @@ test("applyMaterials swaps, keeps the original, restores when the choice goes", 
   expect(m).not.toBe(original);
   expect(m.map).not.toBeNull();
   expect(m.normalMap).not.toBeNull();
+  expect(wall.geometry.attributes.normal).toBeDefined(); // lit material needs normals, else black
   expect(other.material).toBe(original); // untouched
   applyMaterials(root, "floor-1", pick, cache);
   expect(wall.material).toBe(m); // same choice: no new material
