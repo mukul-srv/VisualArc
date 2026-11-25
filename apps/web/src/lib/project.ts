@@ -1,5 +1,5 @@
 import { parseMaterials } from "./materials";
-import { parseLighting, type SiteLighting } from "./site-lighting";
+import { parseLightingReport, type SiteLighting } from "./site-lighting";
 import type { Measured } from "./selection";
 
 // Pure project helpers (no DOM/three.js). The manifest comes from GET /api/v1/projects/{id}.
@@ -11,7 +11,7 @@ export type Floor = {
   offset?: { x: number; y: number; unit: "mm"; source: "user_provided" | "defaulted" }; // manual plan offset (building assembly)
 };
 export type Role = "owner" | "editor" | "viewer";
-export type Manifest = { id: string; name: string; floors: Floor[]; role?: Role; materials?: Record<string, string>; lighting?: SiteLighting }; // materials: "<floor>/<element>" -> library id
+export type Manifest = { id: string; name: string; floors: Floor[]; role?: Role; materials?: Record<string, string>; lighting?: SiteLighting; lightingDropped?: number }; // materials: "<floor>/<element>" -> library id
 
 const HEX32 = /^[0-9a-f]{32}$/;
 const PROVENANCES = ["source_extracted", "user_provided", "defaulted", "inferred", "user_modified"];
@@ -32,10 +32,16 @@ export function parseManifest(x: unknown): Manifest | null {
       return null;
   }
   const role = ["owner", "editor", "viewer"].includes(m.role as string) ? { role: m.role } : {};
-  return { id: m.id, name: m.name, floors: m.floors, ...role, ...(m.materials ? { materials: parseMaterials(m.materials) } : {}), ...(m.lighting ? { lighting: parseLighting(m.lighting) } : {}) };
+  return { id: m.id, name: m.name, floors: m.floors, ...role, ...(m.materials ? { materials: parseMaterials(m.materials) } : {}), ...lightingPart(m.lighting) };
 }
 
 /** Lowest floor first; does not mutate the input. */
+const lightingPart = (x: unknown) => {
+  if (!x) return {};
+  const r = parseLightingReport(x);
+  return { lighting: r.lighting, ...(r.dropped ? { lightingDropped: r.dropped } : {}) };
+};
+
 export const sortFloors = (floors: Floor[]): Floor[] =>
   [...floors].sort((a, b) => a.elevation.value - b.elevation.value);
 

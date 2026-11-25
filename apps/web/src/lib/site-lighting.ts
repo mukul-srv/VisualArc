@@ -15,21 +15,29 @@ export type ArtificialLight = {
 };
 export type SiteLighting = { location: { latitude: number; longitude: number } | null; north_deg: number; lights: ArtificialLight[] };
 export const NO_LIGHTING: SiteLighting = { location: null, north_deg: 0, lights: [] };
-export const MAX_LIGHTS = 10; // saves with more are cut to the first 10 on read
+export const MAX_LIGHTS = 10; // saves with more show the first 10 and report the rest as dropped
 
 const num = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 
 /** Untrusted manifest/building value -> a valid setting (malformed parts dropped, never thrown). */
 export function parseLighting(x: unknown): SiteLighting {
+  return parseLightingReport(x).lighting;
+}
+
+/** Like parseLighting, plus how many valid lights beyond MAX_LIGHTS were left out (saving would delete them). */
+export function parseLightingReport(x: unknown): { lighting: SiteLighting; dropped: number } {
   const v = x as Partial<SiteLighting> | null;
-  if (!v || typeof v !== "object") return NO_LIGHTING;
+  if (!v || typeof v !== "object") return { lighting: NO_LIGHTING, dropped: 0 };
   const loc = v.location;
   const location = loc && num(loc.latitude) && num(loc.longitude) && Math.abs(loc.latitude) <= 90 && Math.abs(loc.longitude) <= 180 ? { latitude: loc.latitude, longitude: loc.longitude } : null;
   const lights = (Array.isArray(v.lights) ? v.lights : []).filter(
     (l): l is ArtificialLight =>
       !!l && typeof l.id === "string" && (l.kind === "point" || l.kind === "spot") && typeof l.floor_id === "string" && num(l.x_mm) && num(l.y_mm) && num(l.height_mm) && /^#[0-9a-fA-F]{6}$/.test(l.color) && num(l.intensity),
   ).map((l) => ({ ...l, intensity: Math.min(10, Math.max(0, l.intensity)) })); // old saves allowed up to 100: clamp, never drop
-  return { location, north_deg: num(v.north_deg) ? ((v.north_deg % 360) + 360) % 360 : 0, lights: lights.slice(0, MAX_LIGHTS) };
+  return {
+    lighting: { location, north_deg: num(v.north_deg) ? ((v.north_deg % 360) + 360) % 360 : 0, lights: lights.slice(0, MAX_LIGHTS) },
+    dropped: Math.max(0, lights.length - MAX_LIGHTS),
+  };
 }
 
 /** Next free light id ("light-N"). */

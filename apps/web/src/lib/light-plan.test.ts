@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { arrowStep, canPlace, clampTo, clickToPlan, moveLight, nudgeLight, placeLight, planToScreen, squareBounds, squareFit } from "./light-plan";
+import { arrowStep, canPlace, clampTo, clickToPlan, moveLight, nudgeLight, placeLight, planToScreen, setLightCoord, squareBounds, squareFit } from "./light-plan";
 import { MAX_LIGHTS, type ArtificialLight } from "./site-lighting";
 
 const sq = squareBounds({ minX: 0, minY: 0, maxX: 10000, maxY: 4000 });
@@ -75,4 +75,16 @@ test("Add light source: a new light at the centre of the plan square, selected b
   const nine = Array.from({ length: 9 }, (_, i) => light(`l${i}`));
   expect(placeLight(nine, "f1", cx, cy, sq, true).lights).toHaveLength(10);
   expect(placeLight([...nine, light("l9")], "f1", cx, cy, sq, true).id).toBeNull();
+});
+
+test("typed x/y are clamped to the plan square like a drag; junk and viewers change nothing", () => {
+  const ls = [light("a", 1000, 1000)];
+  const x = setLightCoord(ls, "a", "x", "9999999", sq, true); // the API would allow 1e7
+  expect([x[0].x_mm, x[0].y_mm]).toEqual([Math.round(sq.maxX), 1000]);
+  const y = setLightCoord(ls, "a", "y", "-9999999", sq, true);
+  expect([y[0].x_mm, y[0].y_mm]).toEqual([1000, Math.round(sq.minY)]);
+  expect(setLightCoord(ls, "a", "x", "2500", sq, true)[0].x_mm).toBe(2500);
+  expect(setLightCoord(ls, "a", "x", "", sq, true)).toBe(ls);
+  expect(setLightCoord(ls, "a", "x", "abc", sq, true)).toBe(ls);
+  expect(setLightCoord(ls, "a", "x", "5", sq, false)).toBe(ls);
 });

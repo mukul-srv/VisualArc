@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { arrowStep, canPlace, clickToPlan, moveLight, nudgeLight, placeLight, planToScreen, squareBounds, squareFit } from "../lib/light-plan";
+import { arrowStep, canPlace, clickToPlan, moveLight, nudgeLight, placeLight, planToScreen, setLightCoord, squareBounds, squareFit } from "../lib/light-plan";
 import { getPlanOverlay, overlayBounds, wallCorners, type OverlayData } from "../lib/overlay";
 import { MAX_LIGHTS, type ArtificialLight } from "../lib/site-lighting";
 
@@ -141,6 +141,18 @@ export function LightPlan({ projectId, floors, share, lights, selectedId, onSele
           );
         })}
       </svg>
+      {sel && sel.floor_id === floorId && (
+        <div>
+          <label>
+            Plan x (mm){" "}
+            <input aria-label="Light x" type="number" step={50} style={{ width: 80 }} disabled={!canEdit} value={sel.x_mm} onChange={(e) => onChange(setLightCoord(lights, sel.id, "x", e.target.value, sq, canEdit))} />
+          </label>{" "}
+          <label>
+            y (mm){" "}
+            <input aria-label="Light y" type="number" step={50} style={{ width: 80 }} disabled={!canEdit} value={sel.y_mm} onChange={(e) => onChange(setLightCoord(lights, sel.id, "y", e.target.value, sq, canEdit))} />
+          </label>
+        </div>
+      )}
       {loaded?.key === key && loaded.error && <div role="alert">Plan unavailable: {loaded.error}. Lights can still be placed by the x and y fields.</div>}
       <div>
         {lights.length}/{MAX_LIGHTS} lights, {mine.length} on this floor. {canEdit ? "" : "Read only."}

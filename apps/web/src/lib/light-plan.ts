@@ -55,6 +55,14 @@ export function moveLight(lights: ArtificialLight[], id: string, x: number, y: n
   return lights.map((l) => (l.id === id ? { ...l, x_mm: cx, y_mm: cy } : l));
 }
 
+/** Typed x or y (mm) for one light: clamped to the plan square like a drag; blank or non-numeric input changes nothing. */
+export function setLightCoord(lights: ArtificialLight[], id: string, axis: "x" | "y", raw: string, sq: Bounds, canEdit: boolean): ArtificialLight[] {
+  const l = lights.find((k) => k.id === id);
+  const v = Number(raw);
+  if (!l || raw.trim() === "" || !Number.isFinite(v)) return lights;
+  return axis === "x" ? moveLight(lights, id, v, l.y_mm, sq, canEdit) : moveLight(lights, id, l.x_mm, v, sq, canEdit);
+}
+
 export const nudgeLight = (lights: ArtificialLight[], id: string, dx: number, dy: number, sq: Bounds, canEdit: boolean) => {
   const l = lights.find((x) => x.id === id);
   return l ? moveLight(lights, id, l.x_mm + dx, l.y_mm + dy, sq, canEdit) : lights;

@@ -28,6 +28,9 @@ const UV_AXES = [[2, 1], [0, 2], [0, 1]] as const; // same box projection as the
  *  geometry (UVs differ per face). Returns how many meshes were fixed. */
 export function ensureUVs(root: THREE.Object3D): number {
   let fixed = 0;
+  const pt = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]; // scratch, reused for every triangle
+  const [a, b, c] = pt;
+  const n = new THREE.Vector3(), e = new THREE.Vector3();
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || m.geometry.getAttribute("uv")) return;
@@ -35,19 +38,16 @@ export function ensureUVs(root: THREE.Object3D): number {
     const g = old.index ? old.toNonIndexed() : old;
     const p = g.getAttribute("position");
     const uv = new Float32Array(p.count * 2);
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
-    const pt = [a, b, c];
     for (let f = 0; f + 2 < p.count; f += 3) {
       a.fromBufferAttribute(p, f);
       b.fromBufferAttribute(p, f + 1);
       c.fromBufferAttribute(p, f + 2);
-      n.subVectors(c, b).cross(new THREE.Vector3().subVectors(a, b));
+      n.subVectors(c, b).cross(e.subVectors(a, b));
       const ax = Math.abs(n.x) >= Math.abs(n.y) && Math.abs(n.x) >= Math.abs(n.z) ? 0 : Math.abs(n.y) >= Math.abs(n.z) ? 1 : 2;
       const [u, v] = UV_AXES[ax];
       pt.forEach((q, i) => {
-        const xyz = q.toArray();
-        uv[(f + i) * 2] = xyz[u];
-        uv[(f + i) * 2 + 1] = xyz[v];
+        uv[(f + i) * 2] = q.getComponent(u);
+        uv[(f + i) * 2 + 1] = q.getComponent(v);
       });
     }
     g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));

@@ -64,7 +64,8 @@ export default function ViewerPage() {
   const [quality, setQuality] = useState<QualityId>(DEFAULT_QUALITY);
   const [site, setSiteState] = useState<SiteLighting>(NO_LIGHTING); // edited copy; `savedSite` is what the project holds
   const [savedSite, setSavedState] = useState<SiteLighting>(NO_LIGHTING);
-  const [nowMs] = useState(() => Date.now()); // the sun is placed for the moment the page loaded: current local date and time
+  const [nowMs, setNowMs] = useState(() => Date.now()); // the sun follows the clock (refreshed every minute)
+  const [droppedLights, setDroppedLights] = useState(0);
   const [selLight, setSelLight] = useState<string | null>(null);
   const lightState = useRef({ site, nowMs, quality, selLight });
   const manifestRef = useRef<Manifest | null>(null);
@@ -134,6 +135,7 @@ export default function ViewerPage() {
         setMaterials(m.materials ?? {});
         setSite(m.lighting ?? NO_LIGHTING);
         setSavedSite(m.lighting ?? NO_LIGHTING);
+        setDroppedLights(m.lightingDropped ?? 0);
         setBuilding(br?.ok ? br.building : manifestBuilding(m));
         // ?floor= keeps showing just that floor (as before); without it the whole building
         setView({ mode: query.get("floor") ? "isolate" : "whole", activeId: f.id, gap: GAP.default, ghost: false });
@@ -168,6 +170,11 @@ export default function ViewerPage() {
     materialsRef.current = materials;
     applyMats.current(QUALITY[quality].textures ? materials : {}); // accuracy: no textures, plain palette
   }, [materials, quality]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     lightState.current = { site, nowMs, quality, selLight };
@@ -791,6 +798,7 @@ export default function ViewerPage() {
         if (JSON.stringify(savedSiteRef.current) !== JSON.stringify(lt)) {
           if (JSON.stringify(siteRef.current) === JSON.stringify(savedSiteRef.current)) setSite(lt); // unsaved edits are kept
           setSavedSite(lt);
+          setDroppedLights(m.lightingDropped ?? 0);
         }
         setMaterials((old) => (JSON.stringify(old) === JSON.stringify(m.materials ?? {}) ? old : (m.materials ?? {})));
         if (key(m) === key(manifest)) return;
@@ -829,7 +837,10 @@ export default function ViewerPage() {
   const saveSite = async () => {
     if (!manifest) return;
     const r = await putLighting(manifest.id, site);
-    if (r.ok) setSavedSite(r.lighting);
+    if (r.ok) {
+      setSavedSite(r.lighting);
+      setDroppedLights(0); // the server now holds what is shown
+    }
     else setHint(`Could not save lighting: ${r.message}`);
   };
   const sunPos = site.location && QUALITY[quality].artificial ? sunPosition(site.location.latitude, site.location.longitude, nowMs) : null;
@@ -918,6 +929,7 @@ export default function ViewerPage() {
           onQuality={setQuality}
           site={site}
           onSite={setSite}
+          droppedLights={droppedLights}
           sunInfo={sunPos ? `Sun: azimuth ${sunPos.azimuth.toFixed(0)} deg, elevation ${sunPos.elevation.toFixed(0)} deg${sunPos.elevation <= 0 ? " (night)" : ""}` : null}
           canSave={canEdit && manifest !== null}
           dirty={siteDirty}

@@ -7,7 +7,7 @@ const lightAt = (i: number) => ({ id: `light-${i}`, kind: "point" as const, floo
 const site: SiteLighting = { location: { latitude: 51.5, longitude: -0.1 }, north_deg: 20, lights: [{ id: "light-1", kind: "point", floor_id: "floor-1", x_mm: 0, y_mm: 0, height_mm: 2400, color: "#ffffff", intensity: 3 }] };
 const render = (canSave: boolean, quality: "medium" | "accuracy" = "medium") =>
   renderToStaticMarkup(
-    <LightingPanel quality={quality} onQuality={() => {}} site={site} onSite={() => {}} sunInfo="Sun: azimuth 180 deg" canSave={canSave} dirty onSave={() => {}} projectId="p1" planFloors={[{ id: "floor-1", name: "Ground" }]} share={null} selectedId={null} onSelect={() => {}} floorName={() => "Ground"} />,
+    <LightingPanel quality={quality} onQuality={() => {}} site={site} onSite={() => {}} droppedLights={0} sunInfo="Sun: azimuth 180 deg" canSave={canSave} dirty onSave={() => {}} projectId="p1" planFloors={[{ id: "floor-1", name: "Ground" }]} share={null} selectedId={null} onSelect={() => {}} floorName={() => "Ground"} />,
   );
 
 test("editors can add lights and save; the four quality presets are offered", () => {
@@ -37,8 +37,18 @@ test("accuracy says what it switches off", () => {
 test("at the cap the add button is disabled and shows 10/10", () => {
   const full = { ...site, lights: Array.from({ length: 10 }, (_, i) => lightAt(i)) };
   const html = renderToStaticMarkup(
-    <LightingPanel quality="medium" onQuality={() => {}} site={full} onSite={() => {}} sunInfo={null} canSave dirty onSave={() => {}} projectId="p1" planFloors={[{ id: "floor-1", name: "Ground" }]} share={null} selectedId={null} onSelect={() => {}} floorName={() => "Ground"} />,
+    <LightingPanel quality="medium" onQuality={() => {}} site={full} onSite={() => {}} droppedLights={0} sunInfo={null} canSave dirty onSave={() => {}} projectId="p1" planFloors={[{ id: "floor-1", name: "Ground" }]} share={null} selectedId={null} onSelect={() => {}} floorName={() => "Ground"} />,
   );
   expect(html).toMatch(/<button[^>]*disabled[^>]*>Add light source \(10\/10\)</);
   expect(html).toContain("Lights (10/10)");
+});
+
+test("a notice says how many saved lights beyond the limit are hidden and will be removed by saving", () => {
+  const html = (n: number) =>
+    renderToStaticMarkup(
+      <LightingPanel quality="medium" onQuality={() => {}} site={site} onSite={() => {}} droppedLights={n} sunInfo={null} canSave dirty onSave={() => {}} projectId="p1" planFloors={[{ id: "floor-1", name: "Ground" }]} share={null} selectedId={null} onSelect={() => {}} floorName={() => "Ground"} />,
+    );
+  expect(html(3)).toContain("3 saved lights beyond the 10 limit are not shown; saving will remove them.");
+  expect(html(1)).toContain("1 saved light beyond the 10 limit is not shown; saving will remove it.");
+  expect(html(0)).not.toContain("beyond the 10 limit");
 });

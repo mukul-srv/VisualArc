@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { MAX_LIGHTS, nextLightId, NO_LIGHTING, parseLighting, putLighting, type ArtificialLight } from "./site-lighting";
+import { MAX_LIGHTS, nextLightId, NO_LIGHTING, parseLighting, parseLightingReport, putLighting, type ArtificialLight } from "./site-lighting";
 
 const light = (id: string): ArtificialLight => ({ id, kind: "point", floor_id: "floor-1", x_mm: 1, y_mm: 2, height_mm: 2400, color: "#ffffff", intensity: 2 });
 
@@ -32,4 +32,13 @@ test("more than MAX_LIGHTS saved lights are cut to the first ones on read, not r
   const many = Array.from({ length: 14 }, (_, i) => light(`l${i}`));
   const got = parseLighting({ location: null, north_deg: 0, lights: many });
   expect(got.lights.map((l) => l.id)).toEqual(many.slice(0, 10).map((l) => l.id));
+});
+
+test("lights beyond the limit are reported as dropped, so the panel can warn before a save removes them", () => {
+  const many = Array.from({ length: 13 }, (_, i) => light(`l${i}`));
+  const r = parseLightingReport({ location: null, north_deg: 0, lights: [...many, { id: "bad" }] }); // a malformed entry is not counted
+  expect(r.lighting.lights).toHaveLength(10);
+  expect(r.dropped).toBe(3);
+  expect(parseLightingReport({ lights: many.slice(0, 10) }).dropped).toBe(0);
+  expect(parseLightingReport(null)).toEqual({ lighting: NO_LIGHTING, dropped: 0 });
 });
