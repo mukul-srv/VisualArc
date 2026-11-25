@@ -164,3 +164,24 @@ def test_uvs_are_box_projected_metres():
         cols = [[2, 1], [0, 2], [0, 1]][a]
         np.testing.assert_allclose(uv[f], v[f][:, cols], atol=1e-6)  # float32 in the GLB
     assert uv.min() >= -0.2 - 1e-6 and uv.max() <= 4 + 1e-6
+
+
+def _glb_json(data: bytes) -> dict:
+    import struct
+
+    length = struct.unpack_from("<I", data, 12)[0]
+    return json.loads(data[20 : 20 + length])
+
+
+def test_every_mesh_exports_flat_normals():
+    # without NORMAL, three's normal-pass effects (GTAO) and normal bias see garbage: all meshes carry them
+    project = read_dxf(FIXTURE_A, wall_height=3000, ceiling_height=3000)
+    gltf = _glb_json(build_scene(project).export(file_type="glb"))
+    prims = [p for m in gltf["meshes"] for p in m["primitives"]]
+    assert prims and all("NORMAL" in p["attributes"] for p in prims)
+    loaded = _roundtrip(build_scene(_one_wall_project())).geometry["w-1"]
+    n = np.asarray(loaded.vertex_normals)
+    np.testing.assert_allclose(np.linalg.norm(n, axis=1), 1, atol=1e-5)
+    # flat: every vertex normal equals its face normal (no smoothing across the box edges)
+    for f, fn in zip(loaded.faces, loaded.face_normals, strict=True):
+        np.testing.assert_allclose(n[f], np.tile(fn, (3, 1)), atol=1e-5)

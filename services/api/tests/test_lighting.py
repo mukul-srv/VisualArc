@@ -34,11 +34,14 @@ def test_default_set_validate_version_restore_and_floor_removal():
     v_set = c.get(f"{P}/{pid}").json()["version"]
     bad = [{"location": {"latitude": 91, "longitude": 0}}, {"north_deg": 360},
            {"lights": [_light(g["id"], color="red")]}, {"lights": [_light(g["id"], kind="laser")]},
-           {"lights": [_light(g["id"], intensity=-1)]}, {"lights": [_light("nope")]},
-           {"lights": [_light(g["id"]), _light(g["id"])]}, {"extra": 1}]
+           {"lights": [_light(g["id"], intensity=-1)]}, {"lights": [_light(g["id"], intensity=10.5)]}, {"lights": [_light("nope")]},
+           {"lights": [_light(g["id"]), _light(g["id"])]}, {"extra": 1},
+           {"lights": [_light(g["id"], id=f"l{i}") for i in range(11)]}]  # over the cap of 10
     for b in bad:
         assert c.put(f"{P}/{pid}/lighting", json=b).status_code == 422, b
     assert _b(c, pid)["lighting"]["north_deg"] == 30  # nothing stored by the rejected calls
+    ten = {"lights": [_light(g["id"], id=f"l{i}") for i in range(10)]}
+    assert c.put(f"{P}/{pid}/lighting", json=ten).status_code == 200  # exactly the cap
     c.put(f"{P}/{pid}/lighting", json={})  # clear
     assert _b(c, pid)["lighting"]["lights"] == []
     assert c.get(f"{P}/{pid}?version={v_set}").json()["lighting"]["lights"][0]["id"] == "l1"

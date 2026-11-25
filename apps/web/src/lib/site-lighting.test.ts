@@ -1,14 +1,14 @@
 import { expect, test, vi } from "vitest";
-import { mapClickToLatLon, nextLightId, NO_LIGHTING, parseLighting, putLighting, type ArtificialLight } from "./site-lighting";
+import { MAX_LIGHTS, nextLightId, NO_LIGHTING, parseLighting, putLighting, type ArtificialLight } from "./site-lighting";
 
 const light = (id: string): ArtificialLight => ({ id, kind: "point", floor_id: "floor-1", x_mm: 1, y_mm: 2, height_mm: 2400, color: "#ffffff", intensity: 2 });
 
 test("parseLighting keeps valid parts and drops malformed ones", () => {
   expect(parseLighting(undefined)).toEqual(NO_LIGHTING);
-  const got = parseLighting({ location: { latitude: 95, longitude: 0 }, north_deg: -90, lights: [light("a"), { ...light("b"), color: "red" }, { ...light("c"), kind: "laser" }] });
+  const got = parseLighting({ location: { latitude: 95, longitude: 0 }, north_deg: -90, lights: [light("a"), { ...light("b"), color: "red" }, { ...light("c"), kind: "laser" }, { ...light("d"), intensity: 50 }, { ...light("e"), intensity: -2 }] });
   expect(got.location).toBeNull();
   expect(got.north_deg).toBe(270);
-  expect(got.lights.map((l) => l.id)).toEqual(["a"]);
+  expect(got.lights.map((l) => [l.id, l.intensity])).toEqual([["a", 2], ["d", 10], ["e", 0]]); // out-of-range intensity is clamped, not dropped
   expect(parseLighting({ location: { latitude: 51.5, longitude: -0.1 } }).location).toEqual({ latitude: 51.5, longitude: -0.1 });
 });
 
@@ -27,9 +27,9 @@ test("putLighting sends the whole setting", async () => {
   expect(JSON.parse(init.body as string)).toEqual(body);
 });
 
-test("a click on the world map maps to latitude and longitude", () => {
-  expect(mapClickToLatLon(0.5, 0.5)).toEqual({ latitude: 0, longitude: 0 });
-  expect(mapClickToLatLon(0, 0)).toEqual({ latitude: 90, longitude: -180 });
-  expect(mapClickToLatLon(1, 1)).toEqual({ latitude: -90, longitude: 180 });
-  expect(mapClickToLatLon(2, -1)).toEqual({ latitude: 90, longitude: 180 }); // clamped
+test("more than MAX_LIGHTS saved lights are cut to the first ones on read, not rejected", () => {
+  expect(MAX_LIGHTS).toBe(10);
+  const many = Array.from({ length: 14 }, (_, i) => light(`l${i}`));
+  const got = parseLighting({ location: null, north_deg: 0, lights: many });
+  expect(got.lights.map((l) => l.id)).toEqual(many.slice(0, 10).map((l) => l.id));
 });

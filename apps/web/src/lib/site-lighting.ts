@@ -15,7 +15,7 @@ export type ArtificialLight = {
 };
 export type SiteLighting = { location: { latitude: number; longitude: number } | null; north_deg: number; lights: ArtificialLight[] };
 export const NO_LIGHTING: SiteLighting = { location: null, north_deg: 0, lights: [] };
-export const MAX_LIGHTS = 50;
+export const MAX_LIGHTS = 10; // saves with more are cut to the first 10 on read
 
 const num = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 
@@ -28,7 +28,7 @@ export function parseLighting(x: unknown): SiteLighting {
   const lights = (Array.isArray(v.lights) ? v.lights : []).filter(
     (l): l is ArtificialLight =>
       !!l && typeof l.id === "string" && (l.kind === "point" || l.kind === "spot") && typeof l.floor_id === "string" && num(l.x_mm) && num(l.y_mm) && num(l.height_mm) && /^#[0-9a-fA-F]{6}$/.test(l.color) && num(l.intensity),
-  );
+  ).map((l) => ({ ...l, intensity: Math.min(10, Math.max(0, l.intensity)) })); // old saves allowed up to 100: clamp, never drop
   return { location, north_deg: num(v.north_deg) ? ((v.north_deg % 360) + 360) % 360 : 0, lights: lights.slice(0, MAX_LIGHTS) };
 }
 
@@ -47,9 +47,3 @@ export const putLighting = (pid: string, lighting: SiteLighting, f: typeof fetch
       body: JSON.stringify(lighting),
     }),
   );
-
-/** World map click (equirectangular, `world.svg` viewBox 360 x 180) -> lat/lon, rounded to 0.1 degree. */
-export function mapClickToLatLon(fx: number, fy: number): { latitude: number; longitude: number } {
-  const r = (v: number) => Math.round(v * 10) / 10;
-  return { latitude: r(90 - Math.max(0, Math.min(1, fy)) * 180), longitude: r(Math.max(0, Math.min(1, fx)) * 360 - 180) };
-}
