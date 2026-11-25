@@ -6,7 +6,9 @@ used; the file is stored under a server-generated id.
 """
 
 
+import shutil
 from dataclasses import asdict
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -21,6 +23,8 @@ from api.engine.adapters.dxf.inspect import build_inventory
 from api.engine.adapters.dxf.reader import InputError, load_doc, read_dxf, resolve_scale
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, excluded_issue
 from api.engine.adapters.ifc.reader import is_ifc, read_ifc, storeys
+from api.engine.adapters.pdf.reader import convert_pdf, inspect_pdf, is_pdf
+from api.engine.adapters.pdf.scale import MM_PER_PT_AT_1, ratio_from_two_points
 from api.engine.settings import DEFAULTS
 from api.generations import GenerationRequest, read_project, request_settings
 from api.layer_conventions import preflight, save_conventions
@@ -68,6 +72,20 @@ async def _ifc_upload(path, upload_id: str, user, filename: str | None) -> dict:
             "floor_candidates": []}
 
 
+async def _pdf_upload(path, upload_id: str, user, filename: str | None) -> dict:
+    """A PDF body: describe its pages (vector groups, scale suggestions); POST /uploads/{id}/pdf converts it."""
+    info = await run_in_threadpool(inspect_pdf, path)
+    if all(p["raster_only"] for p in info["pages"]):
+        raise InputError("this PDF is a scanned image with no vector drawing. Raster scans need the trace-assist "
+                         "feature (coming soon); a PDF exported from CAD works now.")
+    with session() as db:
+        name = (filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:255] or None
+        db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id), owner_id=user.id, filename=name))
+        db.commit()
+    return {"upload_id": upload_id, **info, "inventory": {"layers": [], "entity_counts": {}}, "issues": [],
+            "needs": ["scale"], "floor_candidates": []}
+
+
 @router.post("/uploads", status_code=201)
 async def create_upload(request: Request, user: CurrentUser, filename: str | None = None) -> dict:
     upload_id = new_id()
@@ -75,6 +93,8 @@ async def create_upload(request: Request, user: CurrentUser, filename: str | Non
     try:
         if not await _save(request, DEFAULTS.max_dxf_bytes):
             raise HTTPException(422, "empty upload: send the file as the request body")
+        if is_pdf(path):  # the scale is the user's to confirm: nothing is converted yet
+            return await _pdf_upload(path, upload_id, user, filename)
         if is_dwg(path):  # converted to DXF in place; everything after is the DXF pipeline
             await run_in_threadpool(convert_in_place, path)
         if is_ifc(path):
@@ -262,3 +282,63 @@ def import_ifc(upload_id: str, req: IfcImport, user: CurrentUser):
             floors.append({"key": s["key"], **out})
         record_version(db, pid, user.id, f"Imported from IFC ({len(floors)} storeys)")
     return {"project_id": pid, "floors": floors, "issues": issues}
+
+
+class ScaleSpec(BaseModel):
+    """The scale the user confirmed: a ratio (100 = 1:100) or two points (PDF points) a known real distance apart."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["ratio", "two_points"]
+    ratio: float | None = Field(None, gt=0, le=100_000, allow_inf_nan=False)
+    p1: tuple[float, float] | None = None
+    p2: tuple[float, float] | None = None
+    distance_mm: float | None = Field(None, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _complete(self) -> "ScaleSpec":
+        need = (self.ratio,) if self.kind == "ratio" else (self.p1, self.p2, self.distance_mm)
+        if any(v is None for v in need):
+            raise ValueError(f"scale kind {self.kind!r} needs " + ("ratio" if self.kind == "ratio" else "p1, p2 and distance_mm"))
+        return self
+
+
+class PdfConvert(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    page: int = Field(1, ge=1, le=1000)
+    scale: ScaleSpec
+    confirmed: bool  # the user ticked "this scale is right"; a suggestion alone never converts
+
+    @model_validator(mode="after")
+    def _confirmed(self) -> "PdfConvert":
+        if not self.confirmed:
+            raise ValueError("the scale must be confirmed by the user")
+        return self
+
+
+@router.post("/uploads/{upload_id}/pdf", status_code=201)
+def convert_upload_pdf(upload_id: str, req: PdfConvert, user: CurrentUser) -> dict:
+    """Turn one page of an uploaded PDF into the upload's DXF at the confirmed scale, then answer like the DXF
+    upload (inventory, issues, needs, floors) so the layer-mapping step follows. Can be repeated (other page or scale)."""
+    with session() as db:
+        owned(db, UploadRow, upload_id, user.id, "unknown upload_id")
+    path = upload_path(upload_id)
+    src = path.with_name(path.name + ".pdf")  # the original PDF, kept once the upload holds the DXF
+    if not path.is_file():
+        raise HTTPException(404, "unknown upload_id")
+    try:
+        if is_pdf(path):
+            shutil.copyfile(path, src)
+        elif not src.is_file():
+            raise HTTPException(422, "this upload is not a PDF")
+        s = req.scale
+        ratio = s.ratio if s.kind == "ratio" else ratio_from_two_points(s.p1, s.p2, s.distance_mm)
+        tmp = path.with_name(path.name + ".tmp")
+        notes = convert_pdf(src, tmp, req.page, ratio * MM_PER_PT_AT_1)
+        tmp.replace(path)
+        inventory = build_inventory(path)
+        project = read_dxf(path, building_type="residential")
+    except ValueError as e:  # InputError is one; so is a bad two-point scale
+        raise HTTPException(422, str(e).replace(str(path), "the uploaded file")) from e
+    pre = preflight(path, project, DEFAULTS)
+    return {"upload_id": upload_id, "kind": "dxf", "inventory": inventory, "scale_ratio": ratio,
+            **pre, "issues": [*(i.model_dump(mode="json") for i in notes), *pre["issues"]]}
