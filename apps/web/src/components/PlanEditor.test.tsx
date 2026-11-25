@@ -29,6 +29,7 @@ test("door and window tools show height (and a window's sill), empty meaning the
   expect(w).toContain('aria-label="New opening height"');
   expect(w).toContain('aria-label="New window sill"');
   expect(w).toContain("project default");
+  expect(w).toContain("press on a wall and drag along it");
   expect(w).toContain("Press on a wall, drag along it");
   const d = bar({ tool: "door" });
   expect(d).toContain('aria-label="New opening height"');

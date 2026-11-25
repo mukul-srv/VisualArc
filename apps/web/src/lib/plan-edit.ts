@@ -224,17 +224,6 @@ export function openingDims(kind: Kind, height: string, sill: string): Parsed<Di
   return { ok: true, value: { ...(h === undefined ? {} : { height: h }), ...(kind === "door" ? { sill_height: 0 } : s === undefined ? {} : { sill_height: s }) } };
 }
 
-/** A door/window of `width` centred on `at` (plan mm), moved inside the host wall. Null when it does not fit. */
-export function addOpeningOp(id: string, host: EditWall, kind: Kind, at_: Pt, width: number, dims: Dims = {}): EditOp | null {
-  const a = axisOf(host.start, host.end);
-  if (!a || !(width > 0)) return null;
-  const [lo, hi] = span(a, host.start, host.end);
-  if (width > hi - lo) return null;
-  const s = Math.min(Math.max(along(a, at_) - width / 2, lo), hi - width);
-  const c = cross(a, host.start);
-  return { op: "add_opening", id, wall: wallRef(host), kind, start: at(a, s, c), end: at(a, s + width, c), ...dims };
-}
-
 // --- undo / redo ---------------------------------------------------------------------------------------------------------
 export type History = { done: EditOp[]; undone: EditOp[] };
 export const EMPTY_HISTORY: History = { done: [], undone: [] };

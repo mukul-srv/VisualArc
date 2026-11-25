@@ -34,7 +34,7 @@ export function EditorToolbar(p: {
         <>
           <label>{p.tool === "door" ? "Door" : "Window"} height (mm) <input aria-label="New opening height" inputMode="decimal" value={p.height} placeholder="project default" onChange={(e) => p.setHeight(e.target.value)} size={8} /></label>{" "}
           {p.tool === "window" && <label>Sill above floor (mm) <input aria-label="New window sill" inputMode="decimal" value={p.sill} placeholder="project default" onChange={(e) => p.setSill(e.target.value)} size={8} /></label>}{" "}
-          <small>Empty uses the project default; values you enter are marked as yours. Drag along a wall to draw it.</small>
+          <small>A click is not enough: press on a wall and drag along it to draw the {p.tool}. Empty fields use the project default; values you enter are marked as yours.</small>
         </>
       )}
       <p><small>{hint}</small></p>

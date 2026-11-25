@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { OverlayData } from "./overlay";
 import {
-  EDIT, EMPTY_HISTORY, dragOpeningOp, openingDims, addOpeningOp, addWallOp, applyOps, axisOf, canAdd, dragEndpoint, endpointAt, dragged, hitTest, inspectorRows, isNoop, moveWall, nextId,
+  EDIT, EMPTY_HISTORY, dragOpeningOp, openingDims, addWallOp, applyOps, axisOf, canAdd, dragEndpoint, endpointAt, dragged, hitTest, inspectorRows, isNoop, moveWall, nextId,
   openingFromFields, orthogonal, push, redo, removeOpeningOp, removeWallOp, renameRoomOp, setOpeningOp, setWallOp, slideOpening, snap, snapMove, toEditModel,
   undo, wallFromFields, type EditModel, type EditWall,
 } from "./plan-edit";
@@ -67,15 +67,6 @@ test("op builders capture the target snapshot and refuse non-orthogonal geometry
   expect(renameRoomOp("e6", m.rooms[0], "  ")).toBeNull();
 });
 
-test("a door goes where clicked, kept inside its wall, and does not fit a short wall", () => {
-  const host = m.walls[0];
-  expect(addOpeningOp("e1", host, "door", [3000, 100], 900)).toMatchObject({ op: "add_opening", kind: "door", start: [2550, 100], end: [3450, 100] });
-  expect(addOpeningOp("e1", host, "door", [-300, 100], 900)).toMatchObject({ start: [0, 100], end: [900, 100] });
-  expect(addOpeningOp("e1", host, "door", [7999, 100], 900)).toMatchObject({ start: [7100, 100], end: [8000, 100] });
-  expect(addOpeningOp("e1", { ...host, end: [500, 100] }, "door", [250, 100], 900)).toBeNull();
-  expect(addOpeningOp("e1", host, "window", [3000, 100], 1200, { height: 1100 })).toMatchObject({ height: 1100, end: [3600, 100] });
-});
-
 test("ids continue after the highest existing one", () => {
   expect(nextId([])).toBe("e1");
   expect(nextId([{ id: "e1" }, { id: "e7" }, { id: "x" }])).toBe("e8");
@@ -101,7 +92,7 @@ test("preview: a moved wall carries its opening, a removed wall takes it, added 
   expect(moved.walls[0]).toMatchObject({ id: "wall-001", start: [0, 600], handles: ["e1"] });
   expect(moved.openings[0]).toMatchObject({ start: [1000, 600], end: [2200, 600] });
   expect(applyOps(m, [removeWallOp("e1", m.walls[0])]).openings).toEqual([]);
-  const added = applyOps(m, [addWallOp("e1", [6000, 200], [6000, 4800])!, addOpeningOp("e2", m.walls[0], "door", [5000, 100], 900)!, removeOpeningOp("e3", m.openings[0])]);
+  const added = applyOps(m, [addWallOp("e1", [6000, 200], [6000, 4800])!, dragOpeningOp("e2", m.walls[0], "door", [4550, 100], [5450, 100], m.openings)!, removeOpeningOp("e3", m.openings[0])]);
   expect(added.walls.map((w) => w.id)).toEqual(["wall-001", "wall-002", "new-e1"]);
   expect(added.openings.map((o) => [o.id, o.kind, o.wall_id])).toEqual([["new-e2", "door", "wall-001"]]);
   expect(applyOps(m, [renameRoomOp("e1", m.rooms[1], "Hall")!]).rooms[1]).toMatchObject({ name: "Hall", name_source: "user_modified" });
