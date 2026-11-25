@@ -60,9 +60,10 @@ async def _ifc_upload(path, upload_id: str, user, filename: str | None) -> dict:
         db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id), owner_id=user.id, filename=name))
         db.commit()
     floors = [] if has_blocking(project) else storeys(path)
-    return {"upload_id": upload_id, "kind": "ifc", "inventory": {"kind": "ifc", "storeys": floors},
+    return {"upload_id": upload_id, "kind": "ifc", "storeys": floors,
+            "inventory": {"layers": [], "entity_counts": {}},  # DXF-only parts of the contract: empty
             "issues": [i.model_dump(mode="json") for i in project.issues], "needs": [],
-            "floor_candidates": floors}
+            "floor_candidates": []}
 
 
 @router.post("/uploads", status_code=201)

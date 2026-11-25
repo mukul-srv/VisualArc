@@ -141,7 +141,7 @@ def test_upload_and_import_flow(client):
     r = client.post("/api/v1/uploads", params={"filename": "house.ifc"}, content=_two_storeys())
     assert r.status_code == 201
     body = r.json()
-    assert body["kind"] == "ifc" and [s["elevation"] for s in body["floor_candidates"]] == [0.0, 3200.0]
+    assert body["kind"] == "ifc" and [s["elevation"] for s in body["storeys"]] == [0.0, 3200.0] and body["floor_candidates"] == []
     r = client.post(f"/api/v1/uploads/{body['upload_id']}/ifc", json={"project_name": "From IFC"})
     assert r.status_code == 201, r.text
     pid = r.json()["project_id"]
@@ -161,6 +161,6 @@ def test_upload_and_import_flow(client):
 def test_ifc_upload_rejects_garbage_and_blocked(client, tmp_path):
     assert client.post("/api/v1/uploads", content=b"ISO-10303-21;\nnot really\n").status_code == 422
     up = client.post("/api/v1/uploads", content=_bare(tmp_path, units=False).read_bytes()).json()
-    assert up["floor_candidates"] == [] and up["issues"][0]["code"] == "ifc_units_missing"
+    assert up["storeys"] == [] and up["issues"][0]["code"] == "ifc_units_missing"
     r = client.post(f"/api/v1/uploads/{up['upload_id']}/ifc", json={"project_name": "x"})
     assert r.status_code == 409 and r.json()["issues"][0]["severity"] == "blocking"
