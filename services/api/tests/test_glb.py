@@ -48,7 +48,8 @@ def test_axis_swap_and_metres():
     loaded = _roundtrip(build_scene(_one_wall_project()))
     np.testing.assert_allclose(loaded.bounds, [[0, 0, -0.2], [4, 3, 0]], atol=1e-9)
     mesh = loaded.geometry["w-1"]
-    assert mesh.is_watertight and mesh.volume > 0  # winding not flipped by swap
+    solid = trimesh.Trimesh(mesh.vertices, mesh.faces, process=True)  # UVs unmerge vertices: re-merge to test
+    assert solid.is_watertight and mesh.volume > 0  # winding not flipped by swap
     assert mesh.volume == pytest.approx(4 * 0.2 * 3)
 
 
@@ -150,3 +151,16 @@ def test_ceiling_mesh_faces_down_with_type_metadata():
         assert m.metadata["elevation"]["source"] == "inferred"
         np.testing.assert_allclose(m.vertices[:, 1], 2.6, atol=1e-9)  # Y-up, metres
         np.testing.assert_allclose(m.face_normals, [[0, -1, 0]] * len(m.faces), atol=1e-9)
+
+
+def test_uvs_are_box_projected_metres():
+    # wall x 0..4, y 0..0.2, up 0..3 m: X faces map (z, y), Y faces (x, z), Z faces (x, y)
+    mesh = _roundtrip(build_scene(_one_wall_project())).geometry["w-1"]
+    uv = np.asarray(mesh.visual.uv)
+    assert uv.shape == (len(mesh.vertices), 2)
+    v, n = mesh.vertices, mesh.face_normals
+    for f, normal in zip(mesh.faces, n, strict=True):
+        a = int(np.abs(normal).argmax())
+        cols = [[2, 1], [0, 2], [0, 1]][a]
+        np.testing.assert_allclose(uv[f], v[f][:, cols], atol=1e-6)  # float32 in the GLB
+    assert uv.min() >= -0.2 - 1e-6 and uv.max() <= 4 + 1e-6

@@ -33,6 +33,19 @@ def material_key(el) -> str:
     return "wall_neutral" if el.type == "junction" else el.type
 
 
+def box_uv(mesh: trimesh.Trimesh) -> None:
+    """Box-projected world UVs in metres (call after the mm -> m transform): each face projects on the
+    axis its normal points along most, so a texture tiles at real scale. Unmerges vertices (UVs
+    differ per face), so watertightness (index topology) is recorded in `metadata` first."""
+    mesh.metadata["watertight"] = bool(mesh.is_watertight)
+    mesh.unmerge_vertices()
+    axis = np.abs(mesh.face_normals).argmax(axis=1)
+    v = mesh.vertices.reshape(-1, 3, 3)  # faces are now consecutive vertex triples
+    pairs = np.array([[2, 1], [0, 2], [0, 1]])  # glTF (x, y up, z): X-facing -> (z, y), Y -> (x, z), Z -> (x, y)
+    uv = np.take_along_axis(v, pairs[axis][:, None, :].repeat(3, 1), axis=2)
+    mesh.visual = trimesh.visual.TextureVisuals(uv=uv.reshape(-1, 2), material=mesh.visual.material)
+
+
 def build_scene(project: Project) -> trimesh.Scene:
     scene = trimesh.Scene()
     scene.metadata.update(
@@ -79,6 +92,7 @@ def build_scene(project: Project) -> trimesh.Scene:
                 }
                 if el.id in hosted:  # key absent otherwise: pre-T12 GLBs unchanged
                     mesh.metadata["openings"] = hosted[el.id]
+                box_uv(mesh)
                 scene.add_geometry(mesh, node_name=el.id, geom_name=el.id)
             for pid, (bal, mesh) in build_balcony_railings(floor).items():
                 mesh.apply_transform(PLAN_MM_TO_GLTF_M)
@@ -87,6 +101,7 @@ def build_scene(project: Project) -> trimesh.Scene:
                                  "balcony_id": bal.id, "height": bal.railing_height.model_dump(mode="json"),
                                  "thickness": bal.railing_thickness.model_dump(mode="json"),
                                  "sources": [s.model_dump(mode="json") for s in bal.sources]}
+                box_uv(mesh)
                 scene.add_geometry(mesh, node_name=pid, geom_name=pid)
             for pid, (part, o, mesh) in build_opening_parts(floor).items():
                 mesh.apply_transform(PLAN_MM_TO_GLTF_M)
@@ -94,6 +109,7 @@ def build_scene(project: Project) -> trimesh.Scene:
                 # `opening` (the whole record, swing and detail included) is what the inspector shows
                 mesh.metadata = {"floor_id": floor.id, "id": pid, "type": "opening_part",
                                  "part": part, "opening": o.model_dump(mode="json")}
+                box_uv(mesh)
                 scene.add_geometry(mesh, node_name=pid, geom_name=pid)
     return scene
 
@@ -106,7 +122,6 @@ def build_meta(project: Project, scene: trimesh.Scene) -> dict:
         elements[name] = {
             **mesh.metadata,
             "bounds_m": mesh.bounds.round(9).tolist(),
-            "watertight": bool(mesh.is_watertight),
             "triangles": len(mesh.faces),
         }
     return {

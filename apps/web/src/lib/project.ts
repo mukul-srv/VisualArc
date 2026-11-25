@@ -1,3 +1,4 @@
+import { parseMaterials } from "./materials";
 import type { Measured } from "./selection";
 
 // Pure project helpers (no DOM/three.js). The manifest comes from GET /api/v1/projects/{id}.
@@ -9,7 +10,7 @@ export type Floor = {
   offset?: { x: number; y: number; unit: "mm"; source: "user_provided" | "defaulted" }; // manual plan offset (building assembly)
 };
 export type Role = "owner" | "editor" | "viewer";
-export type Manifest = { id: string; name: string; floors: Floor[]; role?: Role };
+export type Manifest = { id: string; name: string; floors: Floor[]; role?: Role; materials?: Record<string, string> }; // materials: "<floor>/<element>" -> library id
 
 const HEX32 = /^[0-9a-f]{32}$/;
 const PROVENANCES = ["source_extracted", "user_provided", "defaulted", "inferred", "user_modified"];
@@ -30,7 +31,7 @@ export function parseManifest(x: unknown): Manifest | null {
       return null;
   }
   const role = ["owner", "editor", "viewer"].includes(m.role as string) ? { role: m.role } : {};
-  return { id: m.id, name: m.name, floors: m.floors, ...role };
+  return { id: m.id, name: m.name, floors: m.floors, ...role, ...(m.materials ? { materials: parseMaterials(m.materials) } : {}) };
 }
 
 /** Lowest floor first; does not mutate the input. */
