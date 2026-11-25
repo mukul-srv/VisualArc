@@ -167,6 +167,14 @@ class Settings:
     # polygons and junction/leftover regions.
     tolerance_mm: float = 1e-6
 
+    # IFC import (tessellated geometry from IfcOpenShell, so float noise is ~1e-3 mm): corners and levels closer
+    # than this are the same; a footprint filling at least `ifc_rect_fill` of its bounding rectangle is read
+    # as that rectangle (else approximated, with a warning); a column footprint filling at least
+    # `ifc_circle_fill` of its circumscribed circle is a circle. PROVISIONAL: round values, not from a standard.
+    ifc_snap_mm: float = 0.5
+    ifc_rect_fill: float = 0.98
+    ifc_circle_fill: float = 0.97
+
     # Role inference (no role layer): a wall face counts as lying on the exterior
     # ring of the wall union when it is within this distance of it. 1 mm absorbs
     # drafting noise while staying far below the thinnest wall (50 mm).

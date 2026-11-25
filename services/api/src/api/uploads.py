@@ -18,6 +18,7 @@ from api.db import UploadRow, session
 from api.engine.adapters.dxf.inspect import build_inventory
 from api.engine.adapters.dxf.reader import InputError, load_doc, read_dxf, resolve_scale
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, excluded_issue
+from api.engine.adapters.ifc.reader import is_ifc, read_ifc, storeys
 from api.engine.settings import DEFAULTS
 from api.generations import GenerationRequest, read_project, request_settings
 from api.layer_conventions import preflight, save_conventions
@@ -51,13 +52,29 @@ def get_presets() -> dict:
     return {k: asdict(v) for k, v in DEFAULTS.building_presets}
 
 
+async def _ifc_upload(path, upload_id: str, user, filename: str | None) -> dict:
+    """An IFC body: read once for the issues and the storeys; the project is made by POST /uploads/{id}/ifc."""
+    project = read_ifc(path)
+    with session() as db:
+        name = (filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()[:255] or None
+        db.add(UploadRow(id=upload_id, blob_key=upload_key(upload_id), owner_id=user.id, filename=name))
+        db.commit()
+    floors = [] if has_blocking(project) else storeys(path)
+    return {"upload_id": upload_id, "kind": "ifc", "storeys": floors,
+            "inventory": {"layers": [], "entity_counts": {}},  # DXF-only parts of the contract: empty
+            "issues": [i.model_dump(mode="json") for i in project.issues], "needs": [],
+            "floor_candidates": []}
+
+
 @router.post("/uploads", status_code=201)
 async def create_upload(request: Request, user: CurrentUser, filename: str | None = None) -> dict:
     upload_id = new_id()
     path = request.state.path = upload_path(upload_id)
     try:
         if not await _save(request, DEFAULTS.max_dxf_bytes):
-            raise HTTPException(422, "empty upload: send the DXF as the request body")
+            raise HTTPException(422, "empty upload: send the file as the request body")
+        if is_ifc(path):
+            return await _ifc_upload(path, upload_id, user, filename)
         inventory = build_inventory(path)
         project = read_dxf(path, building_type="residential")
     except InputError as e:
@@ -200,3 +217,44 @@ def split_upload(upload_id: str, req: SplitRequest, user: CurrentUser):
         "floors": floors,
         "issues": [i.model_dump(mode="json") for i in notes],
     }
+
+
+class IfcImport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_name: str = Field(min_length=1, max_length=100)
+
+
+@router.post("/uploads/{upload_id}/ifc", status_code=201)
+def import_ifc(upload_id: str, req: IfcImport, user: CurrentUser):
+    """An uploaded IFC as one project, one floor per storey (name, elevation and every value from the file)."""
+    with session() as db:
+        owned(db, UploadRow, upload_id, user.id, "unknown upload_id")
+    path = upload_path(upload_id)
+    if not path.is_file() or not is_ifc(path):
+        raise HTTPException(422, "this upload is not an IFC file")
+    whole = read_ifc(path)
+    issues = [i.model_dump(mode="json") for i in whole.issues]
+    if has_blocking(whole):
+        return JSONResponse(status_code=409, content={"detail": "blocking issues; no project generated",
+                                                      "issues": issues})
+    levels = storeys(path)
+    elevs = [s["elevation"] for s in levels if s["elevation"] is not None]
+    if len(set(elevs)) < len(elevs):
+        raise HTTPException(422, "two storeys share an elevation; floors need unique elevations")
+    floors, used = [], set()
+    with session() as db, db.begin():
+        pid = create_project(req.project_name, user.id, version=False, db=db)
+        for s in levels:
+            name, n = s["name"][:100], 2
+            while name.casefold() in used:  # floor names are unique within a project
+                name = f"{s['name'][:92]} ({n})"
+                n += 1
+            used.add(name.casefold())
+            freq = FloorRequest(upload_id=upload_id, floor_name=name, elevation=s["elevation"])
+            out = add_floor(pid, freq, FloorScope(frozenset({s["key"]}), (0.0, 0.0), ()), user.id, None,
+                            version=False, db=db, roof=False)
+            if isinstance(out, JSONResponse):
+                raise HTTPException(409, f"storey {name!r} is blocked")
+            floors.append({"key": s["key"], **out})
+        record_version(db, pid, user.id, f"Imported from IFC ({len(floors)} storeys)")
+    return {"project_id": pid, "floors": floors, "issues": issues}

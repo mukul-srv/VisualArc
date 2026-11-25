@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { addFloorJob, draftJob, generateJob, STAGE_LABEL, type DraftResult, type JobProgress } from "@/lib/jobs";
 import { useRouter } from "next/navigation";
-import { createProject, getPresets, getProject, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
+import { createProject, getPresets, getProject, importIfc, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, unitsDoubtful, unresolvable, type FormValues } from "@/lib/params";
@@ -87,7 +87,7 @@ export function UploadFlow() {
   // Re-run the preflight under the chosen conventions: the mapping can resolve blocking issues.
   async function applyConventions(spec: ConventionsSpec, uploadId = pre?.upload_id, units = form.units) {
     setConv(spec);
-    if (!uploadId) return;
+    if (!uploadId || pre?.kind === "ifc") return; // layers and units are DXF-only
     const r = await inspectLayers(uploadId, spec, fetch, units || undefined);
     if (!r.ok) return setFailure(r);
     setFailure(null);
@@ -118,7 +118,7 @@ export function UploadFlow() {
       setRows(initialRows(r.floor_candidates ?? []));
       setConv(DEFAULT_CONVENTIONS);
       // an existing project's conventions are loaded by the effect above instead
-      if (!(fresh.proj.on && isGenerationId(fresh.proj.target.trim()))) applyConventions(DEFAULT_CONVENTIONS, r.upload_id);
+      if (r.kind !== "ifc" && !(fresh.proj.on && isGenerationId(fresh.proj.target.trim()))) applyConventions(DEFAULT_CONVENTIONS, r.upload_id);
     } else setFailure(r);
   }
 
@@ -131,6 +131,19 @@ export function UploadFlow() {
     setBlockedIssues(null);
     setBusy(true);
     const r = await splitUpload(pre.upload_id, { ...req.body, conventions: conv });
+    setBusy(false);
+    if (r.ok) router.push(`/viewer?project=${r.project_id}`);
+    else if (r.kind === "blocked") setBlockedIssues(r.issues);
+    else setFailure(r);
+  }
+
+  async function onImportIfc() {
+    if (!pre) return;
+    if (!projectName.trim()) return setErrors(["Project name is required."]);
+    setErrors([]);
+    setFailure(null);
+    setBusy(true);
+    const r = await importIfc(pre.upload_id, projectName.trim());
     setBusy(false);
     if (r.ok) router.push(`/viewer?project=${r.project_id}`);
     else if (r.kind === "blocked") setBlockedIssues(r.issues);
@@ -237,10 +250,10 @@ export function UploadFlow() {
       <Breadcrumbs trail={addingTo
         ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
-      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "DXF floor plan to 3D"}</h1>
+      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Floor plan (DXF or IFC) to 3D"}</h1>
       <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null)}</strong></p>
       <p><small>Values your drawing lacks use defaults, and every one is reported as assumed.</small></p>
-      <input type="file" accept=".dxf" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
+      <input type="file" accept=".dxf,.ifc" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
         <p role="status">
           {job && "Large drawings can take a minute; keep this page open. "}
@@ -253,7 +266,19 @@ export function UploadFlow() {
           <strong>{failure.kind === "rejected" ? "File rejected:" : "Error:"}</strong> {failure.message}
         </p>
       )}
-      {pre && (
+      {pre?.kind === "ifc" && (
+        <>
+          <h2>What we found</h2>
+          <IssueList issues={shown} />
+          <p>Storeys (each becomes a floor; names, elevations and sizes come from the file):</p>
+          <ul>{(pre.storeys ?? []).map((s) => <li key={s.key}>{s.name}{s.elevation === null ? "" : `, elevation ${s.elevation} mm`}</li>)}</ul>
+          {errors.map((e) => <p key={e} role="alert" style={{ color: "#b00020" }}>{e}</p>)}
+          <label>Project name <input value={projectName} maxLength={100} onChange={(e) => setProjectName(e.target.value)} /></label>{" "}
+          <button disabled={busy || shown.some((i) => i.severity === "blocking")} onClick={onImportIfc}>Import IFC</button>
+          {shown.some((i) => i.severity === "blocking") && <p>Fix the blocking issues in the file and upload it again.</p>}
+        </>
+      )}
+      {pre && pre.kind !== "ifc" && (
         <>
           <h2>What we found</h2>
           <IssueList issues={shown} />

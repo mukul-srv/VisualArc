@@ -19,6 +19,8 @@ export type Preflight = {
   issues: Issue[];
   needs: "units"[]; // only what can never be defaulted
   inventory: { layers: string[]; entity_counts: Record<string, number> };
+  kind?: "ifc"; // an IFC upload: no layers or units; one floor per storey is made by importIfc
+  storeys?: { key: string; name: string; elevation: number | null }[];
   floor_candidates?: FloorCandidate[]; // >= 2: the user must confirm the floors (split step)
 };
 
@@ -104,6 +106,10 @@ export const uploadDxf = (file: Blob & { name?: string }, f: Fetch = fetch) =>
       body: file,
     }),
   );
+
+/** An uploaded IFC as a project, one floor per storey (values come from the file). */
+export const importIfc = (uploadId: string, projectName: string, f: Fetch = fetch) =>
+  send<{ project_id: string; issues: Issue[] }>(() => post(`/uploads/${uploadId}/ifc`, { project_name: projectName }, f));
 
 export const generate = (params: GenerationParams, f: Fetch = fetch) =>
   send<{ generation_id: string; issues: Issue[] }>(() =>

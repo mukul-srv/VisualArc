@@ -121,6 +121,7 @@ Configuration: `API_DATA_DIR` (API storage, default a temp folder), `API_CORS_OR
 | `POST /api/v1/generations` | JSON `{upload_id, wall_height, units?, door_height?, window_height?, window_sill?}`; 201 with artifact URLs, 409 with structured issues if blocked |
 | `GET /api/v1/generations/{id}/artifacts/{glb,meta,canonical,report}` | download artifacts |
 | `GET /api/v1/projects/{pid}/export/{obj,ifc}`, `GET /api/v1/generations/{id}/export/{obj,ifc}` | OBJ (metres, Y up, as the GLB) or IFC4 (mm; typed elements per storey, provenance property sets; unmappable elements become proxies with a recorded issue); viewer role or share link |
+| `POST /api/v1/uploads` (IFC body), `POST /api/v1/uploads/{id}/ifc` | an IFC upload is detected by its header; the second call makes a project with a floor per storey (unsupported entities are reported as issues) |
 
 ## Limits (provisional)
 Enforced before interpretation (CLI exit 3, API 422): **600** wall-layer segments,

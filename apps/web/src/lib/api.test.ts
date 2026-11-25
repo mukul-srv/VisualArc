@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { generate, uploadDxf } from "./api";
+import { generate, importIfc, uploadDxf } from "./api";
 
 const reply = (status: number, body: unknown) =>
   (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
@@ -42,4 +42,16 @@ test("network failure is an actionable error, not a throw", async () => {
   const r = await generate({ upload_id: "x" }, f);
   expect(r).toMatchObject({ ok: false, kind: "error" });
   expect(!r.ok && r.message).toMatch(/backend running/);
+});
+
+test("importIfc posts the project name to the upload's ifc endpoint", async () => {
+  let seen: { url: string; body: string } | undefined;
+  const f = (async (url: string, init: RequestInit) => {
+    seen = { url, body: String(init.body) };
+    return new Response(JSON.stringify({ project_id: "p".repeat(32), issues: [] }), { status: 201 });
+  }) as unknown as typeof fetch;
+  const r = await importIfc("u".repeat(32), "House", f);
+  expect(r.ok && r.project_id).toBe("p".repeat(32));
+  expect(seen!.url).toMatch(/\/uploads\/u{32}\/ifc$/);
+  expect(JSON.parse(seen!.body)).toEqual({ project_name: "House" });
 });

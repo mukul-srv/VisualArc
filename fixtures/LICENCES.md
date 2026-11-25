@@ -17,7 +17,7 @@
 
 ## Dependency notes
 
-- IfcOpenShell (`ifcopenshell`, services/api): LGPL-3.0-or-later. Used unmodified as a Python library for the IFC export only (`engine/exporters/ifc.py`); not vendored or modified.
+- IfcOpenShell (`ifcopenshell`, services/api): LGPL-3.0-or-later. Used unmodified as a Python library for the IFC export and import (`engine/exporters/ifc.py`, `engine/adapters/ifc/reader.py`); not vendored or modified.
 
 ## Viewer material textures (committed)
 
