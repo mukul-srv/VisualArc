@@ -13,6 +13,8 @@ import { parseManifest, pickFloor, sortFloors, viewerUrl, type Floor, type Manif
 import { resolveStem } from "@/lib/model-stem";
 import { ViewerNav } from "@/components/ViewerNav";
 import { MetadataPanel } from "@/components/MetadataPanel";
+import { MaterialPicker } from "@/components/MaterialPicker";
+import { applyMaterials, materialKey, putMaterials, textureCache, type MaterialMap } from "@/lib/materials";
 import { RoomList } from "@/components/RoomList";
 import { ViewerToolbar } from "@/components/ViewerToolbar";
 import { orbitLimits, planFrustum } from "@/lib/camera";
@@ -47,6 +49,10 @@ export default function ViewerPage() {
   const [result, setResult] = useState<{ m: Measurement; a: SnapKind; b: SnapKind } | null>(null);
 
   const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [materials, setMaterials] = useState<MaterialMap>({}); // "<floor>/<element>" -> library id
+  const materialsRef = useRef<MaterialMap>({});
+  const applyMats = useRef<(m: MaterialMap) => void>(() => {});
+  const [picked, setPicked] = useState<{ floor: string | null; id: string; type: string } | null>(null);
   const [viewing, setViewing] = useState<number | null>(null); // past version number, read-only
   // what to load: every floor's GLB of a project (id = floor id), or one model (id null)
   const [target, setTarget] = useState<{ stem: string; loads: { id: string | null; url: string }[] } | null>(null);
@@ -88,6 +94,7 @@ export default function ViewerPage() {
         if (!f) return setStatus("error: project has no floors yet");
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
         setManifest(m);
+        setMaterials(m.materials ?? {});
         setBuilding(br?.ok ? br.building : manifestBuilding(m));
         // ?floor= keeps showing just that floor (as before); without it the whole building
         setView({ mode: query.get("floor") ? "isolate" : "whole", activeId: f.id, gap: GAP.default, ghost: false });
@@ -118,6 +125,11 @@ export default function ViewerPage() {
   }, [roomsUrl]);
 
   // the scene reads the current view and building through refs; changing either re-places the floors
+  useEffect(() => {
+    materialsRef.current = materials;
+    applyMats.current(materials);
+  }, [materials]);
+
   useEffect(() => {
     viewRef.current = view;
     buildingRef.current = building;
@@ -170,6 +182,21 @@ export default function ViewerPage() {
     };
     let selected: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] } | null = null;
     let overlay: THREE.Mesh | null = null;
+    const cache = textureCache();
+    const highlight = (mesh: THREE.Mesh) => {
+      const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+      mat.emissive.set(0xffaa00);
+      mat.emissiveIntensity = 0.6;
+      selected = { mesh, original: mesh.material };
+      mesh.material = mat;
+    };
+    applyMats.current = (map) => {
+      const keep = selected?.mesh; // the highlight sits on a clone of the old material: redo it
+      if (keep) clearSelection();
+      roots.forEach((r, id) => applyMaterials(r, id, map, cache));
+      if (keep) highlight(keep);
+      applyView.current(viewRef.current, false); // new materials need the ghost state
+    };
     const clearSelection = () => {
       if (selected) selected.mesh.material = selected.original;
       if (overlay) {
@@ -260,11 +287,8 @@ export default function ViewerPage() {
         showOpening(pick.opening, ud.thickness?.value ?? 0, pick.baseY, pick.shift);
         return setPanel(describeOpening(pick.opening));
       }
-      const mat = (pick.mesh.material as THREE.MeshStandardMaterial).clone();
-      mat.emissive.set(0xffaa00);
-      mat.emissiveIntensity = 0.6;
-      selected = { mesh: pick.mesh, original: pick.mesh.material };
-      pick.mesh.material = mat;
+      highlight(pick.mesh);
+      setPicked({ floor: (rootOf(pick.mesh)?.userData.floorId as string | null) ?? null, id: ud.id, type: ud.type });
       setPanel(describeElement(ud));
     };
     const onUp = (e: PointerEvent) => {
@@ -534,6 +558,7 @@ export default function ViewerPage() {
       setPanel(null);
       frame(reframe);
     };
+    const applyAll = () => roots.forEach((r, id) => applyMaterials(r, id, materialsRef.current, cache));
     const loader = new GLTFLoader();
     Promise.all(loads.map((l) => loader.loadAsync(l.url)))
       .then((gltfs) => {
@@ -558,6 +583,7 @@ export default function ViewerPage() {
             setRoofVisible(r, on);
             applyCeilingVisibility(r, on); // roof off: open to the sky, so no ceilings either
           });
+        applyAll();
         applyView.current(viewRef.current, false);
         const s = frame(true).getSize(new THREE.Vector3());
         setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
@@ -581,6 +607,7 @@ export default function ViewerPage() {
     return () => {
       disposed = true;
       applyView.current = () => {};
+      applyMats.current = () => {};
       window.removeEventListener("resize", onResize);
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointerup", onUp);
@@ -600,7 +627,9 @@ export default function ViewerPage() {
         const m = o as THREE.Mesh;
         m.geometry?.dispose();
         [m.material].flat().forEach((x) => x?.dispose());
+        (m.userData?.originalMaterial as THREE.Material | undefined)?.dispose();
       });
+      cache.dispose();
       renderer.setAnimationLoop(null);
       controls.dispose();
       renderer.dispose();
@@ -618,6 +647,7 @@ export default function ViewerPage() {
         const m = r.ok ? parseManifest(r.manifest) : null;
         if (!m || !br.ok || m.floors.length === 0) return;
         setBuilding((old) => (sameBuilding(old, br.building) ? old : br.building)); // only when offsets or pairings changed
+        setMaterials((old) => (JSON.stringify(old) === JSON.stringify(m.materials ?? {}) ? old : (m.materials ?? {})));
         if (key(m) === key(manifest)) return;
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
         setManifest(m);
@@ -649,6 +679,20 @@ export default function ViewerPage() {
     if (manifest && v.activeId && v.mode === "isolate") window.history.replaceState(null, "", viewerUrl(manifest.id, v.activeId, viewing ?? undefined, share.current));
   };
   const activeFloor = building?.floors.find((f) => f.id === floorId);
+  const canEdit = !!manifest && viewing === null && shared === false && (manifest.role === "owner" || manifest.role === "editor");
+  const changeMaterial = async (key: string, lib: string | null) => {
+    if (!manifest) return;
+    const old = materials;
+    const next = { ...old };
+    if (lib) next[key] = lib;
+    else delete next[key];
+    setMaterials(next);
+    const r = await putMaterials(manifest.id, next);
+    if (!r.ok) {
+      setMaterials(old);
+      setHint(`Could not save material: ${r.message}`);
+    }
+  };
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
@@ -711,6 +755,14 @@ export default function ViewerPage() {
         {building && <BuildingStats building={building} active={activeFloor} />}
         <RoomList rooms={rooms} onSelect={(r) => setPanel(describeRoom(r, current?.id))} />
         <MetadataPanel panel={panel} />
+        {panel && picked && picked.id === panel.id && picked.floor && manifest && (
+          <MaterialPicker
+            type={picked.type}
+            value={materials[materialKey(picked.floor, picked.id)] ?? null}
+            disabled={!canEdit}
+            onChange={(lib) => changeMaterial(materialKey(picked.floor!, picked.id), lib)}
+          />
+        )}
         {measuring && (
           <div>
             <b>Viewer measurement (not source data)</b>

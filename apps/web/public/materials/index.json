@@ -1,0 +1,102 @@
+[
+  {
+    "id": "brick",
+    "label": "Brick",
+    "tile_m": 2,
+    "suits": [
+      "wall"
+    ]
+  },
+  {
+    "id": "concrete",
+    "label": "Concrete",
+    "tile_m": 2,
+    "suits": [
+      "wall",
+      "slab",
+      "floor_boundary",
+      "column"
+    ]
+  },
+  {
+    "id": "plaster",
+    "label": "Plaster",
+    "tile_m": 2,
+    "suits": [
+      "wall",
+      "ceiling"
+    ]
+  },
+  {
+    "id": "paint",
+    "label": "Painted plaster",
+    "tile_m": 2,
+    "suits": [
+      "wall",
+      "ceiling"
+    ]
+  },
+  {
+    "id": "wood-floor",
+    "label": "Wood floor",
+    "tile_m": 1,
+    "suits": [
+      "slab",
+      "floor_boundary"
+    ]
+  },
+  {
+    "id": "tile",
+    "label": "Tiles",
+    "tile_m": 1,
+    "suits": [
+      "slab",
+      "floor_boundary",
+      "wall"
+    ]
+  },
+  {
+    "id": "timber",
+    "label": "Timber planks",
+    "tile_m": 1.5,
+    "suits": [
+      "wall",
+      "balcony",
+      "balcony_railing",
+      "stair",
+      "ramp"
+    ]
+  },
+  {
+    "id": "roof-tile",
+    "label": "Roof tiles",
+    "tile_m": 1.5,
+    "suits": [
+      "roof"
+    ]
+  },
+  {
+    "id": "metal",
+    "label": "Metal",
+    "tile_m": 1,
+    "suits": [
+      "balcony_railing",
+      "column",
+      "stair",
+      "ramp",
+      "roof"
+    ],
+    "metalness": 0.8
+  },
+  {
+    "id": "stone",
+    "label": "Stone",
+    "tile_m": 2,
+    "suits": [
+      "wall",
+      "slab",
+      "column",
+      "stair"
+    ]
+  }
+]

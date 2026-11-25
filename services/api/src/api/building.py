@@ -239,7 +239,8 @@ def get_building(pid: str, who: Principal):
         out = assemble(db, row)
         del out["_floors"]
         v = _latest(db, pid)
-        return {"project_id": pid, "version": v.number if v else 0, "role": project_role(db, row, who), **out}
+        return {"project_id": pid, "version": v.number if v else 0, "role": project_role(db, row, who),
+                "materials": row.data.get("materials", {}), **out}
 
 
 class Offset(BaseModel):
@@ -306,3 +307,28 @@ def unpair(pid: str, req: PairRef, user: CurrentUser):
     """Reject a pair so it is not proposed again (confirm it to bring it back)."""
     return _save(pid, user.id, req, "rejected",
                  f"Stairs unpaired: {req.lower_stair} -> {req.upper_stair}")
+
+
+# Per-element material choice (Phase 1/18): `"<floor id>/<element id>" -> library id`, a project
+# setting in the manifest (snapshotted per version). Must match apps/web/public/materials/index.json
+# (test_materials checks). Element ids that no longer exist are kept and simply never match.
+MATERIAL_IDS = frozenset({"brick", "concrete", "plaster", "paint", "wood-floor", "tile", "timber",
+                          "roof-tile", "metal", "stone"})
+
+
+class MaterialsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    materials: dict[str, str] = Field(max_length=5000, description="absent key = default flat colour")
+
+
+@router.put("/projects/{pid}/materials")
+def put_materials(pid: str, req: MaterialsRequest, user: CurrentUser):
+    """Replace the project's element -> library material map; a new version."""
+    bad = sorted({m for m in req.materials.values() if m not in MATERIAL_IDS})
+    if bad or any(not k or len(k) > 200 for k in req.materials):
+        raise HTTPException(422, f"unknown material {bad}" if bad else "bad element key")
+    with session() as db, db.begin():
+        row = owned(db, ProjectRow, pid, user.id, "unknown project", lock=True, need="editor")
+        row.data = {**row.data, "materials": req.materials}
+        v = _version(db, row, user.id, f"Materials set on {len(req.materials)} elements")
+    return {"materials": req.materials, "version": v.number}
