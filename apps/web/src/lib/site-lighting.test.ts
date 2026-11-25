@@ -5,7 +5,7 @@ const light = (id: string): ArtificialLight => ({ id, kind: "point", floor_id: "
 
 test("parseLighting keeps valid parts and drops malformed ones", () => {
   expect(parseLighting(undefined)).toEqual(NO_LIGHTING);
-  const got = parseLighting({ location: { latitude: 95, longitude: 0 }, north_deg: -90, lights: [light("a"), { ...light("b"), color: "red" }, { ...light("c"), kind: "laser" }] });
+  const got = parseLighting({ location: { latitude: 95, longitude: 0 }, north_deg: -90, lights: [light("a"), { ...light("b"), color: "red" }, { ...light("c"), kind: "laser" }, { ...light("d"), intensity: 50 }] });
   expect(got.location).toBeNull();
   expect(got.north_deg).toBe(270);
   expect(got.lights.map((l) => l.id)).toEqual(["a"]);

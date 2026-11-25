@@ -27,6 +27,9 @@ import { setWalkFill, WALK_FILL } from "@/lib/lighting";
 import { LightingPanel, type SunSettings } from "@/components/LightingPanel";
 import { DEFAULT_QUALITY, QUALITY, type QualityId } from "@/lib/quality";
 import { createRig } from "@/lib/rig";
+import { IDLE_RENDER, RenderPanel, type RenderState } from "@/components/RenderPanel";
+import { beginStill, maxRenderDim, type Still } from "@/lib/render-gl";
+import { clampTrace, DEFAULT_TRACE, outputSize, stillName, type ResolutionId, type TraceSettings } from "@/lib/render-settings";
 import { daylight, defaultUtcOffset, localToUtcMs, sunDirection, sunPosition } from "@/lib/solar";
 import { nextLightId, NO_LIGHTING, putLighting, type SiteLighting } from "@/lib/site-lighting";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
@@ -72,6 +75,12 @@ export default function ViewerPage() {
   }, [manifest]);
   const applyLighting = useRef<() => void>(() => {});
   const addLightAt = useRef<(floorId: string, x_mm: number, y_mm: number, height_mm: number) => void>(() => {});
+  const [renderOpen, setRenderOpen] = useState(false);
+  const [renderState, setRenderState] = useState<RenderState>(IDLE_RENDER);
+  const [traceSettings, setTraceSettings] = useState<TraceSettings>(DEFAULT_TRACE);
+  const renderApi = useRef<{ start: (s: TraceSettings) => void; stop: () => void; shot: (r: ResolutionId) => void; reset: () => void }>({ start() {}, stop() {}, shot() {}, reset() {} });
+  const siteRef = useRef(site);
+  const savedSiteRef = useRef(savedSite);
   const [picked, setPicked] = useState<{ floor: string | null; id: string; type: string } | null>(null);
   const [viewing, setViewing] = useState<number | null>(null); // past version number, read-only
   // what to load: every floor's GLB of a project (id = floor id), or one model (id null)
@@ -154,9 +163,11 @@ export default function ViewerPage() {
 
   useEffect(() => {
     lightState.current = { site, sun, quality, selLight };
+    siteRef.current = site;
+    savedSiteRef.current = savedSite;
     addModeRef.current = addMode;
     applyLighting.current();
-  }, [site, sun, quality, selLight, addMode]);
+  }, [site, sun, quality, selLight, addMode, savedSite]);
 
   // the UTC offset follows the longitude until the user sets it
   const lon = site.location?.longitude;
@@ -166,7 +177,9 @@ export default function ViewerPage() {
 
   // today's date for the sun (not in the initial state: it must match the server render)
   useEffect(() => {
-    queueMicrotask(() => setSun((s) => ({ ...s, date: new Date().toISOString().slice(0, 10) })));
+    const d = new Date(); // the user's local calendar day, not the UTC one
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    queueMicrotask(() => setSun((s) => ({ ...s, date: today })));
   }, []);
 
   useEffect(() => {
@@ -198,7 +211,8 @@ export default function ViewerPage() {
     const fill = new THREE.AmbientLight(WALK_FILL.color, WALK_FILL.intensity);
     let grid = new THREE.GridHelper(20, 20); // 1 cell = 1 m; resized to the model once loaded
     scene.add(grid);
-    scene.add(new THREE.AxesHelper(2)); // R=X, G=Y(up), B=Z
+    const axes = new THREE.AxesHelper(2); // R=X, G=Y(up), B=Z
+    scene.add(axes);
 
     // --- selection: click (not drag) picks a mesh; a hit inside a wall's aperture picks the opening
     let model: THREE.Object3D | null = null;
@@ -606,6 +620,7 @@ export default function ViewerPage() {
       setPanel(null);
       frame(reframe);
     };
+    let lastSky = 1;
     applyLighting.current = () => {
       const { site: st, sun: sn, quality: ql, selLight: sel } = lightState.current;
       const q = QUALITY[ql];
@@ -616,10 +631,74 @@ export default function ViewerPage() {
         sunDir = sunDirection(p.azimuth, p.elevation, st.north_deg);
         day = daylight(p.elevation);
       }
+      lastSky = day.sky;
       rig.update(
         { quality: q, sunDir, sunStrength: day.sun * (q.artificial ? sn.intensity : 1), skyStrength: day.sky, lights: st.lights, selectedLight: sel },
         { rootOf: (id) => roots.get(id), elevationMm: (id) => manifestRef.current?.floors.find((f) => f.id === id)?.elevation.value ?? 0 },
       );
+    };
+    // --- render panel: path-traced still and realtime screenshot of the current view
+    let still: Still | null = null;
+    let resultUrl: string | null = null;
+    const dropResult = () => {
+      if (resultUrl) URL.revokeObjectURL(resultUrl);
+      resultUrl = null;
+    };
+    const sized = (res: ResolutionId) => {
+      const sz = outputSize(res, { w: el.clientWidth, h: el.clientHeight }, maxRenderDim(renderer));
+      return { sz, note: sz.clamped ? `The requested resolution was reduced to ${sz.w} x ${sz.h} px, the largest this GPU allows.` : null };
+    };
+    const finishWith = (blob: Blob | null, sz: { w: number; h: number }, kind: "render" | "screenshot", note: string | null) => {
+      dropResult();
+      if (!blob) return setRenderState({ ...IDLE_RENDER, phase: "error", message: "The browser could not produce the PNG." });
+      resultUrl = URL.createObjectURL(blob);
+      setRenderState({ ...IDLE_RENDER, phase: "done", size: sz, message: note, result: { url: resultUrl, name: stillName(stem, sz.w, sz.h, kind), kind } });
+    };
+    renderApi.current = {
+      reset: () => {
+        still?.dispose();
+        still = null;
+        dropResult();
+        setRenderState(IDLE_RENDER);
+      },
+      stop: () => still?.stop(),
+      shot: async (res) => {
+        if (still) return;
+        clearSelection();
+        const { sz, note } = sized(res);
+        try {
+          const blob = await rig.capture(scene, camera, persp, sz.w, sz.h);
+          finishWith(blob, sz, "screenshot", note);
+        } catch (e) {
+          setRenderState({ ...IDLE_RENDER, phase: "error", message: `Screenshot failed: ${e instanceof Error ? e.message : String(e)}` });
+        }
+      },
+      start: async (raw) => {
+        if (still) return;
+        const settings = clampTrace(raw);
+        clearSelection();
+        dropResult();
+        const { sz, note } = sized(settings.resolution);
+        setRenderState({ ...IDLE_RENDER, phase: "building", size: sz, message: note });
+        try {
+          const st = await beginStill({
+            scene, camera, settings, size: sz, accuracy: lightState.current.quality === "accuracy", skyStrength: lastSky,
+            hide: [grid, axes, rig.hemi, fill],
+            onStatus: (status) => setRenderState((r) => (r.phase === "building" || r.phase === "running" ? { ...r, phase: "running", status } : r)),
+          });
+          still = st;
+          setRenderState((r) => ({ ...r, phase: "running", canvas: st.canvas }));
+          await st.done;
+          const blob = await st.png();
+          st.dispose();
+          still = null;
+          finishWith(blob, sz, "render", note);
+        } catch (e) {
+          still?.dispose();
+          still = null;
+          setRenderState({ ...IDLE_RENDER, phase: "error", size: sz, message: `Path tracing failed: ${e instanceof Error ? e.message : String(e)}` });
+        }
+      },
     };
     addLightAt.current = (floorId, x, y, h) => {
       const id = nextLightId(lightState.current.site.lights);
@@ -681,6 +760,8 @@ export default function ViewerPage() {
       applyMats.current = () => {};
       applyLighting.current = () => {};
       addLightAt.current = () => {};
+      renderApi.current.reset();
+      renderApi.current = { start() {}, stop() {}, shot() {}, reset() {} };
       window.removeEventListener("resize", onResize);
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointerup", onUp);
@@ -722,11 +803,10 @@ export default function ViewerPage() {
         if (!m || !br.ok || m.floors.length === 0) return;
         setBuilding((old) => (sameBuilding(old, br.building) ? old : br.building)); // only when offsets or pairings changed
         const lt = m.lighting ?? NO_LIGHTING;
-        setSavedSite((old) => {
-          if (JSON.stringify(old) === JSON.stringify(lt)) return old;
-          setSite((cur) => (JSON.stringify(cur) === JSON.stringify(old) ? lt : cur)); // unsaved edits are kept
-          return lt;
-        });
+        if (JSON.stringify(savedSiteRef.current) !== JSON.stringify(lt)) {
+          if (JSON.stringify(siteRef.current) === JSON.stringify(savedSiteRef.current)) setSite(lt); // unsaved edits are kept
+          setSavedSite(lt);
+        }
         setMaterials((old) => (JSON.stringify(old) === JSON.stringify(m.materials ?? {}) ? old : (m.materials ?? {})));
         if (key(m) === key(manifest)) return;
         lowestMm.current = Math.min(...m.floors.map((x) => x.elevation.value));
@@ -842,6 +922,9 @@ export default function ViewerPage() {
         )}
         {building && <BuildingStats building={building} active={activeFloor} />}
         <RoomList rooms={rooms} onSelect={(r) => setPanel(describeRoom(r, current?.id))} />
+        <button disabled={walking || !target} onClick={() => setRenderOpen(true)}>
+          Render / screenshot…
+        </button>
         <LightingPanel
           quality={quality}
           onQuality={setQuality}
@@ -888,6 +971,20 @@ export default function ViewerPage() {
           </div>
         )}
       </div>
+      {renderOpen && (
+        <RenderPanel
+          state={renderState}
+          settings={traceSettings}
+          onSettings={setTraceSettings}
+          onStart={() => renderApi.current.start(traceSettings)}
+          onStop={() => renderApi.current.stop()}
+          onScreenshot={() => renderApi.current.shot(traceSettings.resolution)}
+          onClose={() => {
+            renderApi.current.reset();
+            setRenderOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

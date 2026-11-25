@@ -34,7 +34,7 @@ def test_default_set_validate_version_restore_and_floor_removal():
     v_set = c.get(f"{P}/{pid}").json()["version"]
     bad = [{"location": {"latitude": 91, "longitude": 0}}, {"north_deg": 360},
            {"lights": [_light(g["id"], color="red")]}, {"lights": [_light(g["id"], kind="laser")]},
-           {"lights": [_light(g["id"], intensity=-1)]}, {"lights": [_light("nope")]},
+           {"lights": [_light(g["id"], intensity=-1)]}, {"lights": [_light(g["id"], intensity=10.5)]}, {"lights": [_light("nope")]},
            {"lights": [_light(g["id"]), _light(g["id"])]}, {"extra": 1}]
     for b in bad:
         assert c.put(f"{P}/{pid}/lighting", json=b).status_code == 422, b

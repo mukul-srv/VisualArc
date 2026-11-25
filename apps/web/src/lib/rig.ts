@@ -5,6 +5,7 @@ import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { SKY_LIGHT, SUN_LIGHT } from "./lighting";
+import { setAspect } from "./render-gl";
 import { shadowFrustum, type Quality } from "./quality";
 import type { ArtificialLight } from "./site-lighting";
 
@@ -70,7 +71,55 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     }
   };
 
+  const resize = (w: number, h: number) => {
+    size = { w, h };
+    renderer.setSize(w, h);
+    composer?.setPixelRatio(renderer.getPixelRatio());
+    composer?.setSize(w, h);
+  };
+
+  const render = (scene3: THREE.Scene, camera: THREE.Camera, persp: THREE.Camera) => {
+    if (q?.ssao && camera === persp && !ssaoFailed) {
+      try {
+        if (!composer) {
+          composer = new EffectComposer(renderer);
+          composer.setPixelRatio(renderer.getPixelRatio());
+          composer.setSize(size.w, size.h);
+          composer.addPass(new RenderPass(scene3, camera));
+          composer.addPass(new GTAOPass(scene3, camera, size.w, size.h));
+          composer.addPass(new OutputPass());
+        }
+        composer.render();
+        return;
+      } catch {
+        ssaoFailed = true; // never take the viewer down for an effect: fall back to the plain render
+        setComposer(false);
+      }
+    }
+    renderer.render(scene3, camera);
+  };
+
+  /** PNG of the current view at w x h px (the viewer is resized for one synchronous frame and put back). */
+  const capture = (scene3: THREE.Scene, camera: THREE.Camera, persp: THREE.Camera, w: number, h: number): Promise<Blob | null> => {
+    const ratio = renderer.getPixelRatio();
+    const was = size;
+    renderer.setPixelRatio(1);
+    resize(w, h);
+    const undo = setAspect(camera, w / h);
+    try {
+      render(scene3, camera, persp);
+      return new Promise((res) => renderer.domElement.toBlob(res, "image/png")); // the bitmap is taken now
+    } finally {
+      undo();
+      renderer.setPixelRatio(ratio);
+      resize(was.w, was.h);
+    }
+  };
+
   return {
+    capture,
+    resize,
+    render,
     sun,
     hemi,
     /** Shadows follow the building: a frustum around its bounds, valid from any sun angle. */
@@ -89,7 +138,7 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
         m.receiveShadow = true;
       });
     },
-    update(this: { resize: (w: number, h: number) => void }, input: RigInput, roots: { rootOf: (floorId: string) => THREE.Object3D | undefined; elevationMm: (floorId: string) => number }) {
+    update(input: RigInput, roots: { rootOf: (floorId: string) => THREE.Object3D | undefined; elevationMm: (floorId: string) => number }) {
       const next = input.quality;
       const shadowsChanged = !q || (q.shadowMap > 0) !== (next.shadowMap > 0);
       if (!q || q.shadowMap !== next.shadowMap) {
@@ -107,7 +156,7 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
       scene.environment = next.env ? env : null;
       scene.environmentIntensity = 0.35;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, next.pixelRatioMax));
-      this.resize(size.w, size.h); // the drawing buffer follows the pixel ratio
+      resize(size.w, size.h); // the drawing buffer follows the pixel ratio
       if (!next.ssao) setComposer(false);
       q = next;
 
@@ -139,33 +188,7 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
         built.push(g);
       });
     },
-    resize(w: number, h: number) {
-      size = { w, h };
-      renderer.setSize(w, h);
-      composer?.setPixelRatio(renderer.getPixelRatio());
-      composer?.setSize(w, h);
-    },
     /** SSAO needs the perspective camera the passes were built for; the plan (ortho) view renders directly. */
-    render(scene3: THREE.Scene, camera: THREE.Camera, persp: THREE.Camera) {
-      if (q?.ssao && camera === persp && !ssaoFailed) {
-        try {
-          if (!composer) {
-            composer = new EffectComposer(renderer);
-            composer.setPixelRatio(renderer.getPixelRatio());
-            composer.setSize(size.w, size.h);
-            composer.addPass(new RenderPass(scene3, camera));
-            composer.addPass(new GTAOPass(scene3, camera, size.w, size.h));
-            composer.addPass(new OutputPass());
-          }
-          composer.render();
-          return;
-        } catch {
-          ssaoFailed = true; // never take the viewer down for an effect: fall back to the plain render
-          setComposer(false);
-        }
-      }
-      renderer.render(scene3, camera);
-    },
     dispose() {
       dropLights();
       setComposer(false);

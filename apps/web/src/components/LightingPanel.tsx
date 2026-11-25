@@ -58,7 +58,7 @@ export function LightingPanel(p: Props) {
         </label>
         <div
           role="img"
-          aria-label="World map: click to set the location"
+          aria-label="World map: click to set the location (keyboard users: type the latitude and longitude instead)"
           onClick={(e) => {
             if (!edit) return;
             const r = e.currentTarget.getBoundingClientRect();
@@ -132,7 +132,7 @@ export function LightingPanel(p: Props) {
             <div>
               <label>
                 Intensity {light.intensity.toFixed(1)}{" "}
-                <input aria-label="Light intensity" type="range" min={0} max={10} step={0.1} disabled={!edit} value={Math.min(10, light.intensity)} onChange={(e) => patch({ intensity: Number(e.target.value) })} />
+                <input aria-label="Light intensity" type="range" min={0} max={10} step={0.1} disabled={!edit} value={light.intensity} onChange={(e) => patch({ intensity: Number(e.target.value) })} />
               </label>
             </div>
             <label>

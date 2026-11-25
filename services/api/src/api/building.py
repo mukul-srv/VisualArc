@@ -354,7 +354,7 @@ class ArtificialLight(BaseModel):
     y_mm: float = Field(ge=-1e7, le=1e7, allow_inf_nan=False)
     height_mm: float = Field(ge=0, le=1e5, allow_inf_nan=False, description="above the floor's elevation")
     color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
-    intensity: float = Field(ge=0, le=100, allow_inf_nan=False)
+    intensity: float = Field(ge=0, le=10, allow_inf_nan=False)  # the viewer slider range
 
 
 class LightingRequest(BaseModel):
