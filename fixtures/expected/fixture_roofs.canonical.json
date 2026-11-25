@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.11.0",
+  "schema_version": "0.12.0",
   "id": "fixture_roofs",
   "units": "mm",
   "source_file": "fixture_roofs.dxf",
@@ -511,7 +511,8 @@
       "code": "elevation_defaulted",
       "severity": "warning",
       "message": "floor elevation assumed 0 mm; DXF plan carries no elevation",
-      "sources": []
+      "sources": [],
+      "suggestions": []
     },
     {
       "code": "wall_role_inferred",
@@ -558,25 +559,29 @@
           "layer": "A-WALL",
           "entity_handle": "34"
         }
-      ]
+      ],
+      "suggestions": []
     },
     {
       "code": "room_name_defaulted",
       "severity": "warning",
       "message": "no label inside Room 1; numbered names assumed",
-      "sources": []
+      "sources": [],
+      "suggestions": []
     },
     {
       "code": "roof_type_defaulted",
       "severity": "warning",
       "message": "Roof type gable assumed (residential default) at 30 deg pitch; not in the DXF",
-      "sources": []
+      "sources": [],
+      "suggestions": []
     },
     {
       "code": "slab_thickness_defaulted",
       "severity": "warning",
       "message": "Slab thickness assumed 200 mm (residential default); not in the DXF",
-      "sources": []
+      "sources": [],
+      "suggestions": []
     }
   ],
   "parameters": {

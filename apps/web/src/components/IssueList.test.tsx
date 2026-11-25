@@ -93,3 +93,10 @@ test("assumed-default groups are labelled as engine warnings and listed, never h
   expect(groupIssues([mk("wall_height_defaulted", "warning")])[0].issues[0].severity).toBe("warning"); // data untouched
   expect(renderToStaticMarkup(<IssueList issues={[mk("unmapped_layer", "warning")]} />)).not.toContain("none are hidden");
 });
+
+test("an issue's suggested fix is shown as not applied, with the units fix action", () => {
+  const issue: Issue = { ...mk("dimension_scale_mismatch", "warning"), suggestions: [{ kind: "units", value: "mm", label: "choose units mm (scale factor x0.001)" }] };
+  const html = renderToStaticMarkup(<IssueList issues={[issue]} onFix={() => {}} />);
+  expect(html).toContain("Suggested (not applied): choose units mm (scale factor x0.001)");
+  expect(html).toContain("Choose units");
+});

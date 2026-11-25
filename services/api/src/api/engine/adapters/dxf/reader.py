@@ -19,6 +19,7 @@ from ezdxf import units
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
+from api.engine.adapters.dxf.interpret import classify_block, dimension_check
 from api.engine.adapters.dxf.split import FloorScope, detect_floors, strip_floor_prefix
 from api.engine.canonical.model import (
     Area,
@@ -41,9 +42,10 @@ from api.engine.canonical.model import (
     Slab,
     SourceRef,
     Stair,
+    Suggestion,
     Wall,
 )
-from api.engine.conventions import layer_hint
+from api.engine.conventions import layer_hint, layer_hint_role
 from api.engine.edits import (
     apply_geometry_edits,
     apply_room_edits,
@@ -68,7 +70,7 @@ from api.engine.geometry2d.roofs import Outline as RoofOutline
 from api.engine.geometry2d.roofs import plan_roofs, ridge_height, wall_outlines
 from api.engine.geometry2d.rooms import Label, find_rooms
 from api.engine.geometry2d.stairs import Arrow, Outline, find_flights
-from api.engine.geometry2d.walls import Segment, pair_walls
+from api.engine.geometry2d.walls import Segment, heal_gaps, pair_walls
 from api.engine.parameters import PARAMS
 from api.engine.settings import DEFAULTS, Settings
 
@@ -442,6 +444,7 @@ def read_dxf(
                         "(POST /api/v1/uploads/{id}/split) before generating",
                     ),
                     *split.issues,
+                    *dimension_check(doc.modelspace(), k, settings),  # wrong units often show as a split
                 ],
             )
 
@@ -467,6 +470,7 @@ def read_dxf(
     outlines: list[Outline] = []
     arrows: list[Arrow] = []
     roof_polys: list[tuple] = []  # (ref, ring) on the roof-plan layer
+    symbols: dict[tuple, list] = {}  # (block name, layer, recognition) -> its INSERTs
     for e in doc.modelspace():
         if scope and e.dxf.handle not in scope.handles:
             continue
@@ -478,6 +482,11 @@ def read_dxf(
                 pass
         elif kind == "ARC" and layer in settings.door_layers:
             arc_centres.append(mm(e.ocs().to_wcs(e.dxf.center)))
+        if kind == "INSERT" and layer not in opening_kind and layer not in ignored and (
+            rec := classify_block(e, k, settings)
+        ):  # a door/window/stair symbol on any other layer (26a): mapped or reported, never dropped
+            symbols.setdefault((e.dxf.name, e.dxf.layer, rec), []).append(e)
+            continue
         if layer in opening_kind:  # ADR-002 §2
             if kind == "INSERT":
                 # a block: its footprint (bounding box of the geometry, swing arcs left out) is the marker
@@ -674,6 +683,40 @@ def read_dxf(
                 )
             )
 
+    issues += dimension_check(
+        (e for e in doc.modelspace() if not scope or e.dxf.handle in scope.handles), k, settings)
+    for (bname, blayer, rec), ents in symbols.items():
+        refs = [_ref(e) for e in ents]
+        if rec.confident:
+            placed = 0
+            for e in ents:
+                rect = _block_rect(e, mm, settings)
+                if rec.kind == "stair" and rect:
+                    outlines.append(Outline("stair", _ref(e), rect))
+                    placed += 1
+                elif rec.kind in ("door", "window") and rect:
+                    markers.append(Marker(rec.kind, _ref(e), rect))
+                    block_markers.setdefault(e.dxf.name, []).append(_ref(e))
+                    placed += 1
+            conf = "high (geometry and name agree)" if rec.name else "medium (geometry only, the name says nothing)"
+            how = (f"{placed} mapped from the block's bounding box (source = block)" if placed else
+                   "none placed as a marker (no rectangular footprint)" + (
+                       "; the opening comes from the wall gap it sits in, if any" if rec.kind == "door" else ""))
+            issues.append(Issue(
+                code="block_symbol_recognised", severity="warning",
+                message=f"{len(ents)} INSERT(s) of block {bname!r} on {blayer} recognised as {rec.kind}, "
+                f"confidence {conf}; {rec.why}; {how}. Check them; map the layer to override",
+                sources=refs[:ref_cap]))
+        else:
+            cands = rec.candidates
+            issues.append(Issue(
+                code="block_symbol_ambiguous", severity="warning",
+                message=f"{len(ents)} INSERT(s) of block {bname!r} on {blayer} may be a "
+                f"{' or '.join(cands)} ({rec.why}) but this is not certain enough to use; nothing was "
+                "made from them. Confirm by mapping their layer",
+                sources=refs[:ref_cap],
+                suggestions=[Suggestion(kind="layer_role", value=c,
+                                        label=f"map layer {blayer} to {c} under Layer conventions") for c in cands]))
     for name, ents in unmapped.items():
         counts = Counter(e.dxftype() for e in ents)
         listed = ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
@@ -694,6 +737,9 @@ def read_dxf(
                 message=f"layer {name} is not a mapped layer ("
                 f"{', '.join(sorted(wall_layers))}, {settings.floor_label}); ignored {listed}{more}{hints}",
                 sources=[_ref(e) for e in ents[:ref_cap]],
+                suggestions=[Suggestion(kind="layer_role", value=role.split(" or ")[0],
+                                        label=f"map layer {name} to {role} under Layer conventions")]
+                if (role := layer_hint_role(name, settings)) else [],
             )
         )
     for name, ents in user_ignored.items():
@@ -726,6 +772,8 @@ def read_dxf(
         issues += edit_issues
     segments, cut_issues = cut_walls_at_markers(segments, markers, settings)
     issues += cut_issues
+    segments, heal_issues = heal_gaps(segments, markers, settings)
+    issues += heal_issues
     res = resolve_openings(segments, markers, settings, tuple(arc_centres))
     paired, pieces = res.walls, res.junctions
     for e in swings:

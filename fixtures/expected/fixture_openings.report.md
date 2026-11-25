@@ -1,7 +1,7 @@
 # Verification report: fixture_openings
 
 - Source file: `fixture_openings.dxf`
-- Schema version: 0.11.0
+- Schema version: 0.12.0
 - Units: mm
 - Result: **OK** (0 blocking, 7 warnings)
 

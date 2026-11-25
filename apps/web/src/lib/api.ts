@@ -7,11 +7,15 @@ import type { FloorCandidate, SplitBody } from "./split";
 // the session cookie is first-party.
 export const API_BASE = "";
 
+// A fix the engine derived; shown, never applied (the user confirms through the units choice or layer mapping).
+export type Suggestion = { kind: "units" | "layer_role" | "gap_close"; value: string; label: string };
+
 export type Issue = {
   code: string;
   severity: "blocking" | "warning";
   message: string;
   sources: SourceRef[];
+  suggestions?: Suggestion[];
 };
 
 export type Preflight = {
