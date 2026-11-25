@@ -51,8 +51,9 @@ def export_project(pid: str, fmt: Format, who: Principal):
         for mf in mfs:
             g = db.get(GenerationRow, mf["generation_id"])
             o = mf.get("offset") or {}
-            if g is not None:
-                floors.append((_canonical(g.blob_prefix), (o.get("x", 0.0), o.get("y", 0.0))))
+            if g is None:  # never export a partial building without saying so
+                raise HTTPException(409, f"floor {mf['id']} has no stored model; export blocked")
+            floors.append((_canonical(g.blob_prefix), (o.get("x", 0.0), o.get("y", 0.0))))
         name = row.data["name"]
     return _export(fmt, floors, name)
 
