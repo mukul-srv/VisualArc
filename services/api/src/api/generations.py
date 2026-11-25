@@ -18,6 +18,7 @@ from api.auth import CurrentUser, current_user
 from api.db import GenerationRow, ProjectRow, ProjectVersionRow, UploadRow, session
 from api.engine.adapters.dxf.reader import USER_UNITS, InputError, read_dxf
 from api.engine.adapters.ifc.reader import is_ifc, read_ifc
+from api.engine.adapters.pdf.reader import is_pdf
 from api.engine.canonical.model import Project
 from api.engine.conventions import resolve
 from api.engine.parameters import PARAMS
@@ -112,6 +113,8 @@ def read_project(req: GenerationRequest, user_id: str | None = None, check_uploa
             owned(db, UploadRow, req.upload_id, user_id or "", "unknown upload_id")
     if not upload_path(req.upload_id).is_file():
         raise HTTPException(404, "unknown upload_id")
+    if is_pdf(upload_path(req.upload_id)):
+        raise HTTPException(422, "confirm the PDF's scale first (POST /uploads/{id}/pdf); nothing is read until then")
     if is_ifc(upload_path(req.upload_id)):  # IFC input: values come from the file, DXF parameters do not apply
         if floor.get("edits"):
             raise HTTPException(422, "floors imported from IFC cannot be edited")

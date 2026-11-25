@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { addFloorJob, draftJob, generateJob, STAGE_LABEL, type DraftResult, type JobProgress } from "@/lib/jobs";
 import { useRouter } from "next/navigation";
-import { createProject, getPresets, getProject, importIfc, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
+import { convertPdf, createProject, getPresets, getProject, importIfc, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
 import { DEFAULT_CONVENTIONS, getProjectConventions, inspectLayers, listConventions, putProjectConventions, type ConventionsSpec, type LayerRole, type PresetInfo } from "@/lib/conventions";
 import { buildRequest, unitsDoubtful, unresolvable, type FormValues } from "@/lib/params";
@@ -15,6 +15,8 @@ import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ConventionsPanel } from "./ConventionsPanel";
 import { IssueList } from "./IssueList";
+import { PdfScalePanel } from "./PdfScalePanel";
+import type { PdfBody } from "@/lib/pdf-scale";
 import { ReviewPanel } from "./ReviewPanel";
 import { UploadForm } from "./UploadForm";
 
@@ -23,6 +25,7 @@ export function UploadFlow() {
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<JobProgress | null>(null);
   const [pre, setPre] = useState<Preflight | null>(null);
+  const [pdf, setPdf] = useState<Preflight | null>(null); // an uploaded PDF waiting for a confirmed scale
   const [form, setForm] = useState<FormValues>(EMPTY_FORM);
   const [errors, setErrors] = useState<string[]>([]);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -101,6 +104,7 @@ export function UploadFlow() {
     if (!file) return;
     setBusy(true);
     setPre(null);
+    setPdf(null);
     setFailure(null);
     setBlockedIssues(null);
     setReview(null);
@@ -113,7 +117,8 @@ export function UploadFlow() {
     setLayers([]);
     const r = await uploadDxf(file);
     setBusy(false);
-    if (r.ok) {
+    if (r.ok && r.kind === "pdf") setPdf(r);
+    else if (r.ok) {
       setPre(r);
       setRows(initialRows(r.floor_candidates ?? []));
       setConv(DEFAULT_CONVENTIONS);
@@ -135,6 +140,19 @@ export function UploadFlow() {
     if (r.ok) router.push(`/viewer?project=${r.project_id}`);
     else if (r.kind === "blocked") setBlockedIssues(r.issues);
     else setFailure(r);
+  }
+
+  async function onConvertPdf(body: PdfBody) {
+    if (!pdf) return;
+    setFailure(null);
+    setBusy(true);
+    const r = await convertPdf(pdf.upload_id, body);
+    setBusy(false);
+    if (!r.ok) return setFailure(r);
+    setPre(r); // from here it is a DXF upload: layer mapping, units, floors
+    setRows(initialRows(r.floor_candidates ?? []));
+    setConv(DEFAULT_CONVENTIONS);
+    applyConventions(DEFAULT_CONVENTIONS, r.upload_id);
   }
 
   async function onImportIfc() {
@@ -250,10 +268,10 @@ export function UploadFlow() {
       <Breadcrumbs trail={addingTo
         ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
-      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Floor plan (DXF, DWG or IFC) to 3D"}</h1>
+      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Floor plan (DXF, DWG, IFC or PDF) to 3D"}</h1>
       <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null)}</strong></p>
       <p><small>Values your drawing lacks use defaults, and every one is reported as assumed.</small></p>
-      <input type="file" accept=".dxf,.dwg,.ifc" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
+      <input type="file" accept=".dxf,.dwg,.ifc,.pdf" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
         <p role="status">
           {job && "Large drawings can take a minute; keep this page open. "}
@@ -266,6 +284,8 @@ export function UploadFlow() {
           <strong>{failure.kind === "rejected" ? "File rejected:" : "Error:"}</strong> {failure.message}
         </p>
       )}
+      {pdf && !pre && <PdfScalePanel key={pdf.upload_id} pages={pdf.pages ?? []} busy={busy} onConvert={onConvertPdf} />}
+      {pdf && pre && <p><button type="button" disabled={busy} onClick={() => setPre(null)}>Change page or scale</button></p>}
       {pre?.kind === "ifc" && (
         <>
           <h2>What we found</h2>

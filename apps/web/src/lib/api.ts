@@ -17,9 +17,11 @@ export type Issue = {
 export type Preflight = {
   upload_id: string;
   issues: Issue[];
-  needs: "units"[]; // only what can never be defaulted
+  needs: ("units" | "scale")[]; // only what can never be defaulted
   inventory: { layers: string[]; entity_counts: Record<string, number> };
-  kind?: "ifc"; // an IFC upload: no layers or units; one floor per storey is made by importIfc
+  kind?: "ifc" | "pdf"; // pdf: nothing is read until the user confirms a scale (convertPdf)
+  pages?: import("./pdf-scale").PdfPage[];
+  // an IFC upload: no layers or units; one floor per storey is made by importIfc
   storeys?: { key: string; name: string; elevation: number | null }[];
   floor_candidates?: FloorCandidate[]; // >= 2: the user must confirm the floors (split step)
 };
@@ -106,6 +108,10 @@ export const uploadDxf = (file: Blob & { name?: string }, f: Fetch = fetch) =>
       body: file,
     }),
   );
+
+/** One page of an uploaded PDF as the upload's DXF, at the scale the user confirmed; answers like uploadDxf. */
+export const convertPdf = (uploadId: string, body: import("./pdf-scale").PdfBody, f: Fetch = fetch) =>
+  send<Preflight>(() => post(`/uploads/${uploadId}/pdf`, body, f));
 
 /** An uploaded IFC as a project, one floor per storey (values come from the file). */
 export const importIfc = (uploadId: string, projectName: string, f: Fetch = fetch) =>
