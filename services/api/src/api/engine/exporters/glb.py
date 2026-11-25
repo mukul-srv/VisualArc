@@ -44,6 +44,7 @@ def box_uv(mesh: trimesh.Trimesh) -> None:
     pairs = np.array([[2, 1], [0, 2], [0, 1]])  # glTF (x, y up, z): X-facing -> (z, y), Y -> (x, z), Z -> (x, y)
     uv = np.take_along_axis(v, pairs[axis][:, None, :].repeat(3, 1), axis=2)
     mesh.visual = trimesh.visual.TextureVisuals(uv=uv.reshape(-1, 2), material=mesh.visual.material)
+    _ = mesh.vertex_normals  # computed (= the face normal: vertices are unmerged) so the exporter writes NORMAL
 
 
 def build_scene(project: Project) -> trimesh.Scene:

@@ -1,3 +1,4 @@
+import { LightPlan } from "./LightPlan";
 import { QUALITY, QUALITY_IDS, type QualityId } from "../lib/quality";
 import { mapClickToLatLon, MAX_LIGHTS, type ArtificialLight, type SiteLighting } from "../lib/site-lighting";
 
@@ -13,8 +14,9 @@ type Props = {
   canSave: boolean; // editor+ on a current version: the location, north and lights can be saved
   dirty: boolean;
   onSave: () => void;
-  addMode: boolean;
-  onAddMode: (on: boolean) => void;
+  projectId: string | null; // the light plan needs a saved project
+  planFloors: { id: string; name: string }[];
+  share: string | null;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   floorName: (id: string) => string;
@@ -103,11 +105,7 @@ export function LightingPanel(p: Props) {
         <legend>
           Lights ({p.site.lights.length}/{MAX_LIGHTS})
         </legend>
-        {edit && (
-          <button aria-pressed={p.addMode} disabled={p.site.lights.length >= MAX_LIGHTS} onClick={() => p.onAddMode(!p.addMode)}>
-            {p.addMode ? "Click the model to place… (cancel)" : "Add light"}
-          </button>
-        )}
+        <LightPlan projectId={p.projectId} floors={p.planFloors} share={p.share} lights={p.site.lights} selectedId={p.selectedId} onSelect={p.onSelect} onChange={(lights) => p.onSite({ ...p.site, lights })} canEdit={edit} />
         <ul style={{ margin: 0, paddingLeft: 18 }}>
           {p.site.lights.map((l) => (
             <li key={l.id}>
@@ -133,6 +131,16 @@ export function LightingPanel(p: Props) {
               <label>
                 Intensity {light.intensity.toFixed(1)}{" "}
                 <input aria-label="Light intensity" type="range" min={0} max={10} step={0.1} disabled={!edit} value={light.intensity} onChange={(e) => patch({ intensity: Number(e.target.value) })} />
+              </label>
+            </div>
+            <div>
+              <label>
+                Plan x (mm){" "}
+                <input aria-label="Light x" type="number" step={50} style={{ width: 80 }} disabled={!edit} value={light.x_mm} onChange={(e) => patch({ x_mm: Math.round(num(e.target.value, light.x_mm)) })} />
+              </label>{" "}
+              <label>
+                y (mm){" "}
+                <input aria-label="Light y" type="number" step={50} style={{ width: 80 }} disabled={!edit} value={light.y_mm} onChange={(e) => patch({ y_mm: Math.round(num(e.target.value, light.y_mm)) })} />
               </label>
             </div>
             <label>

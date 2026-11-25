@@ -5,6 +5,8 @@ import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { SKY_LIGHT, SUN_LIGHT } from "./lighting";
+import { frameUsable, probePoints } from "./ao-probe";
+import { ensureNormals } from "./normals";
 import { setAspect } from "./render-gl";
 import { shadowFrustum, type Quality } from "./quality";
 import type { ArtificialLight } from "./site-lighting";
@@ -78,6 +80,20 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     composer?.setSize(w, h);
   };
 
+  let probes = 0;
+  /** Read a grid of pixels of the frame just drawn (same task, before it is shown). */
+  const aoFrameUsable = () => {
+    const gl = renderer.getContext();
+    const { width, height } = renderer.domElement;
+    const buf = new Uint8Array(4);
+    const all: number[] = [];
+    for (const [fx, fy] of probePoints()) {
+      gl.readPixels(Math.floor(fx * width), Math.floor(fy * height), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      all.push(...buf);
+    }
+    return frameUsable(all);
+  };
+
   const render = (scene3: THREE.Scene, camera: THREE.Camera, persp: THREE.Camera) => {
     if (q?.ssao && camera === persp && !ssaoFailed) {
       try {
@@ -90,6 +106,8 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
           composer.addPass(new OutputPass());
         }
         composer.render();
+        if (probes < 3 && !aoFrameUsable()) throw new Error("ambient occlusion produced a black frame");
+        probes++;
         return;
       } catch {
         ssaoFailed = true; // never take the viewer down for an effect: fall back to the plain render
@@ -131,6 +149,7 @@ export function createRig(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     },
     /** Meshes cast and receive shadows (glass casts none: it would black out the room behind it). */
     prepare(root: THREE.Object3D) {
+      ensureNormals(root); // GLBs from before the engine wrote NORMAL would turn black under GTAO
       root.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;

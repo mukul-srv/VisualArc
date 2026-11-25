@@ -32,7 +32,7 @@ import { beginStill, maxRenderDim, type Still } from "@/lib/render-gl";
 import { cancelToken, CANCELLED } from "@/lib/pathtrace";
 import { clampTrace, DEFAULT_TRACE, outputSize, stillName, type ResolutionId, type TraceSettings } from "@/lib/render-settings";
 import { daylight, defaultUtcOffset, localToUtcMs, sunDirection, sunPosition } from "@/lib/solar";
-import { nextLightId, NO_LIGHTING, putLighting, type SiteLighting } from "@/lib/site-lighting";
+import { NO_LIGHTING, putLighting, type SiteLighting } from "@/lib/site-lighting";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
 import { describeElement, describeOpening, describeRoom, PROVENANCE_LABEL, type ElementData, type OpeningData, type Panel, type RoomData } from "@/lib/selection";
@@ -66,16 +66,14 @@ export default function ViewerPage() {
   const [savedSite, setSavedState] = useState<SiteLighting>(NO_LIGHTING);
   const [sun, setSun] = useState<SunSettings>({ date: "2024-06-21", hours: 12, utcOffset: 0, intensity: 1 });
   const offsetTouched = useRef(false);
-  const [addMode, setAddMode] = useState(false);
   const [selLight, setSelLight] = useState<string | null>(null);
   const lightState = useRef({ site, sun, quality, selLight });
-  const addModeRef = useRef(false);
   const manifestRef = useRef<Manifest | null>(null);
   useEffect(() => {
     manifestRef.current = manifest;
   }, [manifest]);
   const applyLighting = useRef<() => void>(() => {});
-  const addLightAt = useRef<(floorId: string, x_mm: number, y_mm: number, height_mm: number) => void>(() => {});
+  const [shareToken, setShareToken] = useState<string | null>(null); // the read-only link token, for render-time reads
   const [renderOpen, setRenderOpen] = useState(false);
   const [renderState, setRenderState] = useState<RenderState>(IDLE_RENDER);
   const [traceSettings, setTraceSettings] = useState<TraceSettings>(DEFAULT_TRACE);
@@ -112,6 +110,7 @@ export default function ViewerPage() {
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     share.current = query.get("share");
+    queueMicrotask(() => setShareToken(share.current));
     queueMicrotask(() => setShared(share.current !== null));
     // ?project=<id>[&floor=<id>] loads a project floor; ?generation=<id> one API model;
     // ?model=<stem> a local /models file
@@ -175,9 +174,8 @@ export default function ViewerPage() {
     lightState.current = { site, sun, quality, selLight };
     siteRef.current = site;
     savedSiteRef.current = savedSite;
-    addModeRef.current = addMode;
     applyLighting.current();
-  }, [site, sun, quality, selLight, addMode, savedSite]);
+  }, [site, sun, quality, selLight, savedSite]);
 
   // the UTC offset follows the longitude until the user sets it
   const lon = site.location?.longitude;
@@ -360,16 +358,6 @@ export default function ViewerPage() {
         camera,
       );
       const ray = raycaster.ray.clone();
-      if (addModeRef.current) {
-        const hit = pickElement(pickable(), ray);
-        const root = hit && rootOf(hit.mesh);
-        const fid = root?.userData.floorId as string | null | undefined;
-        if (!hit || !root || !fid) return;
-        const local = root.worldToLocal(hit.point.clone());
-        const elev = manifestRef.current?.floors.find((f) => f.id === fid)?.elevation.value ?? 0;
-        const h = local.y * 1000 - elev;
-        return addLightAt.current(fid, local.x * 1000, -local.z * 1000, h < 500 ? 2400 : h); // on the floor: a ceiling light
-      }
       if (measureOn) {
         const pick = pickElement(pickable(), ray);
         return pick && measureClick(pick.mesh, pick.point);
@@ -718,13 +706,6 @@ export default function ViewerPage() {
         }
       },
     };
-    addLightAt.current = (floorId, x, y, h) => {
-      const cur = siteRef.current;
-      const id = nextLightId(cur.lights);
-      setSite({ ...cur, lights: [...cur.lights, { id, kind: "point", floor_id: floorId, x_mm: Math.round(x), y_mm: Math.round(y), height_mm: Math.round(h), color: "#ffe9c4", intensity: 3 }] });
-      setSelLight(id);
-      setAddMode(false);
-    };
     const applyAll = () => roots.forEach((r, id) => applyMaterials(r, id, materialsRef.current, cache));
     const loader = new GLTFLoader();
     Promise.all(loads.map((l) => loader.loadAsync(l.url)))
@@ -778,7 +759,6 @@ export default function ViewerPage() {
       applyView.current = () => {};
       applyMats.current = () => {};
       applyLighting.current = () => {};
-      addLightAt.current = () => {};
       renderApi.current.reset();
       renderApi.current = { start() {}, stop() {}, shot() {}, reset() {} };
       window.removeEventListener("resize", onResize);
@@ -958,8 +938,9 @@ export default function ViewerPage() {
           canSave={canEdit && manifest !== null}
           dirty={siteDirty}
           onSave={saveSite}
-          addMode={addMode}
-          onAddMode={setAddMode}
+          projectId={manifest && viewing === null ? manifest.id : null}
+          planFloors={sortFloors(manifest?.floors ?? []).map((f) => ({ id: f.id, name: f.name }))}
+          share={shareToken}
           selectedId={selLight}
           onSelect={setSelLight}
           floorName={(id) => manifest?.floors.find((f) => f.id === id)?.name ?? id}
