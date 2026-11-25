@@ -32,12 +32,6 @@ ambientCG 1K-JPG sets, licence CC0 1.0 Universal (checked at https://docs.ambien
 | metal/ | ambientCG Metal032, https://ambientcg.com/view?id=Metal032 | CC0 1.0 | 2026-11-25 |
 | stone/ | ambientCG Rock030, https://ambientcg.com/view?id=Rock030 | CC0 1.0 | 2026-11-25 |
 
-## Viewer location map (committed)
-
-| File | Source | Licence | Date |
-|---|---|---|---|
-| apps/web/public/world.svg | Natural Earth 110m land (`ne_110m_land.geojson` from https://github.com/nvkelso/natural-earth-vector), converted by `scripts/make_world_map.py` | Public domain (https://www.naturalearthdata.com/about/terms-of-use/, checked 2026-11-25) | 2026-11-25 |
-
 ## Viewer runtime dependencies added for the path tracer (npm)
 
 | Package | Source | Licence | Date |

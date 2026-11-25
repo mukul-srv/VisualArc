@@ -339,6 +339,9 @@ def put_materials(pid: str, req: MaterialsRequest, user: CurrentUser):
 # Lighting setting (Phase 1/19): site location, building north and artificial lights, saved in the
 # manifest (snapshotted per version). Date, time, sun intensity and quality are viewer-local, not saved.
 # The whole setting is replaced on PUT (last write wins).
+MAX_LIGHTS = 10  # same cap as the viewer
+
+
 class Location(BaseModel):
     model_config = ConfigDict(extra="forbid")
     latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
@@ -362,7 +365,7 @@ class LightingRequest(BaseModel):
     location: Location | None = None
     north_deg: float = Field(0.0, ge=0, lt=360, allow_inf_nan=False,
                              description="clockwise angle from plan +Y to true north")
-    lights: list[ArtificialLight] = Field(default_factory=list, max_length=50)
+    lights: list[ArtificialLight] = Field(default_factory=list, max_length=MAX_LIGHTS)
 
 
 @router.put("/projects/{pid}/lighting")

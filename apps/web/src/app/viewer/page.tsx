@@ -24,14 +24,14 @@ import { collectSupports, dampTo, fall, groundLevel, stepOnto, stepUpLimit } fro
 import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
 import { createTapGate } from "@/lib/tap";
 import { setWalkFill, WALK_FILL } from "@/lib/lighting";
-import { LightingPanel, type SunSettings } from "@/components/LightingPanel";
+import { LightingPanel } from "@/components/LightingPanel";
 import { DEFAULT_QUALITY, QUALITY, type QualityId } from "@/lib/quality";
 import { createRig } from "@/lib/rig";
 import { IDLE_RENDER, RenderPanel, type RenderState } from "@/components/RenderPanel";
 import { beginStill, maxRenderDim, type Still } from "@/lib/render-gl";
 import { cancelToken, CANCELLED } from "@/lib/pathtrace";
 import { clampTrace, DEFAULT_TRACE, outputSize, stillName, type ResolutionId, type TraceSettings } from "@/lib/render-settings";
-import { daylight, defaultUtcOffset, localToUtcMs, sunDirection, sunPosition } from "@/lib/solar";
+import { daylight, sunDirection, sunPosition } from "@/lib/solar";
 import { NO_LIGHTING, putLighting, type SiteLighting } from "@/lib/site-lighting";
 import { CEILING_LAYER, collectColliders, layerCeilings, makeDoubleSided, modelBox, moveWithCollision, spawnPoint, WALK } from "@/lib/walk";
 import { measure, snapPoint, type Measurement, type SnapKind } from "@/lib/measure";
@@ -64,10 +64,9 @@ export default function ViewerPage() {
   const [quality, setQuality] = useState<QualityId>(DEFAULT_QUALITY);
   const [site, setSiteState] = useState<SiteLighting>(NO_LIGHTING); // edited copy; `savedSite` is what the project holds
   const [savedSite, setSavedState] = useState<SiteLighting>(NO_LIGHTING);
-  const [sun, setSun] = useState<SunSettings>({ date: "2024-06-21", hours: 12, utcOffset: 0, intensity: 1 });
-  const offsetTouched = useRef(false);
+  const [nowMs] = useState(() => Date.now()); // the sun is placed for the moment the page loaded: current local date and time
   const [selLight, setSelLight] = useState<string | null>(null);
-  const lightState = useRef({ site, sun, quality, selLight });
+  const lightState = useRef({ site, nowMs, quality, selLight });
   const manifestRef = useRef<Manifest | null>(null);
   useEffect(() => {
     manifestRef.current = manifest;
@@ -171,24 +170,11 @@ export default function ViewerPage() {
   }, [materials, quality]);
 
   useEffect(() => {
-    lightState.current = { site, sun, quality, selLight };
+    lightState.current = { site, nowMs, quality, selLight };
     siteRef.current = site;
     savedSiteRef.current = savedSite;
     applyLighting.current();
-  }, [site, sun, quality, selLight, savedSite]);
-
-  // the UTC offset follows the longitude until the user sets it
-  const lon = site.location?.longitude;
-  useEffect(() => {
-    if (lon !== undefined && !offsetTouched.current) queueMicrotask(() => setSun((s) => ({ ...s, utcOffset: defaultUtcOffset(lon) })));
-  }, [lon]);
-
-  // today's date for the sun (not in the initial state: it must match the server render)
-  useEffect(() => {
-    const d = new Date(); // the user's local calendar day, not the UTC one
-    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    queueMicrotask(() => setSun((s) => ({ ...s, date: today })));
-  }, []);
+  }, [site, nowMs, quality, selLight, savedSite]);
 
   useEffect(() => {
     viewRef.current = view;
@@ -620,18 +606,18 @@ export default function ViewerPage() {
     };
     let lastSky = 1;
     applyLighting.current = () => {
-      const { site: st, sun: sn, quality: ql, selLight: sel } = lightState.current;
+      const { site: st, nowMs: now, quality: ql, selLight: sel } = lightState.current;
       const q = QUALITY[ql];
       let sunDir: [number, number, number] | null = null;
       let day = { sun: 1, sky: 1 };
       if (q.artificial && st.location) {
-        const p = sunPosition(st.location.latitude, st.location.longitude, localToUtcMs(sn.date, sn.hours, sn.utcOffset));
+        const p = sunPosition(st.location.latitude, st.location.longitude, now);
         sunDir = sunDirection(p.azimuth, p.elevation, st.north_deg);
         day = daylight(p.elevation);
       }
       lastSky = day.sky;
       rig.update(
-        { quality: q, sunDir, sunStrength: day.sun * (q.artificial ? sn.intensity : 1), skyStrength: day.sky, lights: st.lights, selectedLight: sel },
+        { quality: q, sunDir, sunStrength: day.sun, skyStrength: day.sky, lights: st.lights, selectedLight: sel },
         { rootOf: (id) => roots.get(id), elevationMm: (id) => manifestRef.current?.floors.find((f) => f.id === id)?.elevation.value ?? 0 },
       );
     };
@@ -846,7 +832,7 @@ export default function ViewerPage() {
     if (r.ok) setSavedSite(r.lighting);
     else setHint(`Could not save lighting: ${r.message}`);
   };
-  const sunPos = site.location && QUALITY[quality].artificial ? sunPosition(site.location.latitude, site.location.longitude, localToUtcMs(sun.date, sun.hours, sun.utcOffset)) : null;
+  const sunPos = site.location && QUALITY[quality].artificial ? sunPosition(site.location.latitude, site.location.longitude, nowMs) : null;
   const changeMaterial = async (key: string, lib: string | null) => {
     if (!manifest) return;
     const old = materials;
@@ -907,6 +893,9 @@ export default function ViewerPage() {
           top: 12,
           right: 12,
           maxWidth: 380,
+          maxHeight: "calc(100vh - 24px)", // taller than the window: scroll the panel, not the page
+          overflowY: "auto",
+          boxSizing: "border-box",
           padding: 10,
           background: "rgba(20,20,24,0.9)",
           color: "#eee",
@@ -929,11 +918,6 @@ export default function ViewerPage() {
           onQuality={setQuality}
           site={site}
           onSite={setSite}
-          sun={sun}
-          onSun={(s) => {
-            if (s.utcOffset !== sun.utcOffset) offsetTouched.current = true;
-            setSun(s);
-          }}
           sunInfo={sunPos ? `Sun: azimuth ${sunPos.azimuth.toFixed(0)} deg, elevation ${sunPos.elevation.toFixed(0)} deg${sunPos.elevation <= 0 ? " (night)" : ""}` : null}
           canSave={canEdit && manifest !== null}
           dirty={siteDirty}
