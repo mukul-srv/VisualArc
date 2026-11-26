@@ -96,7 +96,7 @@ def test_older_slab_shapes_still_validate():
     assert Slab.model_validate(base).boundary_ids == []
     assert Slab.model_validate({**base, "boundary_id": None, "boundary_ids": ["fb-001"], "holes": []}).holes == []
     legacy = (FIXTURES / "expected" / "fixture_b.canonical.json").read_text(encoding="utf-8")
-    old = Project.model_validate_json(legacy.replace('"schema_version": "0.12.0"', '"schema_version": "0.7.0"'))
+    old = Project.model_validate_json(legacy.replace('"schema_version": "0.13.0"', '"schema_version": "0.7.0"'))
     assert old.schema_version == "0.7.0"  # the version is data; an older file reads fine
     # a boundary written before 0.9.0 has no provenance field: it was drawn
     assert FloorBoundary.model_validate({"id": "fb-001", "polygon": [[0, 0], [1, 0], [1, 1]], "sources": []}).source == "source_extracted"

@@ -31,8 +31,10 @@ from api.engine.settings import DEFAULTS
 # 0.10.0: user edits (Section D). Provenance gains `user_modified` (a value or name the user changed in the
 # editor) and SourceRef.format gains "edit" (entity_handle = the edit op's id). Older files read unchanged.
 # 0.11.0: IFC import. SourceRef.format gains "ifc" (layer = the IFC class, entity_handle = the GlobalId). Older files read unchanged.
+# 0.13.0: diagonal walls. An Opening span may run along a diagonal host (it starts at the lower y); everything else is
+# unchanged (a Wall centreline was always any line). Older files read unchanged.
 # 0.12.0: Issue.suggestions (concrete, never auto-applied fixes: units, layer role, gap close, confirm an inferred element). Older files read unchanged.
-SCHEMA_VERSION = "0.12.0"
+SCHEMA_VERSION = "0.13.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred", "user_modified"]
 Point2 = tuple[float, float]
@@ -349,11 +351,14 @@ class Opening(_Model):
         if self.sill_height.value < 0 or self.offset.value < 0:
             raise ValueError(f"{self.id}: sill_height and offset must be >= 0 mm")
         axis = _axis(self.span)
-        if axis is None:
-            raise ValueError(f"{self.id}: span must be axis-aligned and non-degenerate")
-        if self.span.end[axis] < self.span.start[axis]:
-            raise ValueError(f"{self.id}: span must start at the lower coordinate")
         length = math.dist(self.span.start, self.span.end)
+        if axis is not None:
+            if self.span.end[axis] < self.span.start[axis]:
+                raise ValueError(f"{self.id}: span must start at the lower coordinate")
+        elif length <= DEFAULTS.tolerance_mm:
+            raise ValueError(f"{self.id}: span must be non-degenerate")
+        elif self.span.end[1] < self.span.start[1]:  # diagonal host: runs towards +y like its wall (0..180 deg)
+            raise ValueError(f"{self.id}: a diagonal span must start at the lower y")
         if abs(self.width.value - length) > DEFAULTS.tolerance_mm:
             raise ValueError(
                 f"{self.id}: width {self.width.value} != span length {length}"
@@ -414,24 +419,32 @@ class Floor(_Model):
             if w is None:
                 raise ValueError(f"{o.id}: wall {o.wall_id!r} is not on {self.id}")
             c, axis = w.centreline, _axis(o.span)
-            off = 1 - axis
-            lo, hi = sorted((c.start[axis], c.end[axis]))
-            if (
-                _axis(c) != axis
-                or abs(o.span.start[off] - c.start[off]) > tol
-                or abs(o.span.end[off] - c.start[off]) > tol
-                or o.span.start[axis] < lo - tol
-                or o.span.end[axis] > hi + tol
-            ):
-                raise ValueError(f"{o.id}: span is not within {w.id}'s centreline")
+            if axis is None:  # diagonal host: the span lies on the centreline, between its ends
+                length = math.dist(c.start, c.end)
+                dx, dy = (c.end[0] - c.start[0]) / length, (c.end[1] - c.start[1]) / length
+                rel = [(p[0] - c.start[0], p[1] - c.start[1]) for p in (o.span.start, o.span.end)]
+                along = [r[0] * dx + r[1] * dy for r in rel]
+                if any(abs(-r[0] * dy + r[1] * dx) > 1e-4 for r in rel) or along[0] < -1e-4 or along[1] > length + 1e-4:
+                    raise ValueError(f"{o.id}: span is not within {w.id}'s centreline")
+                span_run = (along[0], along[1])
+            else:
+                off = 1 - axis
+                lo, hi = sorted((c.start[axis], c.end[axis]))
+                if (
+                    _axis(c) != axis
+                    or abs(o.span.start[off] - c.start[off]) > tol
+                    or abs(o.span.end[off] - c.start[off]) > tol
+                    or o.span.start[axis] < lo - tol
+                    or o.span.end[axis] > hi + tol
+                ):
+                    raise ValueError(f"{o.id}: span is not within {w.id}'s centreline")
+                span_run = (o.span.start[axis], o.span.end[axis])
             if abs(o.offset.value - math.dist(c.start, o.span.start)) > tol:
                 raise ValueError(f"{o.id}: offset != distance from {w.id} start")
             top = o.sill_height.value + o.height.value
             if w.height is not None and top > w.height.value + tol:
                 raise ValueError(f"{o.id}: sill + height exceeds {w.id} height")
-            runs.setdefault(w.id, []).append(
-                (o.span.start[axis], o.span.end[axis], o.id)
-            )
+            runs.setdefault(w.id, []).append((*span_run, o.id))
         for spans in runs.values():
             spans.sort()
             for (_, hi, a), (lo, _, b) in itertools.pairwise(spans):

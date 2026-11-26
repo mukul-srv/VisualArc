@@ -8,9 +8,10 @@ union of the same points, nothing measured changes) and reported as a warning.
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import combinations
 
+from shapely import set_precision
 from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import polygonize, unary_union
@@ -53,7 +54,11 @@ class PairedWall:
         (x0, y0), (x1, y1) = self.start, self.end
         if y0 == y1:  # horizontal
             return box(x0, y0 - h, x1, y0 + h)
-        return box(x0 - h, y0, x0 + h, y1)
+        if x0 == x1:  # vertical
+            return box(x0 - h, y0, x0 + h, y1)
+        nx, ny = normal(self.start, self.end)  # diagonal: the same footprint turned to its direction
+        return Polygon([(x0 - nx * h, y0 - ny * h), (x1 - nx * h, y1 - ny * h),
+                        (x1 + nx * h, y1 + ny * h), (x0 + nx * h, y0 + ny * h)])
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,48 @@ class JunctionPiece:
     id: str
     polygon: list[Point2]
     wall_ids: list[str]
+
+
+def normal(a: Point2, b: Point2) -> Point2:
+    """Unit normal of the line a->b (left of its direction); exactly (0, 1) / (-1, 0) on the axes."""
+    d = math.dist(a, b)
+    return (-(b[1] - a[1]) / d, (b[0] - a[0]) / d)
+
+
+def rotate(p: Point2, angle: float) -> Point2:
+    c, s = math.cos(angle), math.sin(angle)
+    return (p[0] * c - p[1] * s, p[0] * s + p[1] * c)
+
+
+def skewed_groups(segments: list[Segment], settings: Settings) -> tuple[list[Segment], list[tuple[float, list[Segment]]]]:
+    """Split off the wall lines that are neither horizontal nor vertical (within tolerance_mm) and group them
+    by direction: [(angle in radians, [segments])]. Angles are taken mod 180 deg; a group's angle is that of
+    its longest line. Zero-length lines stay with the rest (pair_walls reports them)."""
+    tol, near = settings.tolerance_mm, math.radians(settings.diagonal_angle_tol_deg)
+    ortho, skew = [], []
+
+    def off_axis(s: Segment) -> float:  # angle to the nearest axis: a drafting slip, not a diagonal, when tiny
+        a = abs(math.atan2(s.end[1] - s.start[1], s.end[0] - s.start[0])) % (math.pi / 2)
+        return min(a, math.pi / 2 - a)
+
+    for s in segments:
+        if (math.dist(s.start, s.end) <= tol or _axial(s, tol) is not None or not settings.diagonal_walls
+                or off_axis(s) <= near):
+            ortho.append(s)
+        else:
+            skew.append(s)
+
+    def theta(s: Segment) -> float:
+        t = math.atan2(s.end[1] - s.start[1], s.end[0] - s.start[0]) % math.pi
+        return t - math.pi if t > math.pi - math.radians(settings.diagonal_angle_tol_deg) else t
+
+    groups: list[list[Segment]] = []
+    for s in sorted(skew, key=theta):
+        if groups and theta(s) - theta(groups[-1][-1]) <= math.radians(settings.diagonal_angle_tol_deg):
+            groups[-1].append(s)
+        else:
+            groups.append([s])
+    return ortho, [(theta(max(g, key=lambda s: math.dist(s.start, s.end))), g) for g in groups]
 
 
 def wall_order(start: Point2, end: Point2) -> tuple[float, float, float, float]:
@@ -277,6 +324,7 @@ def pair_walls(
 ) -> tuple[list[PairedWall], list[Issue]]:
     tol = settings.tolerance_mm
     thk_min, thk_max = settings.wall_thickness_min_mm, settings.wall_thickness_max_mm
+    segments, groups = skewed_groups(segments, settings)
     axial, issues = _usable(segments, tol)
     axial, merged = _merge_overlaps(axial, tol)
     issues += merged
@@ -373,6 +421,17 @@ def pair_walls(
     issues += box_issues
     raw.sort(key=lambda r: wall_order(r[0], r[1]))
     walls = [PairedWall(f"wall-{n:03d}", *r) for n, r in enumerate(raw, 1)]
+    if groups:  # each direction group is paired in its own frame (its lines horizontal), then turned back
+        local = replace(settings, tolerance_mm=settings.diagonal_tol_mm, diagonal_walls=False)
+        found = []
+        for angle, segs in groups:
+            turn = lambda sg, a: Segment(sg.handle, sg.layer, rotate(sg.start, a), rotate(sg.end, a))
+            ws, iss = pair_walls([turn(sg, -angle) for sg in segs], local)
+            issues += iss
+            found += [PairedWall("", rotate(w.start, angle), rotate(w.end, angle), w.thickness,
+                                 tuple(turn(sg, angle) for sg in w.sources)) for w in ws]
+        walls += found
+        walls = [replace(w, id=f"wall-{n:03d}") for n, w in enumerate(walls, 1)]
     caps = [a for a in unpaired if any(_is_end_cap(a, w, tol) for w in walls)]
     for a in unpaired:
         if a not in caps:
@@ -452,6 +511,17 @@ def _one_wall_per_box(raw: list, tol: float) -> tuple[list, list[Issue]]:
     return [r for i, r in enumerate(raw) if i not in drop], issues
 
 
+def _min_side(p: Polygon) -> float:
+    """Shorter side of the bounding box; for a piece with a slanted edge, of its minimum rotated rectangle
+    when that is smaller (a corner wedge between a diagonal and another wall)."""
+    x0, y0, x1, y1 = p.bounds
+    side = min(x1 - x0, y1 - y0)
+    if all(a[0] == b[0] or a[1] == b[1] for a, b in zip(p.exterior.coords, p.exterior.coords[1:])):
+        return side
+    r = list(p.minimum_rotated_rectangle.exterior.coords)
+    return min(side, math.dist(r[0], r[1]), math.dist(r[1], r[2]))
+
+
 def _ring(p: Polygon) -> list[Point2]:
     """CCW exterior ring, collinear points dropped, starting at the min vertex."""
     pts = list(orient(p.simplify(0), 1.0).exterior.coords)[:-1]
@@ -470,14 +540,21 @@ def find_junctions(
     if not walls:
         return [], []
     tol, thk_max = settings.tolerance_mm, settings.wall_thickness_max_mm
-    axial, _ = _usable(segments, tol)  # issues already reported by pair_walls
+    lines = [s for s in segments if math.dist(s.start, s.end) > tol]  # degenerate ones are reported by pair_walls
     rects = {w.id: w.rect() for w in walls}
     covered = unary_union(list(rects.values()))
-    faces = polygonize(
-        unary_union([LineString([a.seg.start, a.seg.end]) for a in axial])
-    )
+    diagonal = any(w.start[0] != w.end[0] and w.start[1] != w.end[1] for w in walls)
+    net = [LineString([s.start, s.end]) for s in lines]
+    if diagonal:  # turned lines meet to float noise only: put the nodes on a thousandth-of-a-mm grid
+        net = [set_precision(g, tol * 1000) for g in net]
+    faces = polygonize(unary_union(net))
     material = unary_union([f for f in faces if f.intersection(covered).area > tol])
     leftover = material.difference(covered)
+    if diagonal:
+        # a diagonal wall's footprint matches its face lines only to float noise: the hairline slivers along
+        # it would join separate corner pieces, so thin strips (a thousandth of a mm) are opened away
+        eps = tol * 1000
+        leftover = leftover.buffer(-eps, join_style="mitre").buffer(eps, join_style="mitre")
 
     parts = [
         g
@@ -490,7 +567,7 @@ def find_junctions(
     for p in parts:
         x0, y0, x1, y1 = p.bounds
         touching = [wid for wid, r in rects.items() if r.distance(p) <= tol]
-        if min(x1 - x0, y1 - y0) <= thk_max + tol and touching and not p.interiors:
+        if _min_side(p) <= thk_max + tol and touching and not p.interiors:
             junctions.append(
                 JunctionPiece(f"junction-{len(junctions) + 1:03d}", _ring(p), touching)
             )

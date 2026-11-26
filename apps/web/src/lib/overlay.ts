@@ -67,7 +67,12 @@ export const panBy = (f: Fit, dx: number, dy: number): Fit => ({ ...f, offX: f.o
 /** A wall footprint rectangle (its four corners, plan mm) from its centreline and thickness. */
 export function wallCorners(w: { start: [number, number]; end: [number, number]; thickness: number }): [number, number][] {
   const [x0, y0] = w.start, [x1, y1] = w.end, h = w.thickness / 2;
-  const horizontal = Math.abs(y1 - y0) <= Math.abs(x1 - x0);
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy);
+  if (Math.abs(dx) > 1e-6 && Math.abs(dy) > 1e-6 && len > 0) { // a diagonal wall: the same footprint turned to its direction
+    const nx = (-dy / len) * h, ny = (dx / len) * h;
+    return [[x0 - nx, y0 - ny], [x1 - nx, y1 - ny], [x1 + nx, y1 + ny], [x0 + nx, y0 + ny]];
+  }
+  const horizontal = Math.abs(dy) <= Math.abs(dx);
   return horizontal
     ? [[x0, y0 - h], [x1, y1 - h], [x1, y1 + h], [x0, y0 + h]]
     : [[x0 - h, y0], [x1 - h, y1], [x1 + h, y1], [x0 + h, y0]];

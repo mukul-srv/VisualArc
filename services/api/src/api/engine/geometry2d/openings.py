@@ -8,7 +8,7 @@ Exact matching only (`tolerance_mm`, no snapping). Every mismatch is an Issue.
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from shapely.geometry import Point, Polygon, box
 
@@ -29,6 +29,8 @@ from api.engine.geometry2d.walls import (
     _axial,
     find_junctions,
     pair_walls,
+    rotate,
+    skewed_groups,
     wall_order,
 )
 from api.engine.settings import DEFAULTS, Settings
@@ -42,6 +44,7 @@ class Marker:
     ref: SourceRef
     rect: Rect
     inferred: bool = False  # made from an unmarked gap (kind by rule), not drawn
+    quad: tuple[Point2, ...] | None = None  # a turned (diagonal) marker's 4 corners; `rect` is then their bounding box
 
     def edges(self, axis: str | None = None) -> list[tuple[Point2, Point2]]:
         """All 4 edges, or only those perpendicular to a host running along `axis`."""
@@ -70,6 +73,23 @@ def marker_rect(pts: list[Point2], tol: float) -> Rect | None:
             return None
     if axes not in (["h", "v"] * 2, ["v", "h"] * 2):
         return None
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def marker_quad(pts: list[Point2], tol: float) -> tuple[Point2, ...] | None:
+    """Exactly 4 distinct vertices forming a rectangle (right angles within `tol` mm over the edge) that is
+    NOT axis-aligned (those are `marker_rect`'s), else None."""
+    if len(pts) != 4 or any(math.dist(a, b) <= tol for i, a in enumerate(pts) for b in pts[i + 1 :]):
+        return None
+    e = [(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:] + pts[:1], strict=True)]
+    for u, v in zip(e, e[1:] + e[:1], strict=True):
+        if abs(u[0] * v[0] + u[1] * v[1]) > tol * max(math.hypot(*u), math.hypot(*v)):
+            return None
+    return tuple(pts)
+
+
+def _bbox(pts) -> Rect:
     xs, ys = [p[0] for p in pts], [p[1] for p in pts]
     return (min(xs), min(ys), max(xs), max(ys))
 
@@ -231,6 +251,7 @@ class FoundOpening:
     offset: float
     marker: Marker
     jambs: tuple[Segment, ...]
+    ends: tuple[Point2, Point2] | None = None  # diagonal host: the span's ends in the plan (axis/c/lo/hi are local)
 
 
 @dataclass
@@ -241,6 +262,8 @@ class Resolution:
     segments: list[Segment]  # the wall segments that went into pairing
     issues: list[Issue]
     unmarked: list = field(default_factory=list)  # gaps with no marker at all and nothing across them
+    closures: list = field(default_factory=list)  # marker edges that close wall-line loops (for junctions)
+    junction_issues: list = field(default_factory=list)  # kept apart so lanes can be re-joined
 
 
 def _analyse(segments, markers, consumed, settings):
@@ -317,17 +340,18 @@ def cut_walls_at_markers(
     return segs, issues
 
 
-def resolve_openings(
+def _lane(
     segments: list[Segment],
     markers: list[Marker],
     settings: Settings = DEFAULTS,
     door_hints: tuple[Point2, ...] = (),
+    id_start: int = 1,
 ) -> Resolution:
     """`_resolve`, then each unmarked gap of a plausible width becomes an opening and the walls are resolved
     again with it. Kind: a door when a door-swing arc is centred at the gap (`door_hints`: arc centres, mm),
     otherwise a window (default sill), and the report says which and why. Gaps outside the width range stay
     unmarked gaps; nothing is bridged that has a face line across it or differing walls either side."""
-    res = _resolve(segments, markers, settings)
+    res = _resolve(segments, markers, settings, id_start)
     lo_w, hi_w = settings.bridged_opening_width_mm
     todo = [g for g in res.unmarked if lo_w <= g.hi - g.lo <= hi_w] if settings.bridge_unmarked_gaps else []
     if not todo:
@@ -344,7 +368,7 @@ def resolve_openings(
             f"a door-swing arc is centred at ({swing[0]:g}, {swing[1]:g})" if swing
             else "no door-swing arc at the gap, so assumed a window (default sill)"
         )
-    res = _resolve(segments, [*markers, *new], settings)
+    res = _resolve(segments, [*markers, *new], settings, id_start)
     for m in new:
         o = next((o for o in res.openings if o.marker is m), None)
         if o is None:
@@ -362,8 +386,91 @@ def resolve_openings(
     return res
 
 
+def resolve_openings(
+    segments: list[Segment],
+    markers: list[Marker],
+    settings: Settings = DEFAULTS,
+    door_hints: tuple[Point2, ...] = (),
+) -> Resolution:
+    """Openings and merged host walls. Orthogonal wall lines and axis-aligned markers are resolved as one lane
+    (`_lane`); each direction group of diagonal wall lines is resolved in its own lane, turned so its lines are
+    horizontal, with the turned markers (`Marker.quad`) that fit it, and the results are turned back. Junction
+    fills are then found once over all lanes, so a diagonal wall meeting an orthogonal one is joined."""
+    ortho, groups = skewed_groups(segments, settings)
+    plain = [m for m in markers if m.quad is None]
+    turned = [m for m in markers if m.quad is not None]
+    res = _lane(ortho, plain, settings, door_hints)
+    if not groups and not turned:
+        res.issues += res.junction_issues
+        return res
+    local = replace(settings, tolerance_mm=settings.diagonal_tol_mm, diagonal_walls=False)
+    used: set[int] = set()
+    walls, openings, segs, closures = list(res.walls), list(res.openings), list(res.segments), list(res.closures)
+    issues, unmarked = list(res.issues), list(res.unmarked)
+
+    def back(seg: Segment, a: float) -> Segment:
+        return Segment(seg.handle, seg.layer, rotate(seg.start, a), rotate(seg.end, a))
+
+    for angle, group in groups:
+        lm_list: list[Marker] = []
+        lm: dict[int, Marker] = {}  # id(marker in the turned frame) -> the drawn one
+        for m in turned:
+            rect = marker_rect([rotate(p, -angle) for p in m.quad], local.tolerance_mm)
+            if rect is not None:
+                lm[id(mine := Marker(m.kind, m.ref, rect, m.inferred))] = m
+                lm_list.append(mine)
+                used.add(id(m))
+        orig: dict[int, Segment] = {}  # a line in the turned frame -> the line as drawn (exact coordinates)
+        local_in = []
+        for g in group:
+            local_in.append(t := back(g, -angle))
+            orig[id(t)] = g
+
+        def drawn(x: Segment, a=angle, orig=orig) -> Segment:
+            return orig.get(id(x)) or back(x, a)
+
+        lres = _lane(local_in, lm_list,
+                     local, tuple(rotate(p, -angle) for p in door_hints), len(walls) + 1)
+        walls += [PairedWall(w.id, rotate(w.start, angle), rotate(w.end, angle), w.thickness,
+                             tuple(drawn(x) for x in w.sources)) for w in lres.walls]
+        for o in lres.openings:
+            world = lm.get(id(o.marker)) or _world_marker(o.marker, angle)
+            ends = tuple(rotate(p, angle) for p in ((o.lo, o.c), (o.hi, o.c)))
+            openings.append(replace(o, marker=world, jambs=tuple(drawn(j) for j in o.jambs), ends=ends))
+            closures += _across_edges(world, ends)
+        segs += [drawn(x) for x in lres.segments]
+        issues += lres.issues + lres.junction_issues  # the turned wall pairs' own junction checks included
+        unmarked += lres.unmarked
+    for m in turned:
+        if id(m) not in used:
+            issues.append(Issue(
+                code="opening_marker_outside_wall", severity="blocking",
+                message=f"{m.kind} marker {m.ref.entity_handle} is turned off the axes but is not aligned "
+                "with any group of parallel diagonal wall lines; no opening made from it",
+                sources=[m.ref]))
+    junctions, jissues = find_junctions(segs + closures, walls, settings)
+    return Resolution(walls, junctions, openings, segs, issues + jissues, unmarked, closures)
+
+
+def _across_edges(m: Marker, ends: tuple[Point2, Point2]) -> list[Segment]:
+    """The marker's two edges across its host (they close the wall-line loops for junctions), exact as drawn."""
+    ux, uy = ends[1][0] - ends[0][0], ends[1][1] - ends[0][1]
+    out = []
+    for a, b in zip(m.quad, m.quad[1:] + m.quad[:1], strict=True):
+        if abs((b[0] - a[0]) * ux + (b[1] - a[1]) * uy) <= 1e-6 * math.hypot(ux, uy) * max(1.0, math.dist(a, b)):
+            out.append(Segment(m.ref.entity_handle, m.ref.layer, a, b))
+    return out
+
+
+def _world_marker(m: Marker, angle: float) -> Marker:
+    """A marker made in a turned frame (an unmarked gap bridged there), as a plan marker."""
+    x0, y0, x1, y1 = m.rect
+    quad = tuple(rotate(p, angle) for p in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)))
+    return Marker(m.kind, m.ref, _bbox(quad), m.inferred, quad)
+
+
 def _resolve(
-    segments: list[Segment], markers: list[Marker], settings: Settings = DEFAULTS
+    segments: list[Segment], markers: list[Marker], settings: Settings = DEFAULTS, id_start: int = 1
 ) -> Resolution:
     tol = settings.tolerance_mm
     # §3: consume segments on any marker edge, then keep only the jambs of markers
@@ -465,7 +572,7 @@ def _resolve(
     merged.sort(key=lambda w: wall_order(w.start, w.end))
     final = {
         id(m): PairedWall(f"wall-{n:03d}", m.start, m.end, m.thickness, m.sources)
-        for n, m in enumerate(merged, 1)
+        for n, m in enumerate(merged, id_start)
     }
     out_walls = [final[id(m)] for m in merged]
 
@@ -554,7 +661,7 @@ def _resolve(
                     sources=[m.ref] + _refs(gwalls),
                 )
             )
-    return Resolution(out_walls, junctions, found, pair_in, issues + junction_issues, unmarked)
+    return Resolution(out_walls, junctions, found, pair_in, issues, unmarked, closures, junction_issues)
 
 
 def build_openings(
@@ -580,7 +687,8 @@ def build_openings(
     }
     measured_default = "user_provided" if from_user else "source_extracted"
     # span start (y, x): the opening id order, also used for issue refs
-    found = sorted(found, key=lambda o: (o.c, o.lo) if o.axis == "h" else (o.lo, o.c))
+    found = sorted(found, key=lambda o: (o.ends[0][1], o.ends[0][0]) if o.ends else
+                   (o.c, o.lo) if o.axis == "h" else (o.lo, o.c))
     openings, issues = [], []
     for kind in ("door", "window"):
         mine = [o for o in found if o.kind == kind]
@@ -623,7 +731,7 @@ def build_openings(
                     )
                 )
                 continue
-            ends = (
+            ends = o.ends or (
                 ((o.lo, o.c), (o.hi, o.c))
                 if o.axis == "h"
                 else ((o.c, o.lo), (o.c, o.hi))
@@ -699,6 +807,9 @@ def door_swings(
     out: dict[str, Swing] = {}
     missing, clashes = [], []
     for o in (f for f in found if f.kind == "door"):
+        if o.ends:  # a door on a diagonal wall: its hinge side is not read (no swing is guessed)
+            missing.append(o)
+            continue
         x0, y0, x1, y1 = o.marker.rect
         corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
         mine = [a for a in arcs if any(math.dist(a.centre, c) <= tol for c in corners)]

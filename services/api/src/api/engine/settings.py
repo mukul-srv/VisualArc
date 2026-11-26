@@ -155,6 +155,14 @@ class Settings:
     bridge_unmarked_gaps: bool = True
     bridged_opening_width_mm: tuple[float, float] = (400.0, 2400.0)
 
+    # Non-orthogonal ("diagonal") walls: wall lines that are not horizontal or vertical are grouped by direction
+    # (angles within diagonal_angle_tol_deg, mod 180) and each group is paired in its own rotated frame, where
+    # the lines count as parallel/collinear within diagonal_tol_mm. Off = such lines are reported and not read.
+    # PROVISIONAL: round numbers (hand-entered CAD angles are exact to well under 0.05 deg).
+    diagonal_walls: bool = True
+    diagonal_angle_tol_deg: float = 0.05
+    diagonal_tol_mm: float = 1.0
+
     # Gap healing: a gap up to this wide between two collinear wall lines on the same layer is closed
     # (the lines are joined), ALWAYS reported as `wall_gap_healed` with its size. Never applied at or above
     # wall_thickness_min_mm (see heal_gaps), so a wall's end or a perpendicular wall is never "healed". PROVISIONAL.

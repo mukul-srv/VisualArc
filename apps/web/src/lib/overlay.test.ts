@@ -71,3 +71,10 @@ test("toPlan inverts toScreen; zoomAt keeps the point under the cursor; panBy sh
   expect([sx, sy].map((v) => Math.round(v * 1e6) / 1e6)).toEqual([120, 80]);
   expect(toScreen(panBy(f, 5, -3), 0, 0)).toEqual([toScreen(f, 0, 0)[0] + 5, toScreen(f, 0, 0)[1] - 3]);
 });
+
+test("wallCorners turns the footprint to a diagonal wall (a 45 degree wall 200 thick)", () => {
+  const c = wallCorners({ start: [0, 0], end: [1000, 1000], thickness: 200 });
+  const d = 100 / Math.SQRT2;
+  expect(c[0][0]).toBeCloseTo(d); expect(c[0][1]).toBeCloseTo(-d);
+  expect(c[2][0]).toBeCloseTo(1000 - d); expect(c[2][1]).toBeCloseTo(1000 + d);
+});

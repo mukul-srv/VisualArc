@@ -18,7 +18,7 @@ import { applyMaterials, materialKey, putMaterials, textureCache, type MaterialM
 import { RoomList } from "@/components/RoomList";
 import { ViewerToolbar } from "@/components/ViewerToolbar";
 import { orbitLimits, planFrustum } from "@/lib/camera";
-import { openingBox, pickElement } from "@/lib/pick";
+import { openingFrame, pickElement } from "@/lib/pick";
 import { animate as animateDoors, blocking, buildDoors, canClose, DOOR, distanceToOpening, doorFor, nearestDoor, toggle as toggleDoor, whyNoToggle, type Door } from "@/lib/doors";
 import { collectSupports, dampTo, fall, groundLevel, stepOnto, stepUpLimit } from "@/lib/ground";
 import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
@@ -266,9 +266,10 @@ export default function ViewerPage() {
         new THREE.BoxGeometry(1, 1, 1),
         new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.45 }),
       );
-      const box = openingBox(o, thicknessMm, baseY, shift);
+      const { box, yaw } = openingFrame(o, thicknessMm, baseY, shift);
       box.getCenter(overlay.position);
       box.getSize(overlay.scale);
+      overlay.rotation.y = yaw;
       scene.add(overlay);
     };
     const raycaster = new THREE.Raycaster();
