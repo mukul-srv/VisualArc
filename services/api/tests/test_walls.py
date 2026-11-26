@@ -1,6 +1,9 @@
+from dataclasses import replace
+
 import pytest
 
 from api.engine.geometry2d.walls import Segment, find_junctions, pair_walls
+from api.engine.settings import DEFAULTS
 
 
 def segs(*lines):
@@ -159,7 +162,10 @@ def test_unexplained_region_carries_touching_wall_sources():
 
 def test_non_orthogonal_and_degenerate_segments_warn():
     _, _, issues = run([((0, 0), (1000, 500)), ((5, 5), (5, 5))])
-    assert codes(issues) == ["degenerate_segment", "non_orthogonal_segment"]
+    assert codes(issues) == ["degenerate_segment", "unpaired_segment"]  # a lone diagonal line has no partner
+    segs = [Segment("D0", "A-WALL", (0, 0), (1000, 500)), Segment("D1", "A-WALL", (5, 5), (5, 5))]
+    _, issues = pair_walls(segs, replace(DEFAULTS, diagonal_walls=False))
+    assert codes(issues) == ["degenerate_segment", "non_orthogonal_segment"]  # diagonals off: reported, not read
 
 
 def test_overlapping_lines_on_different_layers_are_not_merged():

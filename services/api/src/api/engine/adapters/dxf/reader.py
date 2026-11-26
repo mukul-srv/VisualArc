@@ -58,9 +58,11 @@ from api.engine.geometry2d.floor import closed_outer_perimeter, floor_issue
 from api.engine.geometry2d.openings import (
     Marker,
     SwingArc,
+    _bbox,
     build_openings,
     cut_walls_at_markers,
     door_swings,
+    marker_quad,
     marker_rect,
     on_marker_boundary,
     resolve_openings,
@@ -526,13 +528,13 @@ def read_dxf(
                 pts = [mm(p) for p in _wcs_xy(e)]
                 if math.dist(pts[0], pts[-1]) <= settings.tolerance_mm:
                     pts.pop()  # closed by repeating the first vertex
-                rect = (
-                    None
-                    if _extrusion_issue(e, settings)
-                    or any(b for *_, b in e.get_points("xyb"))
-                    else marker_rect(pts, settings.tolerance_mm)
-                )
-                if rect is None:
+                plain = not _extrusion_issue(e, settings) and not any(b for *_, b in e.get_points("xyb"))
+                rect = marker_rect(pts, settings.tolerance_mm) if plain else None
+                quad = (marker_quad(pts, settings.diagonal_tol_mm)
+                        if plain and rect is None and settings.diagonal_walls else None)
+                if quad is not None:  # a rectangle turned to a diagonal wall
+                    markers.append(Marker(opening_kind[layer], _ref(e), _bbox(quad), quad=quad))
+                elif rect is None:
                     issues.append(
                         Issue(
                             code="invalid_opening_marker",
@@ -794,7 +796,7 @@ def read_dxf(
     if edits:  # before openings are resolved, so everything downstream re-derives from the edited lines
         segments, markers, edit_issues = apply_geometry_edits(segments, markers, edits, settings)
         issues += edit_issues
-    segments, cut_issues = cut_walls_at_markers(segments, markers, settings)
+    segments, cut_issues = cut_walls_at_markers(segments, [m for m in markers if m.quad is None], settings)
     issues += cut_issues
     segments, heal_issues = heal_gaps(segments, markers, settings)
     issues += heal_issues

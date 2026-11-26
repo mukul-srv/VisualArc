@@ -13,18 +13,45 @@ const shiftOf = (o: THREE.Object3D): THREE.Vector2 => {
   return new THREE.Vector2();
 };
 
-/** Aperture box in three.js metres: span x thickness (+4 mm so the faces are not coplanar). */
-export function openingBox(o: OpeningData, thicknessMm: number, baseY: number, shift = new THREE.Vector2()): THREE.Box3 {
+/** Aperture box in three.js metres: span x thickness (+4 mm so the faces are not coplanar). `yaw` turns it
+ *  about the vertical axis through its centre: 0 on the axes, the span's plan direction on a diagonal wall. */
+export function openingFrame(o: OpeningData, thicknessMm: number, baseY: number, shift = new THREE.Vector2()): { box: THREE.Box3; yaw: number } {
   const [sx, sy] = o.span.start;
   const [ex, ey] = o.span.end;
-  const alongX = Math.abs(ex - sx) >= Math.abs(ey - sy);
   const len = Math.hypot(ex - sx, ey - sy) / 1000;
   const h = o.height.value / 1000;
   const t = thicknessMm / 1000 + 0.004;
-  const size = new THREE.Vector3(alongX ? len : t, h, alongX ? t : len);
+  const diagonal = Math.abs(ex - sx) > 1e-6 && Math.abs(ey - sy) > 1e-6;
+  const alongX = Math.abs(ex - sx) >= Math.abs(ey - sy);
+  const size = new THREE.Vector3(alongX || diagonal ? len : t, h, alongX || diagonal ? t : len);
   // plan (x, y) mm -> three (x, -y) m; sill is above the floor elevation (baseY)
   const centre = new THREE.Vector3((sx + ex) / 2000 + shift.x, baseY + o.sill_height.value / 1000 + h / 2, -(sy + ey) / 2000 + shift.y);
-  return new THREE.Box3().setFromCenterAndSize(centre, size);
+  return { box: new THREE.Box3().setFromCenterAndSize(centre, size), yaw: diagonal ? Math.atan2(ey - sy, ex - sx) : 0 };
+}
+
+/** The aperture's box; on a diagonal wall the bounding box of the turned one. */
+export function openingBox(o: OpeningData, thicknessMm: number, baseY: number, shift = new THREE.Vector2()): THREE.Box3 {
+  const { box, yaw } = openingFrame(o, thicknessMm, baseY, shift);
+  if (!yaw) return box;
+  const c = box.getCenter(new THREE.Vector3());
+  const s = box.getSize(new THREE.Vector3());
+  const ex = Math.abs(Math.cos(yaw)) * s.x + Math.abs(Math.sin(yaw)) * s.z;
+  const ez = Math.abs(Math.sin(yaw)) * s.x + Math.abs(Math.cos(yaw)) * s.z;
+  return new THREE.Box3().setFromCenterAndSize(c, new THREE.Vector3(ex, s.y, ez));
+}
+
+/** Where the ray enters the aperture box (turned boxes are hit in their own frame), or null. */
+export function rayOpening(ray: THREE.Ray, o: OpeningData, thicknessMm: number, baseY: number, shift = new THREE.Vector2()): THREE.Vector3 | null {
+  const { box, yaw } = openingFrame(o, thicknessMm, baseY, shift);
+  if (!yaw) return ray.intersectBox(box, new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  const up = new THREE.Vector3(0, 1, 0);
+  const local = new THREE.Ray(
+    c.clone().add(ray.origin.clone().sub(c).applyAxisAngle(up, -yaw)),
+    ray.direction.clone().applyAxisAngle(up, -yaw),
+  );
+  const p = local.intersectBox(box, new THREE.Vector3());
+  return p ? c.clone().add(p.sub(c).applyAxisAngle(up, yaw)) : null;
 }
 
 /** `model`: the pickable floor models (hidden or ghosted floors are left out by the caller). */
@@ -42,7 +69,7 @@ export function pickElement(model: THREE.Object3D | THREE.Object3D[], ray: THREE
     const baseY = new THREE.Box3().setFromObject(mesh).min.y + (ud.floor_offset_mm ?? 0) / 1000;
     for (const o of ud.openings) {
       const shift = shiftOf(mesh);
-      const p = ray.intersectBox(openingBox(o, ud.thickness?.value ?? 0, baseY, shift), new THREE.Vector3());
+      const p = rayOpening(ray, o, ud.thickness?.value ?? 0, baseY, shift);
       if (p) cands.push({ opening: o, mesh, baseY, point: p, shift, d: ray.origin.distanceTo(p) });
     }
   }));

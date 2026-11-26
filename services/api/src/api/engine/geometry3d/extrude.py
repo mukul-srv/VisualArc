@@ -83,15 +83,26 @@ def build_opening_parts(floor: Floor) -> dict[str, tuple[str, Opening, trimesh.T
         if d is None:
             continue
         axis = _axis(o.span)
-        a0, a1 = sorted((o.span.start[axis], o.span.end[axis]))
-        c = o.span.start[1 - axis]
+        if axis is None:  # diagonal host: build in the wall's own frame (u along, n across), then place it
+            a0, a1, c = 0.0, math.dist(o.span.start, o.span.end), 0.0
+            sx, sy = o.span.start
+            ux, uy = (o.span.end[0] - sx) / a1, (o.span.end[1] - sy) / a1
+            place = np.array([[ux, -uy, 0, sx], [uy, ux, 0, sy], [0, 0, 1, 0], [0, 0, 0, 1]])
+        else:
+            a0, a1 = sorted((o.span.start[axis], o.span.end[axis]))
+            c = o.span.start[1 - axis]
+            place = None
         t, fw, pt = walls[o.wall_id].thickness.value, d.frame_width.value, d.panel_thickness.value
         s = floor.finished_level_mm + o.sill_height.value
         top = s + o.height.value
         door = d.panel == "leaf"
 
-        def box(x0, x1, z0, z1, depth=t, axis=axis, c=c):
-            return _slab_box(axis, x0, x1, c - depth / 2, c + depth / 2, z0, z1)
+        def box(x0, x1, z0, z1, depth=t, axis=axis, c=c, place=place):
+            if place is None:
+                return _slab_box(axis, x0, x1, c - depth / 2, c + depth / 2, z0, z1)
+            m = trimesh.creation.box(bounds=[(x0, c - depth / 2, z0), (x1, c + depth / 2, z1)])
+            m.apply_transform(place)
+            return m
 
         frame = [box(a0, a0 + fw, s, top), box(a1 - fw, a1, s, top),
                  box(a0 + fw, a1 - fw, top - fw, top)]

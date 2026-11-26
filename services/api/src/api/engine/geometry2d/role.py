@@ -13,7 +13,7 @@ from shapely.ops import unary_union
 
 from api.engine.adapters.dxf.split import strip_floor_prefix
 from api.engine.canonical.model import Issue
-from api.engine.geometry2d.walls import JunctionPiece, PairedWall
+from api.engine.geometry2d.walls import JunctionPiece, PairedWall, normal
 from api.engine.settings import DEFAULTS, Settings
 
 Role = tuple[str, str]  # (role, role_source)
@@ -32,7 +32,7 @@ def _inferred(
     for w in walls:
         h = w.thickness / 2
         (x0, y0), (x1, y1) = w.start, w.end
-        dx, dy = (0, h) if y0 == y1 else (h, 0)  # offset across the wall
+        dx, dy = (h * c for c in normal(w.start, w.end))  # offset across the wall
         faces = [
             LineString([(x0 + s * dx, y0 + s * dy), (x1 + s * dx, y1 + s * dy)])
             for s in (-1, 1)

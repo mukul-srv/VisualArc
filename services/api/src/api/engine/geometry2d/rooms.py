@@ -12,7 +12,7 @@ from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import unary_union
 
 from api.engine.canonical.model import Issue, Point2, SourceRef
-from api.engine.geometry2d.walls import JunctionPiece, PairedWall, _ring
+from api.engine.geometry2d.walls import JunctionPiece, PairedWall, _ring, normal
 from api.engine.settings import DEFAULTS, Settings
 
 
@@ -48,15 +48,17 @@ def _open_ends(
     """Wall ends not joined to any other wall or junction: the outline is open there, so no
     room closes through it (a room elsewhere may still close)."""
     tol, free = settings.tolerance_mm, []
+    diagonal = any(w.start[0] != w.end[0] and w.start[1] != w.end[1] for w in walls)
     for w in walls:
         others = unary_union(
             [v.rect() for v in walls if v.id != w.id] + [Polygon(j.polygon) for j in pieces]
         )
+        if diagonal:  # footprints of turned walls meet only to float noise: allow a thousandth of a mm
+            others = others.buffer(tol * 1000, join_style="mitre")
         h = w.thickness / 2
-        y0, y1 = w.start[1], w.end[1]
-        horizontal = y0 == y1
+        nx, ny = normal(w.start, w.end)
         for x, y in (w.start, w.end):
-            cap = LineString([(x, y - h), (x, y + h)] if horizontal else [(x - h, y), (x + h, y)])
+            cap = LineString([(x - nx * h, y - ny * h), (x + nx * h, y + ny * h)])  # across the wall end
             if cap.intersection(others).length < w.thickness - tol:
                 free.append((w, (x, y)))
     if not free:
@@ -79,13 +81,17 @@ def find_rooms(
     settings: Settings = DEFAULTS,
 ) -> tuple[list[RoomPiece], list[Issue]]:
     tol = settings.tolerance_mm
-    union = unary_union([w.rect() for w in walls] + [Polygon(j.polygon) for j in pieces])
+    parts = [w.rect() for w in walls] + [Polygon(j.polygon) for j in pieces]
+    # turned walls meet their junction fills only to float noise: grow each piece by a thousandth of a mm so they
+    # join, and give the same back to every closed region below (orthogonal drawings are exact: eps = 0)
+    eps = tol * 1000 if any(w.start[0] != w.end[0] and w.start[1] != w.end[1] for w in walls) else 0.0
+    union = unary_union([p.buffer(eps, join_style="mitre") for p in parts] if eps else parts)
     polys = [g for g in getattr(union, "geoms", [union]) if isinstance(g, Polygon)]
     regions: list[Polygon] = []
     issues: list[Issue] = []
     for poly in polys:
         for ring in poly.interiors:
-            hole = Polygon(ring)
+            hole = Polygon(ring).buffer(eps, join_style="mitre") if eps else Polygon(ring)
             islands = [q for q in polys if q is not poly and hole.contains(q)]
             region = hole.difference(unary_union(islands)) if islands else hole
             if isinstance(region, Polygon) and region.area <= tol:
