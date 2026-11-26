@@ -386,6 +386,60 @@ def _lane(
     return res
 
 
+def cut_walls_at_turned_markers(
+    segments: list[Segment], markers: list[Marker], settings: Settings = DEFAULTS
+) -> tuple[list[Segment], list[Issue]]:
+    """cut_walls_at_markers for markers turned to a diagonal wall (`Marker.quad`): when the marker's two long
+    edges are the wall's two face lines, which run on past both of its ends, each face line is split at the
+    marker bounds. Same reporting; a marker that fits no wall that way (or could cut either way) is left alone."""
+    tol = settings.diagonal_tol_mm
+    thk_min, thk_max = settings.wall_thickness_min_mm, settings.wall_thickness_max_mm
+    segs, issues = list(segments), []
+    for m in (m for m in markers if m.quad is not None):
+        q = m.quad
+        edges = [math.dist(q[i], q[(i + 1) % 4]) for i in (0, 1)]
+        fits = [i for i in (0, 1) if thk_min - tol <= edges[1 - i] <= thk_max + tol]  # i: the edge along the wall
+        if len(fits) != 1:
+            continue
+        a, b = q[fits[0]], q[fits[0] + 1]
+        length = math.dist(a, b)
+        u = ((b[0] - a[0]) / length, (b[1] - a[1]) / length)
+        n = (-u[1], u[0])
+
+        def local(p, a=a, u=u, n=n):
+            return ((p[0] - a[0]) * u[0] + (p[1] - a[1]) * u[1], (p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1])
+
+        pts = [local(p) for p in q]
+        lo, hi = min(p[0] for p in pts), max(p[0] for p in pts)
+        faces = (min(p[1] for p in pts), max(p[1] for p in pts))
+        hits = []
+        for v in faces:
+            found = []
+            for i, sg in enumerate(segs):
+                (s0, v0), (s1, v1) = local(sg.start), local(sg.end)
+                if abs(v1 - v0) <= tol and abs(v - (v0 + v1) / 2) <= tol and min(s0, s1) < lo - tol and max(s0, s1) > hi + tol:
+                    found.append(i)
+            hits.append(found)
+        if not all(len(h) == 1 for h in hits):
+            continue
+        cut = []
+        for (i,), v in zip(hits, faces, strict=True):
+            sg = segs[i]
+            s0, s1 = sorted((local(sg.start)[0], local(sg.end)[0]))
+            at = lambda x, v=v, a=a, u=u, n=n: (a[0] + x * u[0] + v * n[0], a[1] + x * u[1] + v * n[1])
+            cut.append((i, [Segment(sg.handle, sg.layer, at(p), at(q2)) for p, q2 in ((s0, lo), (hi, s1))]))
+        faces_cut = [segs[i] for i, _ in cut]
+        for i, pieces in sorted(cut, reverse=True):
+            segs[i : i + 1] = pieces
+        issues.append(Issue(
+            code="opening_cut_into_wall", severity="warning",
+            message=f"{m.kind} marker {m.ref.entity_handle} lies across solid wall "
+            f"(faces {faces_cut[0].handle}, {faces_cut[1].handle}); the wall was cut at the "
+            "marker bounds and the opening made from it",
+            sources=[m.ref, *(x.ref for x in faces_cut)]))
+    return segs, issues
+
+
 def resolve_openings(
     segments: list[Segment],
     markers: list[Marker],

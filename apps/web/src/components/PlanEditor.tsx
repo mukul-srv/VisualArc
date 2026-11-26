@@ -6,8 +6,8 @@ import { saveEditsJob, STAGE_LABEL, type JobProgress } from "../lib/jobs";
 import { fit, getPlanOverlay, overlayBounds, panBy, toPlan, toScreen, wallCorners, zoomAt, type Fit, type OverlayData } from "../lib/overlay";
 import type { Floor } from "../lib/project";
 import {
-  EDIT, EMPTY_HISTORY, addWallOp, dragOpeningOp, openingDims, applyOps, canAdd, dragEndpoint, dragged, isNoop, snapMove, endpointAt, hitTest, moveWall, nextId, orthogonal, push, pxToMm, redo,
-  removeOpeningOp, removeWallOp, setOpeningOp, setWallOp, slideOpening, snap, toEditModel, undo, type EditModel, type EditOp, type EditOpening, type EditWall, type Pt, type Selection,
+  EDIT, EMPTY_HISTORY, addWallOp, dragOpeningOp, openingDims, applyOps, canAdd, constrain, dragEndpoint, dragged, isNoop, snapMove, endpointAt, hitTest, moveWall, nextId, push, pxToMm, redo,
+  removeOpeningOp, removeWallOp, setOpeningOp, setWallOp, slideOpening, snap, toEditModel, undo, type AngleMode, type EditModel, type EditOp, type EditOpening, type EditWall, type Pt, type Selection,
 } from "../lib/plan-edit";
 import { IssueList } from "./IssueList";
 import { UnderlayPanel, type Calibrating } from "./UnderlayPanel";
@@ -24,7 +24,7 @@ type Drag =
   | { kind: "pan"; last: [number, number] };
 
 /** The transient op of a drag, from the committed model: the same op that is saved when the pointer is released. */
-function dragOp(d: Drag, committed: EditModel, id: string, scale: number): EditOp | null {
+function dragOp(d: Drag, committed: EditModel, id: string, scale: number, mode: AngleMode): EditOp | null {
   if (d.kind === "pan" || !dragged(d.origin, d.cur, scale)) return null; // a click is not a drag: nothing is snapped or saved
   if (d.kind === "draw") return dragOpeningOp(id, d.host, d.open, d.origin, d.cur, committed.openings, d.dims);
   if (d.kind === "slide") {
@@ -34,7 +34,7 @@ function dragOp(d: Drag, committed: EditModel, id: string, scale: number): EditO
   if (d.kind === "move") {
     return setWallOp(id, d.wall, moveWall(d.wall, snapMove(d.wall, [d.cur[0] - d.origin[0], d.cur[1] - d.origin[1]], committed, scale)));
   }
-  const g = dragEndpoint(d.wall, d.kind, snap(d.cur, committed, scale, d.wall.id));
+  const g = dragEndpoint(d.wall, d.kind, snap(d.cur, committed, scale, d.wall.id), mode);
   return g && setWallOp(id, d.wall, g);
 }
 
@@ -52,6 +52,7 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   const [height, setHeight] = useState("");
   const [sill, setSill] = useState("");
   const [thickness, setThickness] = useState(String(EDIT.defaultThicknessMm));
+  const [mode, setMode] = useState<AngleMode>("ortho"); // how a wall is turned while drawing or dragging an end
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<JobProgress | null>(null);
   const [blocked, setBlocked] = useState<Issue[] | null>(null);
@@ -86,7 +87,7 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   const existing = useMemo(() => (data?.edits ?? []) as EditOp[], [data]);
   const allOps = useMemo(() => [...existing, ...hist.done], [existing, hist.done]);
   const committed = useMemo(() => (base ? applyOps(base, hist.done) : null), [base, hist.done]);
-  const transient = drag && committed && view ? dragOp(drag, committed, nextId(allOps), view.scale) : null;
+  const transient = drag && committed && view ? dragOp(drag, committed, nextId(allOps), view.scale, mode) : null;
   const now = useMemo(() => (committed ? (transient ? applyOps(committed, [transient]) : committed) : null), [committed, transient]);
 
   const commit = useCallback((op: EditOp | null) => {
@@ -182,11 +183,11 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
       ctx.lineWidth = EDIT.defaultThicknessMm * view.scale;
       ctx.globalAlpha = 0.35;
       ctx.beginPath();
-      path([anchor, orthogonal(anchor, hover)], false);
+      path([anchor, constrain(anchor, snap(hover, committed ?? base!, view.scale), mode)], false);
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-  }, [data, now, base, view, sel, tool, anchor, hover, allOps, under, img, hideImg, opacity, calib]);
+  }, [data, now, base, view, sel, tool, anchor, hover, allOps, under, img, hideImg, opacity, calib, mode, committed]);
 
   const point = (e: RPointerEvent<HTMLCanvasElement>): { s: [number, number]; p: Pt } | null => {
     const c = canvas.current;
@@ -212,7 +213,7 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
     if (tool === "wall") {
       const at = snap(p, committed, view.scale);
       if (!anchor) return setAnchor(at);
-      commit(addWallOp(id, anchor, orthogonal(anchor, at), Number(thickness) || EDIT.defaultThicknessMm));
+      commit(addWallOp(id, anchor, constrain(anchor, at, mode), Number(thickness) || EDIT.defaultThicknessMm));
       return setAnchor(null);
     }
     if (tool === "door" || tool === "window") {
@@ -300,13 +301,13 @@ export function PlanEditor({ projectId, floor, onSaved, onClose }: { projectId: 
   return (
     <section aria-label={`Edit plan: ${floor.name}`}>
       <h3>Edit plan: {floor.name} <button type="button" onClick={() => discardOk() && onClose()} disabled={busy}>Close</button></h3>
-      <p><small>Orthogonal walls, doors, windows (drawn by dragging along a wall) and room names. Rooms and everything built from them update when you save; the 3D viewer shows the saved version.</small></p>
+      <p><small>Walls (orthogonal, or at any angle: pick an angle mode), doors, windows (drawn by dragging along a wall, also on angled walls) and room names. Rooms and everything built from them update when you save; the 3D viewer shows the saved version.</small></p>
       {under && (
         <UnderlayPanel underlay={under} opacity={opacity} setOpacity={setOpacity} hidden={hideImg} setHidden={setHideImg} locked={locked} setLocked={setLocked}
           calib={calib} setCalib={(c) => { setCalib(c); setCalibError(null); }} onSaveCalibration={saveCalibration} busy={busy} error={calibError} />
       )}
       <EditorToolbar tool={tool} setTool={(t) => { setTool(t); setAnchor(null); }}
-        height={height} setHeight={setHeight} sill={sill} setSill={setSill} thickness={thickness} setThickness={setThickness}
+        height={height} setHeight={setHeight} sill={sill} setSill={setSill} thickness={thickness} setThickness={setThickness} mode={mode} setMode={setMode}
         canUndo={hist.done.length > 0} canRedo={hist.undone.length > 0} onUndo={() => setHist(undo(hist))} onRedo={() => setHist(redo(hist))}
         pending={hist.done.length} busy={busy} onSave={save} onDiscard={() => { if (!discardOk()) return; setHist(EMPTY_HISTORY); setSel(null); setAnchor(null); }} />
       {busy && <p role="status">{job ? `${STAGE_LABEL[job.stage] ?? job.stage} (${job.progress}%)` : "Saving…"}</p>}
