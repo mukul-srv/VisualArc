@@ -61,6 +61,7 @@ from api.engine.geometry2d.openings import (
     _bbox,
     build_openings,
     cut_walls_at_markers,
+    cut_walls_at_turned_markers,
     door_swings,
     marker_quad,
     marker_rect,
@@ -798,6 +799,8 @@ def read_dxf(
         issues += edit_issues
     segments, cut_issues = cut_walls_at_markers(segments, [m for m in markers if m.quad is None], settings)
     issues += cut_issues
+    segments, turned_cut = cut_walls_at_turned_markers(segments, markers, settings)
+    issues += turned_cut
     segments, heal_issues = heal_gaps(segments, markers, settings)
     issues += heal_issues
     res = resolve_openings(segments, markers, settings, tuple(arc_centres))
