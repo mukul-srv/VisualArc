@@ -155,6 +155,28 @@ class Settings:
     bridge_unmarked_gaps: bool = True
     bridged_opening_width_mm: tuple[float, float] = (400.0, 2400.0)
 
+    # Gap healing: a gap up to this wide between two collinear wall lines on the same layer is closed
+    # (the lines are joined), ALWAYS reported as `wall_gap_healed` with its size. Never applied at or above
+    # wall_thickness_min_mm (see heal_gaps), so a wall's end or a perpendicular wall is never "healed". PROVISIONAL.
+    heal_wall_gaps: bool = True
+    heal_gap_max_mm: float = 30.0
+
+    # DIMENSION check (units sanity): a measured value (text override or stored measurement, assumed mm)
+    # differing from the length between its definition points by more than this fraction is a mismatch.
+    dimension_rel_tolerance: float = 0.02
+    dimension_min_mm: float = 100.0  # shorter dimensions are ignored (rounding noise)
+
+    # Block symbol recognition (doors, windows, stairs) by name and by geometry. Upper-case substrings.
+    block_name_hints: tuple[tuple[str, str], ...] = (
+        ("DOOR", "door"), ("DR_", "door"), ("PUERTA", "door"), ("TÜR", "door"),
+        ("WINDOW", "window"), ("WIN_", "window"), ("VENTANA", "window"), ("FENSTER", "window"),
+        ("STAIR", "stair"), ("ESCALERA", "stair"), ("TREPPE", "stair"),
+    )
+    block_min_parallel_lines: int = 3  # window: this many parallel lines of equal extent inside a wall thickness
+    block_min_treads: int = 5  # stair: this many equally spaced parallel lines
+    block_swing_span_deg: tuple[float, float] = (75.0, 105.0)  # a door swing arc is about a quarter turn
+    block_rel_tolerance: float = 0.10  # leaf vs radius, tread spacing, line lengths
+
     # Plausible size of a building plan (its longest side). A plan outside this is more likely
     # read in the wrong units (a metre drawing flagged as inches is ~25x too small) than real;
     # it is reported, never corrected. PROVISIONAL: a round range, not from a standard.

@@ -31,7 +31,8 @@ from api.engine.settings import DEFAULTS
 # 0.10.0: user edits (Section D). Provenance gains `user_modified` (a value or name the user changed in the
 # editor) and SourceRef.format gains "edit" (entity_handle = the edit op's id). Older files read unchanged.
 # 0.11.0: IFC import. SourceRef.format gains "ifc" (layer = the IFC class, entity_handle = the GlobalId). Older files read unchanged.
-SCHEMA_VERSION = "0.11.0"
+# 0.12.0: Issue.suggestions (concrete, never auto-applied fixes: units, layer role, gap close, confirm an inferred element). Older files read unchanged.
+SCHEMA_VERSION = "0.12.0"
 
 Provenance = Literal["source_extracted", "user_provided", "defaulted", "inferred", "user_modified"]
 Point2 = tuple[float, float]
@@ -54,11 +55,20 @@ class SourceRef(_Model):
     entity_handle: str
 
 
+class Suggestion(_Model):
+    """A fix the engine derived. Shown to the user, who confirms it through the existing control
+    (units choice, layer mapping); never applied by the engine."""
+    kind: Literal["units", "layer_role", "gap_close", "confirm_inferred"]
+    value: str  # units: mm|cm|m|in|ft; layer_role: door|window|stair|wall...; gap_close: the gap in mm; confirm_inferred: the element kind
+    label: str  # plain-language fix, e.g. "choose units mm (scale x0.001)"
+
+
 class Issue(_Model):
     code: str
     severity: Literal["blocking", "warning"]
     message: str
     sources: list[SourceRef] = []
+    suggestions: list[Suggestion] = []
 
 
 class LineGeometry(_Model):

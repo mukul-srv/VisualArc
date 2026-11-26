@@ -11,6 +11,7 @@ function Items({ issues }: { issues: Issue[] }) {
         return (
           <li key={`${n}-${i.message}`}>
             {i.message}{" "}
+            {i.suggestions?.map((x) => <strong key={`${x.kind}:${x.value}`}> Suggested (not applied): {x.label}. </strong>)}
             {locs.length > 0 ? (
               <details style={{ display: "inline" }}>
                 <summary style={{ display: "inline", cursor: "pointer" }}>

@@ -123,6 +123,12 @@ def layer_hint(layer: str, settings: Settings = DEFAULTS) -> str | None:
     )
 
 
+def layer_hint_role(layer: str, settings: Settings = DEFAULTS) -> str | None:
+    """The role word behind layer_hint (door, window, wall...), for a structured suggestion."""
+    name = strip_floor_prefix(layer, settings).upper()
+    return next((r for word, r in settings.layer_name_hints if word in name), None)
+
+
 def layer_roles(preset: str, mapping: dict[str, str] | None, layers: list[str]) -> list[dict]:
     """Each layer with its role under preset + mapping (None = unmapped; the engine reports it)."""
     s = resolve(preset, mapping)

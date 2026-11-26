@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.11.0",
+  "schema_version": "0.12.0",
   "id": "fixture_openings",
   "units": "mm",
   "source_file": "fixture_openings.dxf",
@@ -1519,7 +1519,8 @@
           "layer": "A-DOOR",
           "entity_handle": "63"
         }
-      ]
+      ],
+      "suggestions": []
     },
     {
       "code": "opening_dimension_defaulted",
@@ -1541,7 +1542,8 @@
           "layer": "A-DOOR",
           "entity_handle": "5D"
         }
-      ]
+      ],
+      "suggestions": []
     },
     {
       "code": "opening_dimension_defaulted",
@@ -1568,13 +1570,15 @@
           "layer": "A-GLAZ",
           "entity_handle": "5A"
         }
-      ]
+      ],
+      "suggestions": []
     },
     {
       "code": "elevation_defaulted",
       "severity": "warning",
       "message": "floor elevation assumed 0 mm; DXF plan carries no elevation",
-      "sources": []
+      "sources": [],
+      "suggestions": []
     },
     {
       "code": "wall_role_inferred",
@@ -1731,19 +1735,22 @@
           "layer": "A-WALL",
           "entity_handle": "3F"
         }
-      ]
+      ],
+      "suggestions": []
     },
     {
       "code": "room_name_defaulted",
       "severity": "warning",
       "message": "no label inside Room 1, Room 2, Room 3; numbered names assumed",
-      "sources": []
+      "sources": [],
+      "suggestions": []
     },
     {
       "code": "roof_type_unknown",
       "severity": "warning",
       "message": "no roof type (choose a building type or set the parameter); no roof built",
-      "sources": []
+      "sources": [],
+      "suggestions": []
     }
   ],
   "parameters": {

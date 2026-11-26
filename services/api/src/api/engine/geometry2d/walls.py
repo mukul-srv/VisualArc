@@ -15,7 +15,7 @@ from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import polygonize, unary_union
 
-from api.engine.canonical.model import Issue, Point2, SourceRef
+from api.engine.canonical.model import Issue, Point2, SourceRef, Suggestion
 from api.engine.settings import DEFAULTS, Settings
 
 
@@ -155,6 +155,63 @@ def _merge_overlaps(axial: list[_Axial], tol: float) -> tuple[list[_Axial], list
         )
     out.sort(key=lambda a: axial_pos[a])
     return out, issues
+
+
+def heal_gaps(segments: list[Segment], markers=(), settings: Settings = DEFAULTS) -> tuple[list[Segment], list[Issue]]:
+    """Close small gaps between collinear wall lines of one layer (drafting slips, not openings): the two
+    lines are joined into one over the gap. Only gaps up to settings.heal_gap_max_mm, never one an opening
+    marker touches; wider gaps are left for the normal gap/opening rules. Every heal is reported with its
+    size and both lines (the joined line keeps the first line's handle)."""
+    if not settings.heal_wall_gaps:
+        return segments, []
+    tol, issues = settings.tolerance_mm, []
+    axial = {id(s): _axial(s, tol) for s in segments}
+    order = sorted((s for s in segments if axial[id(s)] and math.dist(s.start, s.end) > tol),
+                   key=lambda s: (axial[id(s)].axis, round(axial[id(s)].c / max(tol, 1e-3)), s.layer, axial[id(s)].lo))
+    out: dict[int, Segment | None] = {}
+    cur: Segment | None = None
+    origin: Segment | None = None  # the drawn line a chain of joins started from
+    for s in order:
+        a = axial[id(s)]
+        if cur is not None:
+            c = axial[id(cur)]
+            gap = a.lo - c.hi
+            same = (c.axis, c.seg.layer) == (a.axis, s.layer) and abs(c.c - a.c) <= tol
+            near = tol < gap <= settings.heal_gap_max_mm and gap < settings.wall_thickness_min_mm
+            if same and near and not _marker_in_gap(markers, a.axis, c.c, c.hi, a.lo, tol):
+                lo, hi = c.lo, max(c.hi, a.hi)
+                start, end = ((lo, c.c), (hi, c.c)) if a.axis == "h" else ((c.c, lo), (c.c, hi))
+                joined = Segment(cur.handle, cur.layer, start, end)
+                axial[id(joined)] = _Axial(joined, a.axis, c.c, lo, hi)
+                out[id(s)] = None
+                out[id(origin)] = joined
+                issues.append(Issue(
+                    code="wall_gap_healed", severity="warning",
+                    message=f"gap of {gap:.1f} mm between wall lines {cur.handle} and {s.handle} on {s.layer} "
+                    f"closed (limit {settings.heal_gap_max_mm:g} mm); the lines were joined, nothing else moved",
+                    sources=[cur.ref, s.ref],
+                    suggestions=[Suggestion(kind="gap_close", value=f"{gap:g}", label=f"close the {gap:.1f} mm gap in the drawing")],
+                ))
+                cur = joined
+                continue
+        cur = origin = s
+    if not issues:
+        return segments, []
+    res: list[Segment] = []
+    for s in segments:
+        r = out.get(id(s), s)
+        if r is not None:
+            res.append(r)
+    return res, issues
+
+
+def _marker_in_gap(markers, axis: str, c: float, lo: float, hi: float, tol: float) -> bool:
+    for m in markers:
+        x0, y0, x1, y1 = m.rect
+        along, across = ((x0, x1), (y0, y1)) if axis == "h" else ((y0, y1), (x0, x1))
+        if along[0] < hi + tol and along[1] > lo - tol and across[0] - tol <= c <= across[1] + tol:
+            return True
+    return False
 
 
 def _is_end_cap(a: _Axial, w: "PairedWall", tol: float) -> bool:
