@@ -51,11 +51,12 @@ test("drag handles: body moves, endpoints change length along the axis, openings
   expect(slideOpening(m.openings[0], m.walls[1], [100, 0])).toBeNull(); // not its host's direction
 });
 
-test("op builders capture the target snapshot and refuse non-orthogonal geometry", () => {
+test("op builders capture the target snapshot and refuse walls with no length", () => {
   const op = setWallOp("e1", m.walls[1], { start: [3000, 200], end: [3000, 4800] })!;
   expect(op).toMatchObject({ op: "set_wall", id: "e1", thickness: 200, target: { start: [4000, 200], end: [4000, 4800], thickness: 200, handles: ["C", "D"] } });
-  expect(setWallOp("e1", m.walls[1], { start: [3000, 200], end: [3100, 4800] })).toBeNull();
-  expect(addWallOp("e2", [0, 0], [1000, 500])).toBeNull();
+  expect(setWallOp("e1", m.walls[1], { start: [3000, 200], end: [3000, 200] })).toBeNull();
+  expect(setWallOp("e1", m.walls[1], { start: [3000, 200], end: [3100, 4800] })).toMatchObject({ op: "set_wall" }); // slanted is fine now
+  expect(addWallOp("e2", [0, 0], [1000, 500])).toMatchObject({ op: "add_wall", start: [0, 0], end: [1000, 500] });
   expect(addWallOp("e2", [0, 0], [10, 0])).toBeNull(); // below the minimum length
   expect(addWallOp("e2", [0, 0], [1000, 0])).toMatchObject({ op: "add_wall", thickness: EDIT.defaultThicknessMm });
   expect(removeWallOp("e3", m.walls[0])).toMatchObject({ op: "remove_wall", target: { handles: ["A", "B"] } });
@@ -117,9 +118,10 @@ test("inspector rows put the source next to the edited value", () => {
   expect(inspectorRows(m, m, { kind: "room", id: "room-001" })).toEqual([{ label: "Name", source: "Room 1", edited: "Room 1", changed: false }]);
 });
 
-test("inspector fields: orthogonal walls only, openings must lie in their wall", () => {
+test("inspector fields: any direction with a length, openings must lie in their wall", () => {
   expect(wallFromFields({ sx: "0", sy: "0", ex: "1000", ey: "0", thickness: "200" })).toEqual({ ok: true, value: { start: [0, 0], end: [1000, 0], thickness: 200 } });
-  expect(wallFromFields({ sx: "0", sy: "0", ex: "1000", ey: "100", thickness: "200" })).toMatchObject({ ok: false });
+  expect(wallFromFields({ sx: "0", sy: "0", ex: "1000", ey: "100", thickness: "200" })).toMatchObject({ ok: true });
+  expect(wallFromFields({ sx: "0", sy: "0", ex: "10", ey: "0", thickness: "200" })).toMatchObject({ ok: false });
   expect(wallFromFields({ sx: "0", sy: "0", ex: "x", ey: "0", thickness: "200" })).toMatchObject({ ok: false });
   expect(wallFromFields({ sx: "0", sy: "0", ex: "1000", ey: "0", thickness: "0" })).toMatchObject({ ok: false });
   const host = m.walls[0];

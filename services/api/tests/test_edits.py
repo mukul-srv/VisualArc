@@ -145,10 +145,11 @@ def test_stale_targets_warn_and_change_nothing(two):
     assert all(i.sources[0].format == "edit" for i in p.issues if i.code == "edit_target_missing")
 
 
-def test_non_orthogonal_and_duplicate_edits_are_rejected():
-    bad = {"op": "add_wall", "id": "e1", "start": [0, 0], "end": [1000, 500], "thickness": 200}
-    with pytest.raises(ValidationError, match="orthogonal"):
+def test_zero_length_and_duplicate_edits_are_rejected():
+    bad = {"op": "add_wall", "id": "e1", "start": [0, 0], "end": [0, 0], "thickness": 200}
+    with pytest.raises(ValidationError, match="length"):
         EditsRequest.model_validate({"edits": [bad]})
+    EditsRequest.model_validate({"edits": [{**bad, "end": [1000, 500]}]})  # a slanted wall is a valid edit now
     ok = {**bad, "end": [1000, 0]}
     with pytest.raises(ValidationError, match="unique"):
         EditsRequest.model_validate({"edits": [ok, ok]})
@@ -313,7 +314,7 @@ def test_blocking_edit_saves_nothing(client, tmp_path):
 def test_edits_api_validation_and_access(client, tmp_path):
     pid, fid = _project(client, tmp_path)
     url = f"/api/v1/jobs/projects/{pid}/floors/{fid}/edits"
-    bad = {"op": "add_wall", "id": "e1", "start": [0, 0], "end": [1000, 500], "thickness": 200}
+    bad = {"op": "add_wall", "id": "e1", "start": [0, 0], "end": [0, 0], "thickness": 200}
     assert client.put(url, json={"edits": [bad]}).status_code == 422
     assert client.put(f"/api/v1/jobs/projects/{pid}/floors/floor-9/edits", json={"edits": []}).status_code == 404
     assert TestClient(app).put(url, json={"edits": []}).status_code == 404  # another account

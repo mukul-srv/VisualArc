@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import {
-  EDIT, inspectorRows, nextId, openingFromFields, removeOpeningOp, removeWallOp, renameRoomOp, setOpeningOp, setWallOp, wallFromFields,
-  type EditModel, type EditOp, type InspectorRow, type Kind, type Selection,
+  ANGLE_MODES, EDIT, angleDeg, frameOf, inspectorRows, nextId, openingFromFields, removeOpeningOp, removeWallOp, renameRoomOp, setOpeningOp, setWallOp, toS, wallFromFields, wallFromPolar,
+  type AngleMode, type EditModel, type EditOp, type InspectorRow, type Kind, type Selection,
 } from "../lib/plan-edit";
 
 export type Tool = "select" | "wall" | "door" | "window" | "delete";
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
-  { id: "select", label: "Select / move", hint: "Click to select; drag a wall to move it, drag a wall end to change its length, drag an opening along its wall; drag empty space to pan; wheel to zoom." },
-  { id: "wall", label: "Add wall", hint: "Click the start, then the end: walls are horizontal or vertical." },
+  { id: "select", label: "Select / move", hint: "Click to select; drag a wall to move it, drag a wall end to change its length (or its angle, in an angle mode), drag an opening along its wall; drag empty space to pan; wheel to zoom." },
+  { id: "wall", label: "Add wall", hint: "Click the start, then the end. The angle mode decides the direction: orthogonal, 15 or 45 degree steps, or free." },
   { id: "door", label: "Add door", hint: "Press on a wall, drag along it and release: the door spans the dragged length." },
   { id: "window", label: "Add window", hint: "Press on a wall, drag along it and release: the window spans the dragged length." },
   { id: "delete", label: "Delete", hint: "Click a wall or an opening to remove it (a wall takes its openings with it)." },
@@ -17,7 +17,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
 
 export function EditorToolbar(p: {
   tool: Tool; setTool: (t: Tool) => void;
-  height: string; setHeight: (s: string) => void; sill: string; setSill: (s: string) => void; thickness: string; setThickness: (s: string) => void;
+  height: string; setHeight: (s: string) => void; sill: string; setSill: (s: string) => void; thickness: string; setThickness: (s: string) => void; mode: AngleMode; setMode: (m: AngleMode) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   pending: number; busy: boolean; onSave: () => void; onDiscard: () => void;
 }) {
@@ -27,6 +27,11 @@ export function EditorToolbar(p: {
       {TOOLS.map((t) => (
         <button key={t.id} type="button" aria-pressed={p.tool === t.id} onClick={() => p.setTool(t.id)}>{t.label}</button>
       ))}{" "}
+      {(p.tool === "wall" || p.tool === "select") && (
+        <label>Wall angle <select aria-label="Wall angle mode" value={p.mode} onChange={(e) => p.setMode(e.target.value as AngleMode)}>
+          {ANGLE_MODES.map((m) => <option key={m.mode} value={m.mode}>{m.label}</option>)}
+        </select>{" "}</label>
+      )}
       {p.tool === "wall" && (
         <label>Thickness (mm) <input aria-label="New wall thickness" inputMode="decimal" value={p.thickness} onChange={(e) => p.setThickness(e.target.value)} size={5} /></label>
       )}
@@ -80,10 +85,10 @@ export function PlanInspector(p: {
       {!p.disabled && (
         <div key={key}>
           {wall && <WallFields wall={wall} onApply={(w) => {
-            const r = wallFromFields(w);
+            const r = "length" in w ? wallFromPolar(w) : wallFromFields(w);
             if (!r.ok) return setError(r.error);
             const op = setWallOp(id, wall, r.value, r.value.thickness);
-            if (!op) return setError("A wall must be horizontal or vertical.");
+            if (!op) return setError("A wall needs a length.");
             setError(null);
             p.onOp(op);
           }} onDelete={() => p.onOp(removeWallOp(id, wall))} />}
@@ -107,9 +112,13 @@ export function PlanInspector(p: {
   );
 }
 
-function WallFields(p: { wall: EditModel["walls"][number]; onApply: (f: { sx: string; sy: string; ex: string; ey: string; thickness: string }) => void; onDelete: () => void }) {
+type WallPoints = { sx: string; sy: string; ex: string; ey: string; thickness: string };
+type WallPolar = { sx: string; sy: string; length: string; angle: string; thickness: string };
+
+function WallFields(p: { wall: EditModel["walls"][number]; onApply: (f: WallPoints | WallPolar) => void; onDelete: () => void }) {
   const w = p.wall;
   const [f, setF] = useState({ sx: String(w.start[0]), sy: String(w.start[1]), ex: String(w.end[0]), ey: String(w.end[1]), thickness: String(w.thickness) });
+  const [g, setG] = useState({ length: String(Math.round(Math.hypot(w.end[0] - w.start[0], w.end[1] - w.start[1]) * 100) / 100), angle: String(Math.round(angleDeg(w.start, w.end) * 100) / 100) });
   const set = (k: keyof typeof f) => (s: string) => setF({ ...f, [k]: s });
   return (
     <>
@@ -117,6 +126,11 @@ function WallFields(p: { wall: EditModel["walls"][number]; onApply: (f: { sx: st
       {fieldRow("End x (mm)", f.ex, set("ex"))}{fieldRow("End y (mm)", f.ey, set("ey"))}
       {fieldRow("Thickness (mm)", f.thickness, set("thickness"))}
       <button type="button" onClick={() => p.onApply(f)}>Apply</button>{" "}
+      <fieldset style={{ margin: "6px 0" }}>
+        <legend>Or by length and angle from the start</legend>
+        {fieldRow("Length (mm)", g.length, (s) => setG({ ...g, length: s }))}{fieldRow("Angle (degrees, from +x)", g.angle, (s) => setG({ ...g, angle: s }))}
+        <button type="button" onClick={() => p.onApply({ sx: f.sx, sy: f.sy, thickness: f.thickness, ...g })}>Apply length and angle</button>
+      </fieldset>
       <button type="button" onClick={p.onDelete}>Delete wall</button>
     </>
   );
@@ -125,10 +139,12 @@ function WallFields(p: { wall: EditModel["walls"][number]; onApply: (f: { sx: st
 function OpeningFields(p: { o: EditModel["openings"][number]; host?: EditModel["walls"][number]; onApply: (f: { offset: string; width: string; height: string; sill: string }, kind: Kind) => void; onDelete: () => void }) {
   const { o, host } = p;
   const horiz = Math.abs(o.end[1] - o.start[1]) <= EDIT.tolMm;
-  const lo = (pt: [number, number]) => (horiz ? pt[0] : pt[1]);
-  const hostLo = host ? Math.min(lo(host.start), lo(host.end)) : 0;
+  const vert = Math.abs(o.end[0] - o.start[0]) <= EDIT.tolMm;
+  const fr = !horiz && !vert && host ? frameOf(host.start, host.end) : null; // a diagonal host: offsets run along it from its start
+  const lo = (pt: [number, number]) => (fr ? toS(fr, pt) : horiz ? pt[0] : pt[1]);
+  const hostLo = host && !fr ? Math.min(lo(host.start), lo(host.end)) : 0;
   const [kind, setKind] = useState<Kind>(o.kind);
-  const [f, setF] = useState({ offset: String(Math.min(lo(o.start), lo(o.end)) - hostLo), width: String(o.width), height: o.height === null ? "" : String(o.height), sill: o.sill === null ? "" : String(o.sill) });
+  const [f, setF] = useState({ offset: String(Math.round((Math.min(lo(o.start), lo(o.end)) - hostLo) * 100) / 100), width: String(o.width), height: o.height === null ? "" : String(o.height), sill: o.sill === null ? "" : String(o.sill) });
   const set = (k: keyof typeof f) => (s: string) => setF({ ...f, [k]: s });
   return (
     <>

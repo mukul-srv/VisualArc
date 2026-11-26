@@ -10,7 +10,7 @@ const model: EditModel = {
 };
 const noop = () => {};
 const bar = (o: Partial<Parameters<typeof EditorToolbar>[0]> = {}) =>
-  renderToStaticMarkup(<EditorToolbar tool="select" setTool={noop} height="" setHeight={noop} sill="" setSill={noop} thickness="200" setThickness={noop} canUndo={false} canRedo={false} onUndo={noop} onRedo={noop} pending={0} busy={false} onSave={noop} onDiscard={noop} {...o} />);
+  renderToStaticMarkup(<EditorToolbar tool="select" setTool={noop} height="" setHeight={noop} sill="" setSill={noop} thickness="200" setThickness={noop} mode="ortho" setMode={noop} canUndo={false} canRedo={false} onUndo={noop} onRedo={noop} pending={0} busy={false} onSave={noop} onDiscard={noop} {...o} />);
 
 test("toolbar: every tool, the pressed one marked; undo, save and discard wait for a change", () => {
   const html = bar();
@@ -61,4 +61,14 @@ test("inspector: opening fields, a new wall has no source, rooms rename", () => 
   const r = inspector({ kind: "room", id: "room-001" });
   expect(r).toContain('aria-label="Room name"');
   expect(r).toContain('value="Room 1"');
+});
+
+test("the angle mode choice shows with the wall tool and select; the inspector gives length and angle fields", () => {
+  const w = bar({ tool: "wall" });
+  expect(w).toContain('aria-label="Wall angle mode"');
+  for (const l of ["Orthogonal", "15° steps", "45° steps", "Free angle"]) expect(w).toContain(l);
+  expect(bar({ tool: "door" })).not.toContain('aria-label="Wall angle mode"');
+  const html = renderToStaticMarkup(<PlanInspector base={model} committed={model} now={model} sel={{ kind: "wall", id: "wall-001" }} allOps={[]} onOp={noop} />);
+  expect(html).toContain('aria-label="Length (mm)"');
+  expect(html).toContain('aria-label="Angle (degrees, from +x)"');
 });
