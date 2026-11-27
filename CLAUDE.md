@@ -17,6 +17,7 @@ Portfolio project: restricted DXF floor plans → canonical building model with 
 ## Load on demand (Read the file only when the task matches)
 - Nested `CLAUDE.md` files load automatically when working inside their folder.
 - Auto-loaded by path (`.claude/rules/`): `geometry.md` (engine code), `testing.md` (tests), `learning-notes.md` (docs/learning).
+- UX overhaul: `/ux-overhaul` (user-level skill suite; profile `.claude/playbooks/ux-profile.md`).
 - Read manually (`.claude/playbooks/`):
   - `orchestration.md`: planning, delegating to subagents (agents in `.claude/agents/`), CI gate, merge flow.
   - `checkpoints.md`: before stopping for user input or making architecture/domain decisions.
