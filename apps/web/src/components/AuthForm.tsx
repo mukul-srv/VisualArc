@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { credentialErrors, getProviders, login, me, oauthUrl, register, safeNext, type Providers } from "../lib/auth";
 import styles from "./auth.module.css";
@@ -24,6 +24,10 @@ export function AuthFormView(props: {
 }) {
   const { mode, providers, next, errors, busy, onSubmit } = props;
   const [v, setV] = useState({ email: "", password: "", name: "" });
+  const alertRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (errors.length > 0) alertRef.current?.focus(); // keyboard and screen-reader users land on the message
+  }, [errors]);
   const title = mode === "login" ? "Log in" : "Create account";
   const other = mode === "login" ? "register" : "login";
   const suffix = next === "/" ? "" : `?next=${encodeURIComponent(next)}`;
@@ -31,7 +35,7 @@ export function AuthFormView(props: {
     <main className={styles.card}>
       <h1>{title}</h1>
       {errors.length > 0 && (
-        <ul role="alert" className={styles.errors}>
+        <ul role="alert" tabIndex={-1} ref={alertRef} className={styles.errors}>
           {errors.map((e) => (
             <li key={e}>{e}</li>
           ))}
@@ -61,10 +65,12 @@ export function AuthFormView(props: {
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             required
             minLength={mode === "register" ? 10 : undefined}
+            aria-describedby={mode === "register" ? "password-rule" : undefined}
             value={v.password}
             onChange={(e) => setV({ ...v, password: e.target.value })}
           />
         </label>
+        {mode === "register" && <small id="password-rule">At least 10 characters.</small>}
         <button type="submit" disabled={busy}>
           {busy ? "Please wait…" : title}
         </button>

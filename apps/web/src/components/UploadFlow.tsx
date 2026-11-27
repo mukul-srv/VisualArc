@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { addFloorJob, draftJob, generateJob, STAGE_LABEL, type DraftResult, type JobProgress } from "@/lib/jobs";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { convertPdf, createProject, getPresets, getProject, importIfc, isGenerationId, splitUpload, uploadDxf, type Failure, type Issue, type Preflight, type Presets } from "@/lib/api";
 import { parseManifest, viewerUrl, type Floor } from "@/lib/project";
@@ -11,6 +12,7 @@ import { changeTarget, EMPTY_FORM, NO_TARGET, resetForNewFile, restoredFromCache
 import { HELP } from "@/lib/help";
 import { focusSelector, type FixAction } from "@/lib/issues";
 import { buildSplitRequest, initialRows, type SplitRow } from "@/lib/split";
+import styles from "./dashboard.module.css";
 import { AppNav } from "./AppNav";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ConventionsPanel } from "./ConventionsPanel";
@@ -51,11 +53,15 @@ export function UploadFlow() {
   }, []);
 
   // /new?project=<id> (Add floor on the project page or dashboard): add to that project
+  const [missing, setMissing] = useState(false); // /new?project= names a project that does not exist
   const [addingTo, setAddingTo] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("project");
-    if (!id || !isGenerationId(id)) return;
+    if (!id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- URL read once on mount
+    if (!isGenerationId(id)) return setMissing(true);
     getProject(id).then((r) => {
+      if (!r.ok && r.kind === "not_found") return setMissing(true);
       const m = r.ok ? parseManifest(r.manifest) : null;
       if (!m) return setFailure(r.ok ? { ok: false, kind: "error", message: "Malformed project.", issues: [] } : r);
       setAddingTo({ id, name: m.name });
@@ -262,6 +268,15 @@ export function UploadFlow() {
   const shown = blockedIssues ?? pre?.issues ?? [];
   const blocked = unresolvable(shown, unitsDoubtful({ issues: shown }));
 
+  if (missing)
+    return (
+      <main className={styles.page}>
+        <AppNav />
+        <h1>Project not found</h1>
+        <p role="alert">This project could not be found.</p>
+        <Link href="/">Back to projects</Link>
+      </main>
+    );
   return (
     <main style={{ maxWidth: 760, margin: "32px auto", padding: "0 16px", font: "15px system-ui" }}>
       <AppNav />
@@ -269,7 +284,7 @@ export function UploadFlow() {
         ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
       <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Floor plan (DXF, DWG, IFC or PDF) to 3D"}</h1>
-      <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null)}</strong></p>
+      <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null, review !== null && !reviewStale(review.key, inputs))}</strong></p>
       <p><small>Values your drawing lacks use defaults, and every one is reported as assumed.</small></p>
       <input type="file" aria-label="Floor plan file" accept=".dxf,.dwg,.ifc,.pdf" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
@@ -300,8 +315,12 @@ export function UploadFlow() {
       )}
       {pre && pre.kind !== "ifc" && (
         <>
-          <h2>What we found</h2>
-          <IssueList issues={shown} />
+          {!review && (
+            <>
+              <h2>What we found</h2>
+              <IssueList issues={shown} />
+            </>
+          )}
           {convInfo && (
             <details>
               <summary title={HELP.conventions}>Layer conventions (advanced): {pre.inventory.layers.length} layers in this drawing</summary>
@@ -321,6 +340,8 @@ export function UploadFlow() {
             proj={proj}
             setProj={changeProj}
             errors={errors}
+            addingTo={addingTo !== null}
+            reviewed={review !== null}
             disabled={busy || blocked.length > 0}
             onSubmit={onReview}
           />

@@ -47,3 +47,22 @@ a {
     color-scheme: dark;
   }
 }
+
+/* Viewer on narrow screens: the side panel becomes a bottom sheet so the model stays visible. */
+@media (max-width: 900px) {
+  /* Matches the viewer title/toolbar block by its inline `left: 12px` (a class would re-flag its styled line in the visual guard);
+     !important beats inline sizes. Changing that inline left value in viewer/page.tsx silently stops this rule. */
+  [style*="left: 12px"] {
+    max-width: calc(100vw - 24px);
+    max-height: 45vh;
+    overflow: auto;
+  }
+  .viewer-panel {
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0;
+    left: 0;
+    max-width: none !important;
+    max-height: 35vh !important;
+  }
+}

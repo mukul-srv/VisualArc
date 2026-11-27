@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getProject } from "../lib/api";
 import { parseManifest, type Manifest } from "../lib/project";
@@ -28,6 +29,7 @@ export function ProjectView({ id }: { id: string }) {
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null); // the project itself could not be loaded
+  const [notFound, setNotFound] = useState(false);
   const [versionsFailed, setVersionsFailed] = useState(false);
   const [convFailed, setConvFailed] = useState(false);
   const [name, setName] = useState("");
@@ -43,6 +45,7 @@ export function ProjectView({ id }: { id: string }) {
   const load = useCallback(async () => {
     const [p, v] = await Promise.all([getProject(id), listVersions(id)]);
     const m = p.ok ? parseManifest(p.manifest) : null;
+    if (!p.ok && p.kind === "not_found") return setNotFound(true);
     if (!p.ok || !m) return setLoadError(p.ok ? "Malformed project." : p.message);
     setLoadError(null);
     setManifest(m);
@@ -87,7 +90,13 @@ export function ProjectView({ id }: { id: string }) {
       <main className={styles.page}>
         <AppNav />
         <Breadcrumbs trail={[{ label: "Dashboard", href: "/" }, { label: "Project" }]} />
-        {loadError ? (
+        {notFound ? (
+          <>
+            <h1>Project not found</h1>
+            <p role="alert">This project could not be found.</p>
+            <Link href="/">Back to projects</Link>
+          </>
+        ) : loadError ? (
           <div role="alert" className={styles.error}>
             <p>Could not load this project. {loadError}</p>
             <button type="button" onClick={retry}>Try again</button>
@@ -118,7 +127,7 @@ export function ProjectView({ id }: { id: string }) {
       {confirming && manage && (
         <div role="alertdialog" aria-label="Confirm delete" className={styles.row}>
           <span>Delete &quot;{manifest.name}&quot;? It disappears from every list (collaborators lose access); stored files are kept.</span>
-          <button disabled={busy} onClick={() => run(() => deleteProject(id), () => router.push("/"))}>Confirm delete</button>
+          <button disabled={busy} onClick={() => run(() => deleteProject(id), () => router.push("/?deleted=1"))}>Confirm delete</button>
           <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
         </div>
       )}

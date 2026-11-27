@@ -63,7 +63,7 @@ export type GenerationParams = {
 
 export type Failure = {
   ok: false;
-  kind: "rejected" | "blocked" | "unauthorized" | "error";
+  kind: "rejected" | "blocked" | "unauthorized" | "not_found" | "error";
   message: string;
   issues: Issue[];
 };
@@ -98,7 +98,7 @@ export async function send<T>(call: () => Promise<Response>): Promise<Result<T>>
     const body = await res.json();
     return { ok: false, kind: "blocked", message: body.detail, issues: body.issues ?? [] };
   }
-  const kind = res.status === 422 || res.status === 413 ? "rejected" : res.status === 401 ? "unauthorized" : "error";
+  const kind = res.status === 422 || res.status === 413 ? "rejected" : res.status === 401 ? "unauthorized" : res.status === 404 ? "not_found" : "error";
   return { ok: false, kind, message: await detail(res), issues: [] };
 }
 
@@ -106,6 +106,8 @@ export async function send<T>(call: () => Promise<Response>): Promise<Result<T>>
 const rejectedUpload = (r: Result<Preflight>, name?: string): Result<Preflight> => {
   if (r.ok || r.kind !== "rejected") return r;
   const file = name ? `"${name}"` : "the file";
+  // the server's DXF reader says "not a DXF file" for anything it cannot parse, which contradicts the accepted list
+  if (/not a DXF file/i.test(r.message)) return { ...r, message: `${file} is not a supported floor plan file. Use DXF, DWG, IFC or PDF. Choose a floor plan file.` };
   const why = r.message.replace(/the uploaded file/g, file).replace(/\.$/, "");
   return { ...r, message: `Could not read ${file}: ${why}. Accepted file types: DXF, DWG, IFC or PDF. Choose a floor plan file.` };
 };

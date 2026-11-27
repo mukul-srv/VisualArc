@@ -13,7 +13,7 @@ export function ViewerNav({ shared, manifest, viewing, standalone }: { shared: b
         <Link href="/" style={LINK}>&larr; Back to dashboard</Link>
         <nav aria-label="Breadcrumb"><Link href="/" style={LINK}>Dashboard</Link> / Model</nav>
         <Link href="/profile" style={LINK}>Profile</Link>
-        {standalone && <p role="note">This model is not saved to a project yet. Use Save as project on the dashboard to keep versions and share it.</p>}
+        {standalone && <p role="note">This model is not saved to a project yet. Go to the dashboard and choose Save as project to keep versions and share it.</p>}
       </div>
     );
   return (

@@ -62,3 +62,37 @@ test("viewer: one level-1 heading", async ({ page }) => {
   await generateFixture(page);
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
 });
+
+test("viewer: unknown model shows a plain not-found with a way back", async ({ page }) => {
+  await page.goto("/viewer?generation=bogus");
+  await expect(page.getByRole("heading", { name: "This model could not be found." })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to projects" })).toBeVisible();
+  await expect(page.getByText("Rooms")).toHaveCount(0);
+});
+
+test("project page: unknown project is not found, without a pointless retry", async ({ page }) => {
+  await page.goto(`/projects/${"0".repeat(32)}`);
+  await expect(page.getByText("This project could not be found.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Back to projects" })).toBeVisible();
+});
+
+test("add floor: unknown project is not found", async ({ page }) => {
+  await page.goto(`/new?project=${"0".repeat(32)}`);
+  await expect(page.getByText("This project could not be found.")).toBeVisible();
+});
+
+test.describe("register rule", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+  test("register states the password rule", async ({ page }) => {
+    await page.goto("/register");
+    await expect(page.getByText("At least 10 characters.")).toBeVisible();
+    await expectNoA11yViolations(page);
+  });
+});
+
+test("viewer: a model that fails to load gives its reason, not 'not found'", async ({ page }) => {
+  await page.goto("/viewer?model=no_such_model");
+  await expect(page.getByRole("heading", { name: /^This model could not be shown:/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to projects" })).toBeVisible();
+});

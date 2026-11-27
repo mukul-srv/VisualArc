@@ -18,6 +18,8 @@ type Props = {
   proj: ProjectTarget;
   setProj: (p: ProjectTarget) => void;
   errors: string[];
+  reviewed?: boolean; // a review exists: "Re-run review" below replaces this button
+  addingTo?: boolean; // /new?project=: the target is fixed, so the floor fields come first and the id is not shown
   disabled: boolean;
   onSubmit: () => void;
 };
@@ -42,6 +44,23 @@ export function UploadForm(p: Props) {
         onChange={(e) => setForm({ ...form, [k]: e.target.value })}
       />
     </label>
+  );
+  // "Floor name is required." only comes from onGenerate (single floor); the split path (onSplit) never asks for it, so
+  // hiding the floor fields when splitting cannot hide this error.
+  const nameError = p.errors.find((e) => e.startsWith("Floor name is required"));
+  const listErrors = p.errors.filter((e) => e !== nameError);
+  const floorFields = (
+    <>
+      <label style={block}>
+        Floor name{" "}
+        <input value={p.proj.floorName} aria-invalid={nameError ? true : undefined} aria-describedby={nameError ? "floor-name-error" : undefined} onChange={(e) => p.setProj({ ...p.proj, floorName: e.target.value })} />
+        {nameError && <span id="floor-name-error" role="alert"> {nameError}</span>}
+      </label>
+      <label style={block}>
+        Floor elevation (mm){" "}
+        <input inputMode="decimal" value={p.proj.elevation} placeholder={step === undefined ? undefined : isGenerationId(p.proj.target.trim()) ? `default highest floor + ${step}` : "default 0"} onChange={(e) => p.setProj({ ...p.proj, elevation: e.target.value })} /> unique per project
+      </label>
+    </>
   );
   const kept = rows.filter((r) => !r.exclude);
 
@@ -97,6 +116,7 @@ export function UploadForm(p: Props) {
           </table>
         </>
       )}
+      {p.addingTo && !splitting && floorFields}
       <details style={{ margin: "12px 0" }}>
         <summary title={HELP.advancedUpload}>Advanced settings</summary>
         <p>Leave a field empty to use the default shown; defaults are reported as assumed in the result.</p>
@@ -128,7 +148,7 @@ export function UploadForm(p: Props) {
             </table>
           </>
         )}
-        {!splitting && (
+        {!splitting && !p.addingTo && (
           <>
             <label style={block}>
               <input type="checkbox" checked={p.proj.on} onChange={(e) => p.setProj({ ...p.proj, on: e.target.checked })} /> Add to a project (multi-floor){" "}
@@ -140,28 +160,24 @@ export function UploadForm(p: Props) {
                   Project id (existing) or name (new){" "}
                   <input value={p.proj.target} onChange={(e) => p.setProj({ ...p.proj, target: e.target.value })} />
                 </label>
-                <label style={block}>
-                  Floor name <input value={p.proj.floorName} onChange={(e) => p.setProj({ ...p.proj, floorName: e.target.value })} />
-                </label>
-                <label style={block}>
-                  Floor elevation (mm){" "}
-                  <input inputMode="decimal" value={p.proj.elevation} placeholder={step === undefined ? undefined : isGenerationId(p.proj.target.trim()) ? `default highest floor + ${step}` : "default 0"} onChange={(e) => p.setProj({ ...p.proj, elevation: e.target.value })} /> unique per project
-                </label>
+                {floorFields}
               </>
             )}
           </>
         )}
       </details>
-      {p.errors.length > 0 && (
+      {listErrors.length > 0 && (
         <ul role="alert" style={{ color: "#b00020" }}>
-          {p.errors.map((e) => (
+          {listErrors.map((e) => (
             <li key={e}>{e}</li>
           ))}
         </ul>
       )}
-      <button disabled={p.disabled} onClick={p.onSubmit}>
-        Review
-      </button>
+      {!p.reviewed && (
+        <button disabled={p.disabled} onClick={p.onSubmit}>
+          Review
+        </button>
+      )}
     </>
   );
 }

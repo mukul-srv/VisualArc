@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { shortDate, type ProjectSummary, type RecentGeneration, type VersionInfo } from "../lib/projects";
-import { viewerUrl, type Role } from "../lib/project";
+import { count, viewerUrl, type Role } from "../lib/project";
 import { can } from "./ProjectParts";
 import { MoreMenu } from "./MoreMenu";
 import { HELP } from "../lib/help";
@@ -20,6 +20,7 @@ export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSum
       </p>
     );
   return (
+    <div className={styles.scroll} role="region" aria-label="Projects table" tabIndex={0}>
     <table className={styles.table}>
       <caption className={styles.sr}>My projects</caption>
       <thead>
@@ -67,6 +68,7 @@ export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSum
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 
@@ -149,7 +151,7 @@ export function VersionList({ projectId, versions, onRestore, busy, readOnly }: 
     <ol reversed className={styles.versions} aria-label="Version history">
       {versions.map((v) => (
         <li key={v.number} value={v.number}>
-          <strong>Version {v.number}</strong>: {v.message} ({v.floor_count} floors, {shortDate(v.created_at)}){" "}
+          <strong>Version {v.number}</strong>: {v.message} ({count(v.floor_count, "floor")}, {shortDate(v.created_at)}){" "}
           <a href={viewerUrl(projectId, undefined, v.number)}>View</a>{" "}
           {readOnly ? null : v.number === latest ? (
             <em>current</em>
