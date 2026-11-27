@@ -102,8 +102,16 @@ export async function send<T>(call: () => Promise<Response>): Promise<Result<T>>
   return { ok: false, kind, message: await detail(res), issues: [] };
 }
 
-export const uploadDxf = (file: Blob & { name?: string }, f: Fetch = fetch) =>
-  send<Preflight>(() =>
+/** A rejected upload says which file, what is accepted and what to do next (the server text names only "the uploaded file"). */
+const rejectedUpload = (r: Result<Preflight>, name?: string): Result<Preflight> => {
+  if (r.ok || r.kind !== "rejected") return r;
+  const file = name ? `"${name}"` : "the file";
+  const why = r.message.replace(/the uploaded file/g, file).replace(/\.$/, "");
+  return { ...r, message: `Could not read ${file}: ${why}. Accepted file types: DXF, DWG, IFC or PDF. Choose a floor plan file.` };
+};
+
+export const uploadDxf = async (file: Blob & { name?: string }, f: Fetch = fetch) =>
+  rejectedUpload(await send<Preflight>(() =>
     // the file name is only for display (the default name of a standalone model)
     f(`${API_BASE}/api/v1/uploads${file.name ? `?filename=${encodeURIComponent(file.name)}` : ""}`, {
       method: "POST",
@@ -111,7 +119,7 @@ export const uploadDxf = (file: Blob & { name?: string }, f: Fetch = fetch) =>
       headers: { "Content-Type": "application/octet-stream" },
       body: file,
     }),
-  );
+  ), file.name);
 
 /** One page of an uploaded PDF as the upload's DXF, at the scale the user confirmed; answers like uploadDxf. */
 export const convertPdf = (uploadId: string, body: import("./pdf-scale").PdfBody, f: Fetch = fetch) =>
