@@ -20,9 +20,15 @@ test("upload posts the raw file body and returns preflight", async () => {
   expect(seen!.init.body).toBe(file);
 });
 
-test("422 is a rejection with the server message", async () => {
-  const r = await uploadDxf(new Blob(), reply(422, { detail: "not a DXF file" }));
-  expect(r).toMatchObject({ ok: false, kind: "rejected", message: "not a DXF file" });
+test("422 is a rejection that names the file, lists accepted types and says what to do next", async () => {
+  const file = Object.assign(new Blob(), { name: "plan.txt" });
+  const r = await uploadDxf(file, reply(422, { detail: "not a DXF file: bad header in the uploaded file." }));
+  expect(r).toMatchObject({ ok: false, kind: "rejected" });
+  const m = !r.ok ? r.message : "";
+  expect(m).toContain('"plan.txt"');
+  expect(m).toContain("not a DXF file");
+  expect(m).toContain("DXF, DWG, IFC or PDF");
+  expect(m).toContain("Choose a floor plan file.");
 });
 
 test("413 is a rejection", async () => {

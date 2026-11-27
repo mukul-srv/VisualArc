@@ -40,3 +40,25 @@ test("signed in: /login redirects to next or the dashboard", async ({ page }) =>
   await page.goto("/login?next=%2Fprofile");
   await expect(page).toHaveURL(/\/profile$/);
 });
+
+test("document titles name the page and the product", async ({ page }) => {
+  for (const [path, title] of [["/", "My projects | Visual Arc"], ["/new", "New project | Visual Arc"], ["/profile", "Profile | Visual Arc"]]) {
+    await page.goto(path);
+    await expect(page).toHaveTitle(title);
+  }
+});
+
+test.describe("signed out titles", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+  test("login and register titles", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page).toHaveTitle("Log in | Visual Arc");
+    await page.goto("/register");
+    await expect(page).toHaveTitle("Create account | Visual Arc");
+  });
+});
+
+test("viewer: one level-1 heading", async ({ page }) => {
+  await generateFixture(page);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+});

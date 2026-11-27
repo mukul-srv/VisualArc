@@ -3,14 +3,12 @@ import styles from "./dashboard.module.css";
 
 export type Crumb = { label: string; href?: string };
 
-// `Dashboard / Project / Page` plus a Back link to the parent crumb. The last crumb is the current
+// `Dashboard / Project / Page`. Every crumb but the last links (the parent is the way back). The last crumb is the current
 // page (no link). A trail with a single crumb (the root) renders nothing.
 export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
   if (trail.length < 2) return null;
-  const parent = [...trail.slice(0, -1)].reverse().find((c) => c.href);
   return (
     <div className={styles.crumbs}>
-      {parent?.href && <Link href={parent.href}>&larr; Back to {parent.label}</Link>}
       <nav aria-label="Breadcrumb">
         <ol className={styles.crumbList}>
           {trail.map((c, i) => (

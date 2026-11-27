@@ -885,7 +885,7 @@ export default function ViewerPage() {
           onMeasure={() => toggleMeasure.current()}
           exports={exportTarget && { obj: exportUrl(exportTarget, "obj", shareToken), ifc: exportUrl(exportTarget, "ifc", shareToken) }}
         />
-        {walking ? "WASD/arrows move, drag to look, E opens a door" : status}
+        <span role="heading" aria-level={1}>{walking ? "WASD/arrows move, drag to look, E opens a door" : status}</span>
         {hint && <div role="status" style={{ color: "#ffcc66" }}>{hint}</div>}
         <ViewerNav shared={shared} manifest={manifest} viewing={viewing} standalone={generationId !== null} />
         {building && building.floors.length > 1 && (
