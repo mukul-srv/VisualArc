@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { credentialErrors, getProviders, login, oauthUrl, register, safeNext, type Providers } from "../lib/auth";
+import { credentialErrors, getProviders, login, me, oauthUrl, register, safeNext, type Providers } from "../lib/auth";
 import styles from "./auth.module.css";
 
 // OAuth callback error codes (?error=) -> text; anything else is shown as given.
@@ -98,6 +98,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     const oauthError = q.get("error");
     if (oauthError) setErrors([OAUTH_ERRORS[oauthError] ?? oauthError]);
     getProviders().then(setProviders);
+    // already signed in: nothing to do here
+    me().then((r) => r.ok && router.replace(safeNext(q.get("next")))).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   async function submit({ email, password, name }: { email: string; password: string; name: string }) {

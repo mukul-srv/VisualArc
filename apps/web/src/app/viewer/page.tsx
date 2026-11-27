@@ -887,7 +887,7 @@ export default function ViewerPage() {
         />
         {walking ? "WASD/arrows move, drag to look, E opens a door" : status}
         {hint && <div role="status" style={{ color: "#ffcc66" }}>{hint}</div>}
-        <ViewerNav shared={shared} manifest={manifest} viewing={viewing} />
+        <ViewerNav shared={shared} manifest={manifest} viewing={viewing} standalone={generationId !== null} />
         {building && building.floors.length > 1 && (
           <BuildingControls view={view} disabled={walking} onChange={changeView} />
         )}

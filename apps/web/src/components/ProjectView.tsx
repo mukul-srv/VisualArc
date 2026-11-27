@@ -27,6 +27,9 @@ export function ProjectView({ id }: { id: string }) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null); // the project itself could not be loaded
+  const [versionsFailed, setVersionsFailed] = useState(false);
+  const [convFailed, setConvFailed] = useState(false);
   const [name, setName] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -40,11 +43,14 @@ export function ProjectView({ id }: { id: string }) {
   const load = useCallback(async () => {
     const [p, v] = await Promise.all([getProject(id), listVersions(id)]);
     const m = p.ok ? parseManifest(p.manifest) : null;
-    if (!p.ok || !m) return setError(p.ok ? "Malformed project." : p.message);
+    if (!p.ok || !m) return setLoadError(p.ok ? "Malformed project." : p.message);
+    setLoadError(null);
     setManifest(m);
     setName(m.name);
+    setVersionsFailed(!v.ok);
     if (v.ok) setVersions(v.items);
     const [c, info] = await Promise.all([getProjectConventions(id), listConventions()]);
+    setConvFailed(!c.ok || !info.ok);
     if (c.ok) setConv({ preset: c.preset, mapping: c.mapping });
     if (info.ok) setConvInfo({ presets: info.presets, roles: info.roles });
   }, [id]);
@@ -57,6 +63,11 @@ export function ProjectView({ id }: { id: string }) {
     if (t === "conventions") queueMicrotask(() => { setTab("floors"); setConvOpen(true); }); // old links: now a fold under Floors
     else if (["floors", "parameters", "versions", "sharing"].includes(t)) queueMicrotask(() => setTab(t as TabId));
   }, []);
+  const retry = () => {
+    setLoadError(null);
+    setManifest(null);
+    load();
+  };
   const select = (t: TabId) => {
     setTab(t);
     window.history.replaceState(null, "", `#${t}`);
@@ -76,7 +87,12 @@ export function ProjectView({ id }: { id: string }) {
       <main className={styles.page}>
         <AppNav />
         <Breadcrumbs trail={[{ label: "Dashboard", href: "/" }, { label: "Project" }]} />
-        {error ? <p role="alert" className={styles.error}>{error}</p> : <p role="status">Loading…</p>}
+        {loadError ? (
+          <div role="alert" className={styles.error}>
+            <p>Could not load this project. {loadError}</p>
+            <button type="button" onClick={retry}>Try again</button>
+          </div>
+        ) : <p role="status">Loading…</p>}
       </main>
     );
   const role = manifest.role ?? "viewer";
@@ -90,7 +106,7 @@ export function ProjectView({ id }: { id: string }) {
       <h1>{manifest.name}</h1>
       {!edit && <p>You have view-only access to this project.</p>}
       <ProjectToolbar id={id} role={role} floors={manifest.floors} busy={busy}
-        onShare={() => select("sharing")} onRename={() => setRenaming(true)} onDelete={() => setConfirming(true)} />
+        onShare={() => { select("sharing"); setTimeout(() => document.getElementById("panel-sharing")?.focus()); }} onRename={() => setRenaming(true)} onDelete={() => setConfirming(true)} />
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {renaming && (
         <form className={styles.row} onSubmit={(e) => { e.preventDefault(); run(() => renameProject(id, name.trim()), () => { setRenaming(false); return load(); }); }}>
@@ -106,8 +122,9 @@ export function ProjectView({ id }: { id: string }) {
           <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
         </div>
       )}
+      {tab === "sharing" && !manage && <p role="status">Only the project owner can share.</p>}
       <ProjectTabs role={role} tab={shown} onSelect={select} />
-      <section role="tabpanel" id={`panel-${shown}`} aria-labelledby={`tab-${shown}`}>
+      <section role="tabpanel" tabIndex={-1} id={`panel-${shown}`} aria-labelledby={`tab-${shown}`}>
         {shown === "floors" && (
           <>
             <FloorList projectId={id} floors={manifest.floors} role={role} busy={busy}
@@ -134,6 +151,12 @@ export function ProjectView({ id }: { id: string }) {
                 <BuildingPanel projectId={id} readOnly={!edit} onChanged={load} />
               </details>
             )}
+            {convFailed && (
+              <div role="alert" className={styles.error}>
+                <p>Could not load conventions.</p>
+                <button type="button" onClick={load}>Try again</button>
+              </div>
+            )}
             {conv && convInfo && (
               <details open={convOpen} onToggle={(e) => setConvOpen((e.target as HTMLDetailsElement).open)}>
                 <summary title={HELP.conventions}>Layer conventions (advanced)</summary>
@@ -149,7 +172,13 @@ export function ProjectView({ id }: { id: string }) {
           </>
         )}
         {shown === "parameters" && <ParametersPanel key={id} projectId={id} readOnly={!edit} onChanged={load} />}
-        {shown === "versions" && (
+        {shown === "versions" && versionsFailed && (
+          <div role="alert" className={styles.error}>
+            <p>Could not load versions.</p>
+            <button type="button" onClick={load}>Try again</button>
+          </div>
+        )}
+        {shown === "versions" && !versionsFailed && (
           <VersionList projectId={id} versions={versions} busy={busy} onRestore={(n) => run(() => restoreVersion(id, n), load)} readOnly={!edit} />
         )}
         {shown === "sharing" && manage && <AccessPanel projectId={id} />}

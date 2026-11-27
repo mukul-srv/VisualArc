@@ -11,11 +11,15 @@ export function Dashboard() {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [recent, setRecent] = useState<RecentGeneration[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [listFailed, setListFailed] = useState(false);
+  const [recentFailed, setRecentFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   const reload = () => {
-    listProjects().then((r) => (r.ok ? setProjects(r.items) : setError(r.message)));
-    recentGenerations().then((r) => r.ok && setRecent(r.items));
+    setListFailed(false);
+    setRecentFailed(false);
+    listProjects().then((r) => (r.ok ? setProjects(r.items) : (setListFailed(true), setProjects(null))));
+    recentGenerations().then((r) => (r.ok ? setRecent(r.items) : setRecentFailed(true)));
   };
   useEffect(() => {
     queueMicrotask(reload);
@@ -33,9 +37,21 @@ export function Dashboard() {
       <AppNav />
       <h1>My projects</h1>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
-      {projects === null && !error && <p role="status">Loading…</p>}
+      {projects === null && !listFailed && <p role="status">Loading…</p>}
+      {listFailed && (
+        <div role="alert" className={styles.error}>
+          <p>Could not load your projects.</p>
+          <button type="button" onClick={reload}>Try again</button>
+        </div>
+      )}
       {projects && <ProjectList projects={projects} busy={busy} onDelete={(p) => act(() => deleteProject(p.id), reload)} />}
       <h2>Recent buildings</h2>
+      {recentFailed && (
+        <div role="alert" className={styles.error}>
+          <p>Could not load recent buildings.</p>
+          <button type="button" onClick={reload}>Try again</button>
+        </div>
+      )}
       <RecentList items={recent} busy={busy}
         onRename={(gid, name) => act(() => renameGeneration(gid, name), reload)}
         onDelete={(gid) => act(() => deleteGeneration(gid), reload)}

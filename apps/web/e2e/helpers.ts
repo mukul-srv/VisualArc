@@ -6,8 +6,7 @@ const FIXTURE = path.resolve(__dirname, "../../../fixtures/input/fixture_a.dxf")
 /** Upload fixture_a.dxf through the UI and land in the viewer (a standalone generation). */
 export async function generateFixture(page: Page) {
   await page.goto("/new");
-  // the file input has no accessible name (audited separately); the page has exactly one
-  await page.locator("input[type=file]").setInputFiles(FIXTURE);
+  await page.getByLabel("Floor plan file").setInputFiles(FIXTURE);
   await page.getByRole("button", { name: "Review", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review before saving" })).toBeVisible({ timeout: 90_000 });
   await page.getByRole("button", { name: "Accept & generate" }).click();

@@ -16,7 +16,7 @@ export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSum
   if (projects.length === 0)
     return (
       <p>
-        No projects yet. <Link href="/new">Create your first project</Link> from a DXF floor plan.
+        No projects yet. <Link href="/new">Create your first project</Link> from a floor plan.
       </p>
     );
   return (
