@@ -34,3 +34,11 @@ test("past version: back to versions and a read-only banner", () => {
 test("standalone model goes back to the dashboard", () => {
   expect(html(false, null)).toContain("Back to dashboard");
 });
+
+test("standalone model: not-saved note and Profile link, never on share links", () => {
+  const h = renderToStaticMarkup(<ViewerNav shared={false} manifest={null} viewing={null} standalone />);
+  expect(h).toContain('role="note"');
+  expect(h).toContain("This model is not saved to a project yet.");
+  expect(h).toContain('href="/profile"');
+  expect(renderToStaticMarkup(<ViewerNav shared manifest={null} viewing={null} standalone />)).toBe("");
+});

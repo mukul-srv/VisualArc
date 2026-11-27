@@ -38,14 +38,14 @@ export function ProjectToolbar(p: {
   return (
     <div role="toolbar" aria-label="Project actions" className={styles.row}>
       {first ? (
-        <a href={viewerUrl(p.id, first.id)}>Open in viewer</a>
+        <Link href={viewerUrl(p.id, first.id)}>Open in viewer</Link>
       ) : (
         <span title="Add a floor first" aria-disabled="true">Open in viewer (no floors yet)</span>
       )}
       {edit && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
+      {manage && <button type="button" onClick={p.onShare}>Share</button>}
       {edit && (
         <MoreMenu title={HELP.more}>
-          {manage && <button type="button" onClick={p.onShare}>Share</button>}
           <button type="button" disabled={p.busy} onClick={p.onRename}>Rename</button>
           {manage && <button type="button" disabled={p.busy} onClick={p.onDelete}>Delete</button>}
         </MoreMenu>
@@ -99,7 +99,7 @@ export function FloorList(p: {
           ) : (
             <>
               <span>{f.name} at {f.elevation.value} mm</span>
-              <a href={viewerUrl(p.projectId, f.id)}>Open in viewer</a>
+              <Link href={viewerUrl(p.projectId, f.id)}>Open in viewer</Link>
               {edit && p.onEditPlan && <button type="button" disabled={p.busy} onClick={() => p.onEditPlan!(f.id)}>Edit plan</button>}
               {edit && (
                 <MoreMenu title={HELP.more}>

@@ -28,8 +28,9 @@ test("the counter ignores closed details but keeps their summary", () => {
 // Controls visible at first glance per screen (owner), counted without the bodies of closed folds.
 // Before the simplification: nav 4, project row 5, recent row 4, project toolbar 5, tabs 5, floor list 6
 // (2 floors), upload form 4, conventions panel 1 + one select per unmapped layer, viewer toolbar 4 (now 3).
+// projectToolbar 3 -> 4: UX spec makes the owner Share action a visible toolbar button (was inside More).
 // Kept as upper bounds so the screens do not grow back; every control still exists, one click away.
-const MAX = { nav: 3, projectRow: 3, recentRow: 3, projectToolbar: 3, projectTabs: 4, uploadForm: 4, conventions: 1, viewerToolbar: 3, floorList: 4 };
+const MAX = { nav: 3, projectRow: 3, recentRow: 3, projectToolbar: 4, projectTabs: 4, uploadForm: 4, conventions: 1, viewerToolbar: 3, floorList: 4 };
 
 test("first-glance control counts stay low", () => {
   const counts = {
