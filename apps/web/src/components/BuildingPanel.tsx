@@ -1,5 +1,6 @@
 "use client";
 
+import { count } from "../lib/project";
 import { useCallback, useEffect, useState } from "react";
 import { confirmPairing, getBuilding, pairRows, setOffset, unpair, unpairedStairs, type Building } from "../lib/building";
 import styles from "./dashboard.module.css";
@@ -36,7 +37,7 @@ export function BuildingPanel({ projectId, readOnly, onChanged }: { projectId: s
   return (
     <div>
       <p>
-        {b.stats.floor_count} floors, {b.stats.room_count} rooms, {(b.stats.total_area_mm2 / 1e6).toFixed(1)} m², height {(b.stats.height_mm / 1000).toFixed(2)} m.
+        {count(b.stats.floor_count, "floor")}, {count(b.stats.room_count, "room")}, {(b.stats.total_area_mm2 / 1e6).toFixed(1)} m², height {(b.stats.height_mm / 1000).toFixed(2)} m.
       </p>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       <h3>Floor offsets</h3>

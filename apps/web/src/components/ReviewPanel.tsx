@@ -28,7 +28,7 @@ export function ReviewPanel(p: { draft: DraftResult; stale?: boolean; busy: bool
       ))}
       <button disabled={p.busy} onClick={p.onRerun}>Re-run review</button>{" "}
       <button disabled={p.busy || draft.blocking || p.stale} onClick={p.onAccept}>Accept &amp; generate</button>
-      {p.stale && <p role="status">The inputs changed since this review. Re-run it before accepting.</p>}
+      {p.stale && <p role="status">Press Re-run review: settings changed.</p>}
       {draft.blocking && <p role="status">Resolve the blocking issues, then re-run the review.</p>}
     </section>
   );

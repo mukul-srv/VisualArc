@@ -54,3 +54,6 @@ export const viewerUrl = (projectId: string, floorId?: string, version?: number,
 /** The floor to show: the requested one if present, else the lowest. */
 export const pickFloor = (m: Manifest, floorId: string | null): Floor | null =>
   m.floors.find((f) => f.id === floorId) ?? sortFloors(m.floors)[0] ?? null;
+
+/** "1 floor", "2 floors". */
+export const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

@@ -25,10 +25,11 @@ export function resetForNewFile(proj: ProjectTarget, locked: boolean) {
 }
 
 /** Where the person is in the upload flow, in plain words (shown as one line above the form). */
-export function uploadStep(hasFile: boolean, working: boolean, addingToProject: boolean): string {
+export function uploadStep(hasFile: boolean, working: boolean, addingToProject: boolean, reviewed = false): string {
   // working without a checked file = still reading the upload; with one = building the model
   if (working) return hasFile ? "Step 3 of 3: building the 3D model. You will land in the viewer when it is ready." : "Step 1 of 3: reading your file.";
   if (!hasFile) return `Step 1 of 3: choose your floor plan (DXF, DWG, IFC or PDF)${addingToProject ? " for the new floor" : ""}.`;
+  if (reviewed) return "Step 3 of 3: check the result, then press Accept & generate.";
   return "Step 2 of 3: press Review to check what was found, then Accept & generate. The defaults are fine to start with.";
 }
 

@@ -14,6 +14,8 @@ export function Dashboard() {
   const [listFailed, setListFailed] = useState(false);
   const [recentFailed, setRecentFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deleted, setDeleted] = useState(false); // arrived from deleting a project
+
   const router = useRouter();
   const reload = () => {
     setListFailed(false);
@@ -23,6 +25,7 @@ export function Dashboard() {
   };
   useEffect(() => {
     queueMicrotask(reload);
+    queueMicrotask(() => setDeleted(new URLSearchParams(window.location.search).has("deleted")));
   }, []);
   async function act(call: () => Promise<{ ok: boolean; message?: string }>, then: () => void) {
     setBusy(true);
@@ -36,6 +39,7 @@ export function Dashboard() {
     <main className={styles.page}>
       <AppNav />
       <h1>My projects</h1>
+      {deleted && <p role="status">Project deleted.</p>}
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {projects === null && !listFailed && <p role="status">Loading…</p>}
       {listFailed && (

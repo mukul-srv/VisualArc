@@ -24,6 +24,7 @@ import { collectSupports, dampTo, fall, groundLevel, stepOnto, stepUpLimit } fro
 import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
 import { createTapGate } from "@/lib/tap";
 import { setWalkFill, WALK_FILL } from "@/lib/lighting";
+import Link from "next/link";
 import { LightingPanel } from "@/components/LightingPanel";
 import { DEFAULT_QUALITY, QUALITY, type QualityId } from "@/lib/quality";
 import { createRig } from "@/lib/rig";
@@ -862,11 +863,19 @@ export default function ViewerPage() {
   };
 
   // exports are the current state, so not offered while looking at an older version
+  const failed = status.startsWith("error");
   const exportTarget = viewing !== null ? null : manifest ? { project: manifest.id } : generationId ? { generation: generationId } : null;
   return (
     <div style={{ position: "fixed", inset: 0 }}>
       <div ref={mount} style={{ width: "100%", height: "100%" }} />
       <div style={{ position: "absolute", top: 12, left: 12, color: "#eee", font: "14px monospace" }}>
+        {failed ? (
+          <main role="alert">
+            <h1>This model could not be found.</h1>
+            <Link href="/">Back to projects</Link>
+          </main>
+        ) : (
+          <>
         <ViewerToolbar
           walking={walking}
           top={top}
@@ -903,8 +912,11 @@ export default function ViewerPage() {
             ))}
           </div>
         )}
+      </>)}
       </div>
       <div
+        className="viewer-panel"
+        hidden={failed}
         style={{
           position: "absolute",
           top: 12,

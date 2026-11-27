@@ -26,7 +26,8 @@ test("422 is a rejection that names the file, lists accepted types and says what
   expect(r).toMatchObject({ ok: false, kind: "rejected" });
   const m = !r.ok ? r.message : "";
   expect(m).toContain('"plan.txt"');
-  expect(m).toContain("not a DXF file");
+  expect(m).not.toContain("not a DXF file");
+  expect(m).toContain("is not a supported floor plan file");
   expect(m).toContain("DXF, DWG, IFC or PDF");
   expect(m).toContain("Choose a floor plan file.");
 });
@@ -60,4 +61,12 @@ test("importIfc posts the project name to the upload's ifc endpoint", async () =
   expect(r.ok && r.project_id).toBe("p".repeat(32));
   expect(seen!.url).toMatch(/\/uploads\/u{32}\/ifc$/);
   expect(JSON.parse(seen!.body)).toEqual({ project_name: "House" });
+});
+
+test("another rejection reason keeps the server text once, with the filename", async () => {
+  const file = Object.assign(new Blob(), { name: "big.dxf" });
+  const r = await uploadDxf(file, reply(413, { detail: "file too large (max 50 MB)" }));
+  const m = !r.ok ? r.message : "";
+  expect(m).toContain('"big.dxf"');
+  expect(m.match(/too large/g)).toHaveLength(1);
 });

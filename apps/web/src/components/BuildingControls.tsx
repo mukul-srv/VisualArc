@@ -40,7 +40,7 @@ export function BuildingStats({ building, active }: { building: Building; active
   if (building.version === 0) return null; // a past version: no building data
   return (
     <div style={{ marginBottom: 8 }}>
-      <div><b>Building</b>: {b.floors} floors, {b.rooms} rooms, {b.area}, height {b.height}</div>
+      <div><b>Building</b>: {b.floors} {b.floors === 1 ? "floor" : "floors"}, {b.rooms} {b.rooms === 1 ? "room" : "rooms"}, {b.area}, height {b.height}</div>
       {active && f && <div><b>{active.name}</b>: {f.rooms} rooms, {f.area}, height {f.height}</div>}
     </div>
   );

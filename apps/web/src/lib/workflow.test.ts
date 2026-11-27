@@ -248,7 +248,7 @@ test("failure paths: non-DXF rejected cleanly; unknown upload and generation are
   expect(!bad.ok && bad.message).not.toMatch(/Traceback|[A-Za-z]:\\|\/tmp\//);
 
   const unknown = await api.generate({ upload_id: "0".repeat(32), wall_height: 3000, ceiling_height: 3000 });
-  expect(unknown).toMatchObject({ ok: false, kind: "error" });
+  expect(unknown).toMatchObject({ ok: false, kind: "not_found" });
   expect((await fetch(api.glbUrl("0".repeat(32)))).status).toBe(404);
 });
 

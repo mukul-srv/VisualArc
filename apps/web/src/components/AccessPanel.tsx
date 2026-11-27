@@ -26,6 +26,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("viewer");
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const apply = useCallback((r: Awaited<ReturnType<typeof getAccess>>) => {
     if (r.ok) {
@@ -62,6 +63,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
       <h2>Sharing</h2>
       <p>Invite people by email, or create a link that lets anyone look at the model.<Hint text={HELP.roles} /></p>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
+      {notice && <p role="status">{notice}</p>}
       {info && (
         <>
           <p>{used} of {info.max_collaborators} collaborator slots used (people with access plus pending invites).</p>
@@ -76,7 +78,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
                   <option value="viewer">viewer</option>
                   <option value="editor">editor</option>
                 </select>
-                <button type="button" disabled={busy} onClick={() => act(() => removeAccess(projectId, r.email))}>Remove</button>
+                <button type="button" disabled={busy} onClick={() => act(() => removeAccess(projectId, r.email), () => setNotice(`Removed access for ${r.email}.`))}>Remove</button>
               </li>
             ))}
           </ul>
