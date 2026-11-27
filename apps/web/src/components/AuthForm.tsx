@@ -99,7 +99,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     if (oauthError) setErrors([OAUTH_ERRORS[oauthError] ?? oauthError]);
     getProviders().then(setProviders);
     // already signed in: nothing to do here
-    me().then((r) => r.ok && router.replace(safeNext(q.get("next"))));
+    me().then((r) => r.ok && router.replace(safeNext(q.get("next")))).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
