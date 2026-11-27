@@ -73,7 +73,7 @@ test.describe("unauthenticated", () => {
     await expect(page.getByLabel("Password")).toBeVisible();
     await expectNoA11yViolations(page);
     await page.getByRole("button", { name: "Log in" }).click();
-    // the inputs are `required`: either native validation blocks submit or the form shows an alert
+    // the inputs are `required`: native validation blocks submit (the app shows no alert of its own)
     await expect(page.getByLabel("Email")).toHaveJSProperty("validity.valueMissing", true);
     await expect(page).toHaveURL(/\/login/);
   });

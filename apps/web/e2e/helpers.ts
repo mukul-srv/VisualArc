@@ -23,5 +23,5 @@ export async function createProject(page: Page, name: string) {
   await page.getByLabel("Project name").fill(name);
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
-  return page.url().split("/projects/")[1];
+  return page.url().split("/projects/")[1].split(/[?#]/)[0];
 }
