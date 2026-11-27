@@ -90,3 +90,9 @@ test.describe("register rule", () => {
     await expectNoA11yViolations(page);
   });
 });
+
+test("viewer: a model that fails to load gives its reason, not 'not found'", async ({ page }) => {
+  await page.goto("/viewer?model=no_such_model");
+  await expect(page.getByRole("heading", { name: /^This model could not be shown:/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to projects" })).toBeVisible();
+});

@@ -45,6 +45,8 @@ export function UploadForm(p: Props) {
       />
     </label>
   );
+  // "Floor name is required." only comes from onGenerate (single floor); the split path (onSplit) never asks for it, so
+  // hiding the floor fields when splitting cannot hide this error.
   const nameError = p.errors.find((e) => e.startsWith("Floor name is required"));
   const listErrors = p.errors.filter((e) => e !== nameError);
   const floorFields = (

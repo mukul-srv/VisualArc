@@ -47,6 +47,7 @@ export default function ViewerPage() {
   const [walking, setWalking] = useState(false);
   const [top, setTopState] = useState(false);
   const [status, setStatus] = useState("loading…");
+  const [missing, setMissing] = useState(false); // the id is malformed or the API says 404: "not found", other errors show their reason
   const [panel, setPanel] = useState<Panel | null>(null);
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [roofPresent, setRoofPresent] = useState(false);
@@ -119,13 +120,14 @@ export default function ViewerPage() {
     const project = query.get("project");
     const generation = query.get("generation");
     if (project !== null) {
-      if (!isGenerationId(project)) return queueMicrotask(() => setStatus("error: invalid project id"));
+      if (!isGenerationId(project)) return queueMicrotask(() => { setMissing(true); setStatus("error: invalid project id"); });
       const vq = query.get("version"); // read-only history view of an older version
       const version = vq === null ? undefined : Number(vq);
       if (version !== undefined && !(Number.isInteger(version) && version >= 1)) return queueMicrotask(() => setStatus("error: invalid version"));
       // a past version has no building data (it describes the current state): its floors keep their stored offsets
       Promise.all([getProject(project, fetch, version, share.current), version === undefined ? getBuilding(project, fetch, share.current) : null]).then(([r, br]) => {
         const m = r.ok ? parseManifest(r.manifest) : null;
+        if (!r.ok && r.kind === "not_found") setMissing(true);
         if (!r.ok || !m) return setStatus(r.ok ? "error: malformed project manifest" : `error: ${r.message}`);
         // no building data (API error): the floors still show, without offsets and pairings
         if (br && !br.ok) queueMicrotask(() => setHint("Building data unavailable: floors are shown without offsets or pairings."));
@@ -144,7 +146,7 @@ export default function ViewerPage() {
         setTarget(projectTarget(m));
       });
     } else if (generation !== null) {
-      if (!isGenerationId(generation)) return queueMicrotask(() => setStatus("error: invalid generation id"));
+      if (!isGenerationId(generation)) return queueMicrotask(() => { setMissing(true); setStatus("error: invalid generation id"); });
       queueMicrotask(() => setGenerationId(generation));
       queueMicrotask(() => setTarget({ stem: `generation ${generation.slice(0, 8)}`, loads: [{ id: null, url: glbUrl(generation) }] }));
     } else {
@@ -871,7 +873,7 @@ export default function ViewerPage() {
       <div style={{ position: "absolute", top: 12, left: 12, color: "#eee", font: "14px monospace" }}>
         {failed ? (
           <main role="alert">
-            <h1>This model could not be found.</h1>
+            <h1>{missing ? "This model could not be found." : `This model could not be shown: ${status.replace(/^error:\s*/, "")}`}</h1>
             <Link href="/">Back to projects</Link>
           </main>
         ) : (
