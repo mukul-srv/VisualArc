@@ -42,3 +42,5 @@ var/
 fixtures/local/
 fixtures/input/Two-story-house-410202.*
 fixtures/input/fp1344-1535.*
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
