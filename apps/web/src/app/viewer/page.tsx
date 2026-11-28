@@ -48,6 +48,7 @@ export default function ViewerPage() {
   const [walking, setWalking] = useState(false);
   const [top, setTopState] = useState(false);
   const [status, setStatus] = useState("loading…");
+  const [walkable, setWalkable] = useState(true); // false: no floor outline to walk on, so Walk is disabled with a reason
   const [missing, setMissing] = useState(false); // the id is malformed or the API says 404: "not found", other errors show their reason
   const [panel, setPanel] = useState<Panel | null>(null);
   const [rooms, setRooms] = useState<RoomData[]>([]);
@@ -736,7 +737,9 @@ export default function ViewerPage() {
         applyLighting.current();
         applyView.current(viewRef.current, false);
         const s = frame(true).getSize(new THREE.Vector3());
-        setStatus(`${stem}: ${s.x.toFixed(2)} × ${s.z.toFixed(2)} × ${s.y.toFixed(2)} m (X × Z × H)`);
+        // a standalone model has no name here: its stem is "generation <id>", which says nothing to a person
+        setWalkable([...roots.values()].some((r) => spawnPoint(r) !== null));
+        setStatus(`${stem.startsWith("generation ") ? "Unsaved model" : stem}: ${s.x.toFixed(1)} m x ${s.z.toFixed(1)} m, ${s.y.toFixed(1)} m tall`);
       })
       .catch(() => setStatus(`error: could not load ${loads.map((l) => l.url).join(", ")} (missing, unreachable or not a valid GLB). For API models check the backend is running; for ?model= build it and copy it to apps/web/public/models/`));
 
@@ -881,6 +884,7 @@ export default function ViewerPage() {
           <>
         <ViewerToolbar
           walking={walking}
+          walkBlocked={walkable ? null : "Walking needs a floor outline; this model has none."}
           top={top}
           measuring={measuring}
           roofPresent={roofPresent}
@@ -946,6 +950,8 @@ export default function ViewerPage() {
         <button disabled={walking || !target} onClick={() => setRenderOpen(true)}>
           Render / screenshot…
         </button>
+        <details style={{ marginBottom: 8 }}>
+          <summary>Lighting and sun</summary>
         <LightingPanel
           quality={quality}
           onQuality={setQuality}
@@ -963,6 +969,7 @@ export default function ViewerPage() {
           onSelect={setSelLight}
           floorName={(id) => manifest?.floors.find((f) => f.id === id)?.name ?? id}
         />
+        </details>
         <MetadataPanel panel={panel} />
         {panel && picked && picked.id === panel.id && picked.floor && manifest && (
           <MaterialPicker

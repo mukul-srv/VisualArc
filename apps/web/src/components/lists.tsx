@@ -92,7 +92,7 @@ export function RecentList({ items, onSave, onRename, onDelete, busy }: {
   const [confirming, setConfirming] = useState<string | null>(null);
   if (items.length === 0) return <p>No buildings generated yet. Choose New project, upload a DXF floor plan and generate it; it will appear here.</p>;
   return (
-    <ul aria-label="Recent buildings">
+    <ul aria-label="Unsaved models">
       {items.map((g) => (
         <li key={g.generation_id}>
           <a href={g.project_id ? viewerUrl(g.project_id, g.floor_id ?? undefined) : `/viewer?generation=${g.generation_id}`}>

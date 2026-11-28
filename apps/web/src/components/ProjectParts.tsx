@@ -30,24 +30,22 @@ export function ProjectToolbar(p: {
   floors: Floor[];
   busy?: boolean;
   onShare: () => void;
-  onRename: () => void;
   onDelete: () => void;
 }) {
   const { edit, manage } = can(p.role);
   const first = sortFloors(p.floors)[0];
   return (
     <div role="toolbar" aria-label="Project actions" className={styles.row}>
-      {first ? (
+      {p.floors.length >= 2 ? (
         <Link href={viewerUrl(p.id, first.id)}>Open in viewer</Link>
-      ) : (
+      ) : p.floors.length === 1 ? null : ( // one floor: its row already has "View in 3D"
         <span title="Add a floor first" aria-disabled="true">Open in viewer (no floors yet)</span>
       )}
       {edit && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
       {manage && <button type="button" onClick={p.onShare}>Share</button>}
-      {edit && (
+      {manage && (
         <MoreMenu title={HELP.more}>
-          <button type="button" disabled={p.busy} onClick={p.onRename}>Rename</button>
-          {manage && <button type="button" disabled={p.busy} onClick={p.onDelete}>Delete</button>}
+          <button type="button" disabled={p.busy} onClick={p.onDelete}>Delete</button>
         </MoreMenu>
       )}
     </div>
@@ -99,7 +97,7 @@ export function FloorList(p: {
           ) : (
             <>
               <span>{f.name} at {f.elevation.value} mm</span>
-              <Link href={viewerUrl(p.projectId, f.id)}>Open in viewer</Link>
+              <Link href={viewerUrl(p.projectId, f.id)}>View in 3D</Link>
               {edit && p.onEditPlan && <button type="button" disabled={p.busy} onClick={() => p.onEditPlan!(f.id)}>Edit plan</button>}
               {edit && (
                 <MoreMenu title={HELP.more}>

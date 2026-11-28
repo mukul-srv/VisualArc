@@ -17,6 +17,7 @@ export function Dashboard() {
   const [deleted, setDeleted] = useState(false); // arrived from deleting a project
 
   const router = useRouter();
+  const unsaved = recent.filter((g) => !g.project_id); // models already in a project are found under My projects
   const reload = () => {
     setListFailed(false);
     setRecentFailed(false);
@@ -49,14 +50,19 @@ export function Dashboard() {
         </div>
       )}
       {projects && <ProjectList projects={projects} busy={busy} onDelete={(p) => act(() => deleteProject(p.id), reload)} />}
-      <h2>Recent buildings</h2>
+      {(unsaved.length > 0 || recentFailed) && (
+        <section id="unsaved" aria-labelledby="unsaved-h">
+          <h2 id="unsaved-h">Unsaved models</h2>
+          <p><small>Save one to keep it and share it.</small></p>
+        </section>
+      )}
       {recentFailed && (
         <div role="alert" className={styles.error}>
-          <p>Could not load recent buildings.</p>
+          <p>Could not load your unsaved models.</p>
           <button type="button" onClick={reload}>Try again</button>
         </div>
       )}
-      <RecentList items={recent} busy={busy}
+      {unsaved.length > 0 && <RecentList items={unsaved} busy={busy}
         onRename={(gid, name) => act(() => renameGeneration(gid, name), reload)}
         onDelete={(gid) => act(() => deleteGeneration(gid), reload)}
         onSave={async (gid, name) => {
@@ -66,7 +72,7 @@ export function Dashboard() {
           setBusy(false);
           if (r.ok) router.push(`/projects/${String(r.project_id)}`);
           else setError(r.message);
-        }} />
+        }} />}
     </main>
   );
 }

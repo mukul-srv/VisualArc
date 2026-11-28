@@ -109,3 +109,26 @@ test("upload: plain heading and button names; floor name is visible before the c
   await expect(page.getByText("Project id (existing) or name (new)")).toHaveCount(0);
   await expect(page.getByText("More options")).toBeVisible();
 });
+
+test("project page: Rename is visible by the title; Share moves focus to the Sharing heading", async ({ page }) => {
+  await createProject(page, `e2e-${Date.now()}`);
+  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
+  await page.getByRole("toolbar", { name: "Project actions" }).getByRole("button", { name: "Share" }).click();
+  await expect(page.getByRole("heading", { name: "Sharing" })).toBeFocused();
+});
+
+test("dashboard: an unsaved model is listed under Unsaved models", async ({ page }) => {
+  await generateFixture(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Unsaved models" })).toBeVisible();
+  await expect(page.getByText("Save one to keep it and share it.")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Unsaved models" }).getByRole("button", { name: "Save as project" }).first()).toBeVisible();
+});
+
+test("viewer: plain title and hint, lighting folded away", async ({ page }) => {
+  await generateFixture(page);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(/Unsaved model: \d+\.\d m x \d+\.\d m, \d+\.\d m tall/, { timeout: 60_000 });
+  await expect(page.getByText("Drag to look around. Walk: use W A S D to move.")).toBeVisible();
+  await expect(page.getByText("Lighting and sun")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Save as project" })).toBeVisible();
+});
