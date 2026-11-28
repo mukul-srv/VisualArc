@@ -127,7 +127,7 @@ test("dashboard: an unsaved model is listed under Unsaved models", async ({ page
 
 test("viewer: plain title and hint, lighting folded away", async ({ page }) => {
   await generateFixture(page);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText(/Unsaved model: \d+\.\d m x \d+\.\d m, \d+\.\d m tall/, { timeout: 60_000 });
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(/Unsaved model: \d+\.\d\d m x \d+\.\d\d m, \d+\.\d\d m tall/, { timeout: 60_000 });
   await expect(page.getByText("Drag to look around. Walk: use W A S D to move.")).toBeVisible();
   await expect(page.getByText("Lighting and sun")).toBeVisible();
   await expect(page.getByRole("link", { name: "Save as project" })).toBeVisible();

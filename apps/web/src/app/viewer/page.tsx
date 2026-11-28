@@ -739,7 +739,7 @@ export default function ViewerPage() {
         const s = frame(true).getSize(new THREE.Vector3());
         // a standalone model has no name here: its stem is "generation <id>", which says nothing to a person
         setWalkable([...roots.values()].some((r) => spawnPoint(r) !== null));
-        setStatus(`${stem.startsWith("generation ") ? "Unsaved model" : stem}: ${s.x.toFixed(1)} m x ${s.z.toFixed(1)} m, ${s.y.toFixed(1)} m tall`);
+        setStatus(`${stem.startsWith("generation ") ? "Unsaved model" : stem}: ${s.x.toFixed(2)} m x ${s.z.toFixed(2)} m, ${s.y.toFixed(2)} m tall`);
       })
       .catch(() => setStatus(`error: could not load ${loads.map((l) => l.url).join(", ")} (missing, unreachable or not a valid GLB). For API models check the backend is running; for ?model= build it and copy it to apps/web/public/models/`));
 
