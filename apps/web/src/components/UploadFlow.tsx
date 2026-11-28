@@ -35,6 +35,7 @@ export function UploadFlow() {
   const [rows, setRows] = useState<SplitRow[]>([]);
   const [projectName, setProjectName] = useState("");
   const [proj, setProj] = useState(NO_TARGET);
+  const [reviewOpen, setReviewOpen] = useState(false); // the review dialog; closing it keeps `review`
   const [review, setReview] = useState<{ draft: DraftResult; key: string } | null>(null);
 
   const [presets, setPresets] = useState<Presets | null>(null);
@@ -251,7 +252,10 @@ export function UploadFlow() {
     const r = await draftJob(pre.upload_id, body, setJob);
     setBusy(false);
     setJob(null);
-    if (r.ok) setReview({ draft: r, key: reviewKey(inputs) });
+    if (r.ok) {
+      setReview({ draft: r, key: reviewKey(inputs) });
+      setReviewOpen(true);
+    }
     else setFailure(r);
   }
 
@@ -263,6 +267,8 @@ export function UploadFlow() {
     el?.scrollIntoView?.({ block: "center" });
   }
 
+  // a failed Create (or a block) is shown on the page, so the dialog gives way to it
+  const dialogOpen = reviewOpen && !failure && !blockedIssues;
   const splitting = (pre?.floor_candidates?.length ?? 0) >= 2;
   const setRow = (i: number, patch: Partial<SplitRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const shown = blockedIssues ?? pre?.issues ?? [];
@@ -314,7 +320,7 @@ export function UploadFlow() {
       )}
       {pre && pre.kind !== "ifc" && (
         <>
-          {!review && (
+          {!dialogOpen && (
             <>
               <h2>What we found</h2>
               <IssueList issues={shown} />
@@ -339,11 +345,12 @@ export function UploadFlow() {
             )}
             errors={errors}
             addingTo={addingTo !== null}
-            reviewed={review !== null}
+            reviewed={review !== null && !reviewStale(review.key, inputs)}
+            onShowReview={() => setReviewOpen(true)}
             disabled={busy || blocked.length > 0}
             onSubmit={onReview}
           />
-          {review && <ReviewPanel draft={review.draft} stale={reviewStale(review.key, inputs)} busy={busy} onFix={onFix} onRerun={onReview} onAccept={splitting ? onSplit : onGenerate} />}
+          {review && dialogOpen && <ReviewPanel draft={review.draft} stale={reviewStale(review.key, inputs)} busy={busy} onClose={() => setReviewOpen(false)} progress={busy && <p role="status">{job ? `${STAGE_LABEL[job.stage] ?? job.stage} (${job.progress}%)` : "Working…"}</p>} onFix={onFix} onRerun={onReview} onAccept={splitting ? onSplit : onGenerate} />}
           {blocked.length > 0 && <p>Fix the blocking issues in the drawing and upload it again.</p>}
         </>
       )}

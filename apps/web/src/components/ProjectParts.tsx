@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { sortFloors, viewerUrl, type Floor, type Role } from "../lib/project";
 import { HELP } from "../lib/help";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { MoreMenu } from "./MoreMenu";
 import { HelpLine, useHelp } from "./HelpLine";
 import styles from "./dashboard.module.css";
@@ -43,11 +44,7 @@ export function ProjectToolbar(p: {
       )}
       {edit && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
       {manage && <button type="button" onClick={p.onShare}>Share</button>}
-      {manage && (
-        <MoreMenu title={HELP.more}>
-          <button type="button" disabled={p.busy} onClick={p.onDelete}>Delete</button>
-        </MoreMenu>
-      )}
+      {manage && <button type="button" disabled={p.busy} onClick={p.onDelete}>Delete</button>}
     </div>
   );
 }
@@ -102,13 +99,12 @@ export function FloorList(p: {
               {edit && (
                 <MoreMenu title={HELP.more}>
                   <button type="button" disabled={p.busy} onClick={() => setRenaming({ id: f.id, name: f.name })}>Rename</button>
-                  {removing !== f.id && <button type="button" disabled={p.busy} onClick={() => setRemoving(f.id)}>Remove</button>}
+                  <button type="button" disabled={p.busy} onClick={() => setRemoving(f.id)}>Remove</button>
                   {removing === f.id && (
-                    <span role="alertdialog" aria-label={`Confirm remove ${f.name}`}>
-                      Remove {f.name}? Older versions keep it; restore brings it back.{" "}
-                      <button type="button" disabled={p.busy} onClick={() => { p.onRemove(f.id); setRemoving(null); }}>Confirm remove</button>{" "}
-                      <button type="button" onClick={() => setRemoving(null)}>Cancel</button>
-                    </span>
+                    <ConfirmDialog label={`Confirm remove ${f.name}`} confirmLabel="Confirm remove" busy={p.busy}
+                      onConfirm={() => { p.onRemove(f.id); setRemoving(null); }} onCancel={() => setRemoving(null)}>
+                      Remove {f.name}? Older versions keep it; restore brings it back.
+                    </ConfirmDialog>
                   )}
                 </MoreMenu>
               )}
