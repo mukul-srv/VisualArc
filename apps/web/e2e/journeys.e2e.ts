@@ -30,8 +30,7 @@ test("save as project, then project page for the owner", async ({ page }) => {
   }
   // one floor: the floor row opens the viewer (the toolbar no longer repeats it); Rename sits by the title, Share in the toolbar
   await expect(page.getByRole("list", { name: "Floors" }).getByRole("link", { name: "View in 3D" })).toBeVisible();
-  await page.getByRole("toolbar", { name: "Project actions" }).getByText("More", { exact: true }).click();
-  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+  await expect(page.getByRole("toolbar", { name: "Project actions" }).getByRole("button", { name: "Delete" })).toBeVisible(); // no More menu: Delete is the only item
   await expect(page.getByRole("button", { name: "Share" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
   await expectNoA11yViolations(page, KNOWN_SUMMARY_SIZE);

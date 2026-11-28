@@ -132,3 +132,41 @@ test("viewer: plain title and hint, lighting folded away", async ({ page }) => {
   await expect(page.getByText("Lighting and sun")).toBeVisible();
   await expect(page.getByRole("link", { name: "Save as project" })).toBeVisible();
 });
+
+test("review opens as a dialog; Esc returns to the form with the values kept", async ({ page }) => {
+  await page.goto("/new");
+  await page.getByLabel("Floor plan file").setInputFiles(path.resolve(__dirname, "../../../fixtures/input/fixture_a.dxf"));
+  await page.getByText("More options").click();
+  await page.getByLabel("commercial").check();
+  await page.getByRole("button", { name: "Check my plan", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Review before saving" });
+  await expect(dialog).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("heading", { name: "Review before saving" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Create 3D model" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel("commercial")).toBeChecked();
+  await expect(page.getByRole("button", { name: "Show review" })).toBeFocused();
+  await page.getByRole("button", { name: "Show review" }).click();
+  await expect(page.getByRole("dialog", { name: "Review before saving" })).toBeVisible();
+  await page.getByRole("button", { name: "Back to settings" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("project Delete: plain button for the owner, confirm is a dialog (cancel keeps, confirm deletes)", async ({ page }) => {
+  const name = `e2e-${Date.now()}`;
+  await createProject(page, name);
+  const del = page.getByRole("toolbar", { name: "Project actions" }).getByRole("button", { name: "Delete" });
+  await expect(del).toBeVisible();
+  await del.click();
+  const dialog = page.getByRole("alertdialog", { name: "Confirm delete" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+  await del.click();
+  await page.getByRole("alertdialog", { name: "Confirm delete" }).getByRole("button", { name: "Confirm delete" }).click();
+  await expect(page).toHaveURL(/\/\?deleted=1/);
+  await expect(page.getByText("Project deleted.")).toBeVisible();
+});

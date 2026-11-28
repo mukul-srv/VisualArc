@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getProject } from "../lib/api";
 import { parseManifest, type Manifest } from "../lib/project";
 import { deleteProject, listVersions, removeFloor, renameFloor, renameProject, restoreVersion, type VersionInfo } from "../lib/projects";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ConventionsPanel } from "./ConventionsPanel";
 import { getProjectConventions, listConventions, putProjectConventions, type ConventionsSpec, type PresetInfo } from "../lib/conventions";
 import { AccessPanel } from "./AccessPanel";
@@ -128,11 +129,10 @@ export function ProjectView({ id }: { id: string }) {
         </form>
       )}
       {confirming && manage && (
-        <div role="alertdialog" aria-label="Confirm delete" className={styles.row}>
-          <span>Delete &quot;{manifest.name}&quot;? It disappears from every list (collaborators lose access); stored files are kept.</span>
-          <button disabled={busy} onClick={() => run(() => deleteProject(id), () => router.push("/?deleted=1"))}>Confirm delete</button>
-          <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
-        </div>
+        <ConfirmDialog label="Confirm delete" confirmLabel="Confirm delete" busy={busy}
+          onConfirm={async () => { await run(() => deleteProject(id), () => router.push("/?deleted=1")); setConfirming(false); }} onCancel={() => setConfirming(false)}>
+          Delete &quot;{manifest.name}&quot;? It disappears from every list (collaborators lose access); stored files are kept.
+        </ConfirmDialog>
       )}
       {tab === "sharing" && !manage && <p role="status">Only the project owner can share.</p>}
       <ProjectTabs role={role} tab={shown} onSelect={select} />

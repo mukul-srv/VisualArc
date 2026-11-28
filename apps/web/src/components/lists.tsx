@@ -5,6 +5,7 @@ import { useState } from "react";
 import { shortDate, type ProjectSummary, type RecentGeneration, type VersionInfo } from "../lib/projects";
 import { count, viewerUrl, type Role } from "../lib/project";
 import { can } from "./ProjectParts";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { MoreMenu } from "./MoreMenu";
 import { HELP } from "../lib/help";
 import styles from "./dashboard.module.css";
@@ -45,19 +46,19 @@ export function ProjectList({ projects, onDelete, busy }: { projects: ProjectSum
               <td>
                 <span className={styles.actions}>
                   {p.floor_count > 0 ? <a href={viewerUrl(p.id)}>Open</a> : <span title="Add a floor first" aria-disabled="true">Open (no floors)</span>}
-                  {(edit || manage) && (
+                  {edit && !manage && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
+                  {manage && (
                     <MoreMenu title={HELP.more}>
                       {edit && <Link href={`/new?project=${p.id}`}>Add floor</Link>}
                       {manage && <Link href={`/projects/${p.id}#sharing`}>Share</Link>}
-                      {manage && onDelete && confirming !== p.id && (
+                      {manage && onDelete && (
                         <button type="button" disabled={busy} aria-label={`Delete ${p.name}`} onClick={() => setConfirming(p.id)}>Delete</button>
                       )}
                       {manage && onDelete && confirming === p.id && (
-                        <span role="alertdialog" aria-label={`Confirm delete ${p.name}`}>
-                          Delete &quot;{p.name}&quot;?{" "}
-                          <button type="button" disabled={busy} onClick={() => { onDelete(p); setConfirming(null); }}>Confirm delete</button>{" "}
-                          <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
-                        </span>
+                        <ConfirmDialog label={`Confirm delete ${p.name}`} confirmLabel="Confirm delete" busy={busy}
+                          onConfirm={() => { onDelete(p); setConfirming(null); }} onCancel={() => setConfirming(null)}>
+                          Delete &quot;{p.name}&quot;?
+                        </ConfirmDialog>
                       )}
                     </MoreMenu>
                   )}
@@ -124,15 +125,14 @@ export function RecentList({ items, onSave, onRename, onDelete, busy }: {
                   <button type="button" onClick={() => setRenaming(null)}>Cancel</button>
                 </form>
               )}
-              {onDelete && confirming !== g.generation_id && (
+              {onDelete && (
                 <button type="button" disabled={busy} aria-label={`Delete ${recentLabel(g)}`} onClick={() => setConfirming(g.generation_id)}>Delete</button>
               )}
               {onDelete && confirming === g.generation_id && (
-                <span role="alertdialog" aria-label={`Confirm delete ${recentLabel(g)}`}>
-                  Delete &quot;{recentLabel(g)}&quot;?{" "}
-                  <button type="button" disabled={busy} onClick={() => { onDelete(g.generation_id); setConfirming(null); }}>Confirm delete</button>{" "}
-                  <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
-                </span>
+                <ConfirmDialog label={`Confirm delete ${recentLabel(g)}`} confirmLabel="Confirm delete" busy={busy}
+                  onConfirm={() => { onDelete(g.generation_id); setConfirming(null); }} onCancel={() => setConfirming(null)}>
+                  Delete &quot;{recentLabel(g)}&quot;?
+                </ConfirmDialog>
               )}
                 </MoreMenu>
               )}

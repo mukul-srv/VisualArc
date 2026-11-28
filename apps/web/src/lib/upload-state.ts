@@ -29,7 +29,7 @@ export function uploadStep(hasFile: boolean, working: boolean, addingToProject: 
   // working without a checked file = still reading the upload; with one = building the model
   if (working) return hasFile ? "Step 3 of 3: building the 3D model. You will land in the viewer when it is ready." : "Step 1 of 3: reading your file.";
   if (!hasFile) return `Step 1 of 3: choose your floor plan file (DXF, DWG, IFC or PDF)${addingToProject ? " for the new floor" : ""}.`;
-  if (reviewed) return "Step 3 of 3: check the result, then press Create 3D model.";
+  if (reviewed) return "Step 3 of 3: open the review (Show review) and press Create 3D model.";
   return "Step 2 of 3: check what we found, then create your 3D model.";
 }
 

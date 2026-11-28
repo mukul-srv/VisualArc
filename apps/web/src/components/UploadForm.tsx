@@ -20,7 +20,8 @@ type Props = {
   setProj: (p: ProjectTarget) => void;
   errors: string[];
   extra?: ReactNode; // more options owned by the page (layer conventions)
-  reviewed?: boolean; // a review exists: "Re-run review" below replaces this button
+  reviewed?: boolean; // a fresh review exists: the same button shows it again
+  onShowReview?: () => void;
   addingTo?: boolean; // /new?project=: the target is fixed, so the floor fields come first and the id is not shown
   disabled: boolean;
   onSubmit: () => void;
@@ -177,11 +178,9 @@ export function UploadForm(p: Props) {
           ))}
         </ul>
       )}
-      {!p.reviewed && (
-        <button disabled={p.disabled} onClick={p.onSubmit}>
-          Check my plan
-        </button>
-      )}
+      <button type="button" id="check-plan" disabled={p.disabled} onClick={p.reviewed && p.onShowReview ? p.onShowReview : p.onSubmit}>
+        {p.reviewed ? "Show review" : "Check my plan"}
+      </button>
     </>
   );
 }
