@@ -21,6 +21,7 @@ export function PdfScalePanel({ pages, busy, onConvert }: Props) {
   return (
     <section aria-label="PDF scale">
       <h2>PDF scale</h2>
+      <p>Printed plans show a scale like 1:100. Choose the one printed on your drawing; if unsure, use the suggested one.</p>
       <p>A PDF has no real-world units. Choose the page and confirm the scale of the drawing; the model is only as accurate as this scale.</p>
       {pages.length > 1 && (
         <label>

@@ -283,9 +283,8 @@ export function UploadFlow() {
       <Breadcrumbs trail={addingTo
         ? [{ label: "Dashboard", href: "/" }, { label: addingTo.name, href: `/projects/${addingTo.id}` }, { label: "Add floor" }]
         : [{ label: "Dashboard", href: "/" }, { label: "New project" }]} />
-      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Floor plan (DXF, DWG, IFC or PDF) to 3D"}</h1>
+      <h1>{addingTo ? `Add a floor to ${addingTo.name}` : "Turn a floor plan into a 3D model"}</h1>
       <p role="status"><strong>{uploadStep(pre !== null, busy, addingTo !== null, review !== null && !reviewStale(review.key, inputs))}</strong></p>
-      <p><small>Values your drawing lacks use defaults, and every one is reported as assumed.</small></p>
       <input type="file" aria-label="Floor plan file" accept=".dxf,.dwg,.ifc,.pdf" autoComplete="off" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
       {busy && (
         <p role="status">
@@ -321,13 +320,6 @@ export function UploadFlow() {
               <IssueList issues={shown} />
             </>
           )}
-          {convInfo && (
-            <details>
-              <summary title={HELP.conventions}>Layer conventions (advanced): {pre.inventory.layers.length} layers in this drawing</summary>
-              <p><small>Layers: {pre.inventory.layers.join(", ")}</small></p>
-              <ConventionsPanel spec={conv} setSpec={applyConventions} presets={convInfo.presets} roles={convInfo.roles} layers={layers} disabled={busy} />
-            </details>
-          )}
           <UploadForm
             pre={pre}
             form={form}
@@ -339,6 +331,12 @@ export function UploadFlow() {
             setProjectName={setProjectName}
             proj={proj}
             setProj={changeProj}
+            extra={convInfo && (
+              <>
+                <p><small title={HELP.conventions}>Line names (layer conventions): choose which lines are the walls. The standard names work as they are; change them only if your drawing uses other names. This drawing has {pre.inventory.layers.length} layers: {pre.inventory.layers.join(", ")}.</small></p>
+                <ConventionsPanel spec={conv} setSpec={applyConventions} presets={convInfo.presets} roles={convInfo.roles} layers={layers} disabled={busy} />
+              </>
+            )}
             errors={errors}
             addingTo={addingTo !== null}
             reviewed={review !== null}

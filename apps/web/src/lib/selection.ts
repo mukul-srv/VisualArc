@@ -68,12 +68,13 @@ export type ElementData = {
   part?: "frame" | "leaf" | "glass";
 };
 
+// Display wording only: the machine tags (source_extracted, defaulted, inferred ...) stay in the data and exports.
 export const PROVENANCE_LABEL: Record<Provenance, string> = {
-  source_extracted: "extracted from DXF",
-  user_provided: "user-specified",
-  defaulted: "ASSUMED DEFAULT (not in the drawing)",
-  inferred: "INFERRED (not drawn)",
-  user_modified: "EDITED by you (differs from the drawing)",
+  source_extracted: "from your drawing",
+  user_provided: "set by you",
+  defaulted: "typical value (your drawing did not say)",
+  inferred: "worked out by us (not drawn)",
+  user_modified: "edited by you (differs from the drawing)",
 };
 
 export type Row = { label: string; value: string; provenance?: Provenance };

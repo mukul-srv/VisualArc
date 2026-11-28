@@ -25,6 +25,7 @@ import { applyCeilingVisibility, hasRoof, setRoofVisible } from "@/lib/roof";
 import { createTapGate } from "@/lib/tap";
 import { setWalkFill, WALK_FILL } from "@/lib/lighting";
 import Link from "next/link";
+import { ProvenanceNote } from "@/components/ProvenanceNote";
 import { LightingPanel } from "@/components/LightingPanel";
 import { DEFAULT_QUALITY, QUALITY, type QualityId } from "@/lib/quality";
 import { createRig } from "@/lib/rig";
@@ -941,6 +942,7 @@ export default function ViewerPage() {
         )}
         {building && <BuildingStats building={building} active={activeFloor} />}
         <RoomList rooms={rooms} onSelect={(r) => setPanel(describeRoom(r, current?.id))} />
+        <ProvenanceNote />
         <button disabled={walking || !target} onClick={() => setRenderOpen(true)}>
           Render / screenshot…
         </button>

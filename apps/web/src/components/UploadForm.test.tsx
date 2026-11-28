@@ -39,13 +39,13 @@ const render = (p: Preflight, f: FormValues = form, over: { exclude?: number; ta
 // everything outside the Advanced <details> is what a normal user sees
 const general = (html: string) => html.replace(/<details[\s\S]*<\/details>/, "");
 
-test("General shows only essentials: building type (Residential preselected) and the button", () => {
+test("General shows only the check button; building type sits in More options (Residential preselected)", () => {
   const g = general(render(pre()));
-  expect(g.match(/<input[^>]*value="residential"[^>]*>/)?.[0]).toContain("checked");
-  expect(g.match(/<input[^>]*value="commercial"[^>]*>/)?.[0]).not.toContain("checked");
-  expect(g).toContain('value="commercial"');
-  expect(g).toContain("Review");
-  expect(g).not.toMatch(/Wall height|Ceiling height|Door height|Window|elevation|Offset|Add to a project|<select/i);
+  expect(g).toContain("Check my plan");
+  expect(g).not.toMatch(/value="residential"|Wall height|Ceiling height|Door height|Window|elevation|Offset|Add to a project|<select/i);
+  const html = render(pre());
+  expect(html.match(/<input[^>]*value="residential"[^>]*>/)?.[0]).toContain("checked");
+  expect(html.match(/<input[^>]*value="commercial"[^>]*>/)?.[0]).not.toContain("checked");
 });
 
 test("units question appears in General only when the DXF lacks units", () => {
@@ -59,7 +59,7 @@ test("Advanced is collapsed by default and holds the expert controls with preset
   const html = render(pre());
   expect(html).toContain("<details");
   expect(html).not.toMatch(/<details[^>]*\bopen\b/);
-  expect(html).toContain("Advanced settings");
+  expect(html).toContain("More options");
   for (const label of ["Wall height", "Ceiling height", "Door height", "Window height", "Window sill", "Add to a project"]) {
     expect(html).toContain(label);
     expect(general(html)).not.toContain(label);

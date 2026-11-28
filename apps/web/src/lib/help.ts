@@ -12,7 +12,7 @@ export const HELP = {
   exportObj: "Download the model as OBJ (metres, Y up, like the GLB).",
   exportIfc: "Download the model as IFC4 (millimetres) with typed elements and provenance properties.",
   account: "Your profile and log out",
-  provenance: "Where a value comes from: read from your drawing, given by you, or assumed as a default.",
+  provenance: "Where a value comes from: read from your drawing, given by you, or a typical value we used because your drawing did not say.",
   walk: "Walk through the building with W A S D or the arrow keys; drag to look; E opens a nearby door.",
   roof: "Show or hide the roof to see inside.",
   topdown: "Look straight down at the plan.",

@@ -111,8 +111,8 @@ test("panel text spells out provenance, incl. defaulted opening dimensions", () 
   const o = canon.openings[0] as unknown as { id: string; wall_id: string };
   const open = ud(o.wall_id).openings!.find((x) => x.id === o.id)!;
   const html = renderToStaticMarkup(<MetadataPanel panel={describeOpening(open)} />);
-  expect(html).toContain("[ASSUMED DEFAULT (not in the drawing)]"); // fixture gives no height/sill
-  expect(html).toContain("[extracted from DXF]"); // offset and width come from the drawing
+  expect(html).toContain("[typical value (your drawing did not say)]"); // fixture gives no height/sill
+  expect(html).toContain("[from your drawing]"); // offset and width come from the drawing
   expect(html).toContain(o.wall_id);
 });
 
@@ -248,5 +248,5 @@ test("describeElement shows a roof's type and pitch with provenance, and a fallb
 });
 
 test("an edited value is labelled user_modified, never as extracted", () => {
-  expect(PROVENANCE_LABEL.user_modified).toMatch(/EDITED/);
+  expect(PROVENANCE_LABEL.user_modified).toMatch(/edited by you/);
 });

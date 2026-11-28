@@ -1,3 +1,4 @@
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { expectNoA11yViolations } from "./a11y";
 import { createProject, generateFixture } from "./helpers";
@@ -95,4 +96,16 @@ test("viewer: a model that fails to load gives its reason, not 'not found'", asy
   await page.goto("/viewer?model=no_such_model");
   await expect(page.getByRole("heading", { name: /^This model could not be shown:/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Back to projects" })).toBeVisible();
+});
+
+test("upload: plain heading and button names; floor name is visible before the check when adding a floor", async ({ page }) => {
+  await page.goto("/new");
+  await expect(page.getByRole("heading", { name: "Turn a floor plan into a 3D model", level: 1 })).toBeVisible();
+  const id = await createProject(page, `e2e-${Date.now()}`);
+  await page.goto(`/new?project=${id}`);
+  await page.getByLabel("Floor plan file").setInputFiles(path.resolve(__dirname, "../../../fixtures/input/fixture_a.dxf"));
+  await expect(page.getByRole("button", { name: "Check my plan" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByLabel("Floor name")).toBeVisible();
+  await expect(page.getByText("Project id (existing) or name (new)")).toHaveCount(0);
+  await expect(page.getByText("More options")).toBeVisible();
 });

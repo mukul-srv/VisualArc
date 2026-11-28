@@ -109,6 +109,7 @@ export function PlanOverlay({ projectId = "", floors = [], share, overlay }: { p
             ))}
           </select>
         </label>}
+        <span>Show on plan:</span>
         {(["source", "walls", "openings", "boundary"] as const).map((k) => (
           <label key={k}>
             <input type="checkbox" checked={show[k]} onChange={(e) => setShow({ ...show, [k]: e.target.checked })} /> {k}

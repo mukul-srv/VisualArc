@@ -28,9 +28,9 @@ export function resetForNewFile(proj: ProjectTarget, locked: boolean) {
 export function uploadStep(hasFile: boolean, working: boolean, addingToProject: boolean, reviewed = false): string {
   // working without a checked file = still reading the upload; with one = building the model
   if (working) return hasFile ? "Step 3 of 3: building the 3D model. You will land in the viewer when it is ready." : "Step 1 of 3: reading your file.";
-  if (!hasFile) return `Step 1 of 3: choose your floor plan (DXF, DWG, IFC or PDF)${addingToProject ? " for the new floor" : ""}.`;
-  if (reviewed) return "Step 3 of 3: check the result, then press Accept & generate.";
-  return "Step 2 of 3: press Review to check what was found, then Accept & generate. The defaults are fine to start with.";
+  if (!hasFile) return `Step 1 of 3: choose your floor plan file (DXF, DWG, IFC or PDF)${addingToProject ? " for the new floor" : ""}.`;
+  if (reviewed) return "Step 3 of 3: check the result, then press Create 3D model.";
+  return "Step 2 of 3: check what we found, then create your 3D model.";
 }
 
 /** Remount key of the upload page: one per query string, so a different project target never
