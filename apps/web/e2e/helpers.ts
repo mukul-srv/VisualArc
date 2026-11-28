@@ -17,7 +17,7 @@ export async function generateFixture(page: Page) {
 export async function createProject(page: Page, name: string) {
   await generateFixture(page);
   await page.goto("/");
-  const newest = page.getByRole("list", { name: "Recent buildings" }).getByRole("listitem").first();
+  const newest = page.getByRole("list", { name: "Unsaved models" }).getByRole("listitem").first();
   await newest.getByRole("button", { name: "Save as project" }).click();
   await page.getByLabel("Project name").fill(name);
   await page.getByRole("button", { name: "Create project" }).click();

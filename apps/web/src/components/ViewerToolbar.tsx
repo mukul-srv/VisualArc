@@ -3,6 +3,7 @@ import { HelpLine, useHelp } from "./HelpLine";
 
 type Props = {
   walking: boolean;
+  walkBlocked?: string | null; // why Walk cannot work for this model (it is then disabled)
   top: boolean;
   measuring: boolean;
   roofPresent: boolean;
@@ -23,7 +24,7 @@ export function ViewerToolbar(p: Props) {
   return (
     <div>
       <div role="toolbar" aria-label="Viewer tools" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={p.onWalk} aria-pressed={p.walking} {...about(HELP.walk)}>Walk</button>
+        <button onClick={p.onWalk} aria-pressed={p.walking} disabled={!!p.walkBlocked} {...about(HELP.walk)}>Walk</button>
         {p.roofPresent && (
           <button onClick={p.onRoof} aria-pressed={p.roofOn} {...about(HELP.roof)}>Roof</button>
         )}
@@ -38,6 +39,7 @@ export function ViewerToolbar(p: Props) {
         </details>
       </div>
       <HelpLine text={help} />
+      <small role="note">{p.walkBlocked ?? "Drag to look around. Walk: use W A S D to move."}</small>
     </div>
   );
 }

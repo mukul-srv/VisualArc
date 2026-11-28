@@ -11,20 +11,20 @@ const floors: Floor[] = [
   { id: "floor-0", name: "Ground", elevation: { value: 0, unit: "mm", source: "user_provided" }, generation_id: "c".repeat(32) },
 ];
 const toolbar = (role: Role, f = floors) =>
-  renderToStaticMarkup(<ProjectToolbar id={id} role={role} floors={f} onShare={() => {}} onRename={() => {}} onDelete={() => {}} />);
+  renderToStaticMarkup(<ProjectToolbar id={id} role={role} floors={f} onShare={() => {}} onDelete={() => {}} />);
 
 test("toolbar: each role gets its own set of actions", () => {
   const owner = toolbar("owner");
-  for (const t of ["Open in viewer", "Add floor", ">Share<", ">Rename<", ">Delete<"]) expect(owner).toContain(t);
+  for (const t of ["Open in viewer", "Add floor", ">Share<", ">Delete<"]) expect(owner).toContain(t);
   expect(owner).toContain(`/viewer?project=${id}&amp;floor=floor-0`); // lowest floor
   expect(owner).toContain(`/new?project=${id}`);
   const editor = toolbar("editor");
   expect(editor).toContain("Add floor");
-  expect(editor).toContain(">Rename<");
+  expect(editor).not.toContain(">Rename<"); // Rename sits next to the project title now (ProjectView)
   expect(editor).not.toMatch(/>Share<|>Delete</);
   const viewer = toolbar("viewer");
   expect(viewer).toContain("Open in viewer");
-  expect(viewer).not.toMatch(/Add floor|>Rename<|>Share<|>Delete</);
+  expect(viewer).not.toMatch(/Add floor|>Share<|>Delete</);
 });
 
 test("toolbar: no floors disables Open with a reason", () => {
@@ -123,4 +123,9 @@ test("Edit plan is offered to editors and owners only, and only when the page ca
   expect(list("editor")).toContain(">Edit plan<");
   expect(list("viewer")).not.toContain("Edit plan");
   expect(list("editor", false)).not.toContain("Edit plan");
+});
+
+test("toolbar: a one-floor project drops the duplicate Open link (the floor row says View in 3D)", () => {
+  expect(toolbar("owner", [floors[1]])).not.toContain("Open in viewer");
+  expect(renderToStaticMarkup(<FloorList projectId={id} floors={[floors[1]]} role="viewer" onRename={() => {}} onRemove={() => {}} />)).toContain("View in 3D");
 });

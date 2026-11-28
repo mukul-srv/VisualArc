@@ -112,10 +112,13 @@ export function ProjectView({ id }: { id: string }) {
     <main className={styles.page}>
       <AppNav />
       <Breadcrumbs trail={[{ label: "Dashboard", href: "/" }, { label: manifest.name }]} />
-      <h1>{manifest.name}</h1>
+      <div className={styles.row}>
+        <h1>{manifest.name}</h1>
+        {edit && <button type="button" disabled={busy} onClick={() => setRenaming(true)}>Rename</button>}
+      </div>
       {!edit && <p>You have view-only access to this project.</p>}
       <ProjectToolbar id={id} role={role} floors={manifest.floors} busy={busy}
-        onShare={() => { select("sharing"); setTimeout(() => document.getElementById("panel-sharing")?.focus()); }} onRename={() => setRenaming(true)} onDelete={() => setConfirming(true)} />
+        onShare={() => { select("sharing"); setTimeout(() => document.querySelector<HTMLElement>("#panel-sharing h2")?.focus()); }} onDelete={() => setConfirming(true)} />
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {renaming && (
         <form className={styles.row} onSubmit={(e) => { e.preventDefault(); run(() => renameProject(id, name.trim()), () => { setRenaming(false); return load(); }); }}>
