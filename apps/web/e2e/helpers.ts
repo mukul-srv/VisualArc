@@ -7,9 +7,9 @@ const FIXTURE = path.resolve(__dirname, "../../../fixtures/input/fixture_a.dxf")
 export async function generateFixture(page: Page) {
   await page.goto("/new");
   await page.getByLabel("Floor plan file").setInputFiles(FIXTURE);
-  await page.getByRole("button", { name: "Review", exact: true }).click();
+  await page.getByRole("button", { name: "Check my plan", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review before saving" })).toBeVisible({ timeout: 90_000 });
-  await page.getByRole("button", { name: "Accept & generate" }).click();
+  await page.getByRole("button", { name: "Create 3D model" }).click();
   await expect(page).toHaveURL(/\/viewer/, { timeout: 90_000 });
 }
 
@@ -17,7 +17,7 @@ export async function generateFixture(page: Page) {
 export async function createProject(page: Page, name: string) {
   await generateFixture(page);
   await page.goto("/");
-  const newest = page.getByRole("list", { name: "Recent buildings" }).getByRole("listitem").first();
+  const newest = page.getByRole("list", { name: "Unsaved models" }).getByRole("listitem").first();
   await newest.getByRole("button", { name: "Save as project" }).click();
   await page.getByLabel("Project name").fill(name);
   await page.getByRole("button", { name: "Create project" }).click();

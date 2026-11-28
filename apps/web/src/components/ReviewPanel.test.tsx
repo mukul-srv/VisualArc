@@ -13,21 +13,21 @@ const render = (d: DraftResult) => renderToStaticMarkup(<ReviewPanel draft={d} b
 
 test("shows stats, the plan canvas and a fix button per actionable issue", () => {
   const html = render(draft([issue("unmapped_layer", "warning")], false));
-  expect(html).toContain("8 walls, 3 openings, 2 rooms, 25.0 m² total room area");
+  expect(html).toContain("8 walls, 3 doors and windows, 2 rooms, 25.0 m² total room area");
   expect(html).toContain("<canvas");
   expect(html).toContain("Map layers");
-  expect(html).toContain("Re-run review");
+  expect(html).toContain("Check again");
 });
 
 test("accept is disabled while blocking issues remain", () => {
   const blocked = render(draft([issue("units_missing", "blocking")], true));
-  expect(blocked).toMatch(/<button disabled=""[^>]*>Accept &amp; generate/);
+  expect(blocked).toMatch(/<button disabled=""[^>]*>Create 3D model/);
   expect(blocked).toContain("Choose units");
-  expect(render(draft([], false))).not.toMatch(/<button disabled=""[^>]*>Accept/);
+  expect(render(draft([], false))).not.toMatch(/<button disabled=""[^>]*>Create 3D model/);
 });
 
 test("a stale review cannot be accepted", () => {
   const html = renderToStaticMarkup(<ReviewPanel draft={draft([], false)} stale busy={false} onFix={() => {}} onRerun={() => {}} onAccept={() => {}} />);
-  expect(html).toMatch(/<button disabled=""[^>]*>Accept &amp; generate/);
-  expect(html).toContain("Re-run review: settings changed");
+  expect(html).toMatch(/<button disabled=""[^>]*>Create 3D model/);
+  expect(html).toContain("Check again: settings changed");
 });

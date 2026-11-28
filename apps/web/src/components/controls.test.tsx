@@ -36,8 +36,8 @@ test("first-glance control counts stay low", () => {
   const counts = {
     nav: visibleControls(renderToStaticMarkup(<AppNav />)),
     projectRow: visibleControls(renderToStaticMarkup(<ProjectList projects={[project]} onDelete={() => {}} />)),
-    recentRow: visibleControls(renderToStaticMarkup(<RecentList items={[standalone]} onSave={() => {}} onRename={() => {}} onDelete={() => {}} />)),
-    projectToolbar: visibleControls(renderToStaticMarkup(<ProjectToolbar id={id} role="owner" floors={floors} onShare={() => {}} onRename={() => {}} onDelete={() => {}} />)),
+    recentRow: visibleControls(renderToStaticMarkup(<RecentList items={[standalone]} onSave={() => {}} onDelete={() => {}} />)),
+    projectToolbar: visibleControls(renderToStaticMarkup(<ProjectToolbar id={id} role="owner" floors={floors} onShare={() => {}} onDelete={() => {}} />)),
     projectTabs: visibleControls(renderToStaticMarkup(<ProjectTabs role="owner" tab="floors" onSelect={() => {}} />)),
     uploadForm: visibleControls(renderToStaticMarkup(<UploadForm pre={{ upload_id: id, needs: [], inventory: { layers: [], entity_counts: {} }, issues: [] } as never} form={EMPTY_FORM} setForm={() => {}} presets={null} rows={[]} setRow={() => {}} projectName="" setProjectName={() => {}} proj={NO_TARGET} setProj={() => {}} errors={[]} disabled={false} onSubmit={() => {}} />)),
     conventions: visibleControls(renderToStaticMarkup(<ConventionsPanel spec={{ preset: "aia", mapping: {} }} setSpec={() => {}} presets={[{ id: "aia", label: "AIA", source: "s", layers: {} }]} roles={["wall", "floor"]} layers={[]} />)),
@@ -52,8 +52,9 @@ test("first-glance control counts stay low", () => {
 test("nothing was removed: every moved action is still in the markup, behind its menu", () => {
   const row = renderToStaticMarkup(<ProjectList projects={[project]} onDelete={() => {}} />);
   for (const t of ["Open", "Add floor", "Share", "Delete"]) expect(row).toContain(t);
-  const toolbar = renderToStaticMarkup(<ProjectToolbar id={id} role="owner" floors={floors} onShare={() => {}} onRename={() => {}} onDelete={() => {}} />);
-  for (const t of ["Open in viewer", "Add floor", "Share", "Rename", "Delete"]) expect(toolbar).toContain(t);
+  const toolbar = renderToStaticMarkup(<ProjectToolbar id={id} role="owner" floors={floors} onShare={() => {}} onDelete={() => {}} />);
+  // Rename moved next to the project title (ProjectView), so it is no longer a toolbar control
+  for (const t of ["Open in viewer", "Add floor", "Share", "Delete"]) expect(toolbar).toContain(t);
   const viewer = renderToStaticMarkup(<ViewerToolbar walking={false} top={false} measuring={false} roofPresent roofOn onWalk={() => {}} onRoof={() => {}} onTop={() => {}} onMeasure={() => {}} />);
   for (const t of ["Walk", "Roof", "Top-down", "Measure"]) expect(viewer).toContain(t);
   expect(viewer).not.toMatch(/Reset view|Full screen/);
@@ -83,4 +84,10 @@ test("viewer toolbar offers OBJ and IFC export only when the model has an API so
   const html = renderToStaticMarkup(<ViewerToolbar {...props} exports={{ obj: "/x/obj", ifc: "/x/ifc" }} />);
   expect(html).toContain('href="/x/obj"');
   expect(html).toContain("Export IFC");
+});
+
+test("walk is disabled with a plain reason when the model has no floor outline", () => {
+  const html = renderToStaticMarkup(<ViewerToolbar walking={false} walkBlocked="Walking needs a floor outline; this model has none." top={false} measuring={false} roofPresent={false} roofOn={false} onWalk={() => {}} onRoof={() => {}} onTop={() => {}} onMeasure={() => {}} />);
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Walk/);
+  expect(html).toContain("Walking needs a floor outline; this model has none.");
 });

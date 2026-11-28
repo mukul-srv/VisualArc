@@ -10,10 +10,13 @@ export function ViewerNav({ shared, manifest, viewing, standalone }: { shared: b
   if (!manifest)
     return shared ? null : (
       <div>
-        <Link href="/" style={LINK}>&larr; Back to dashboard</Link>
         <nav aria-label="Breadcrumb"><Link href="/" style={LINK}>Dashboard</Link> / Model</nav>
         <Link href="/profile" style={LINK}>Profile</Link>
-        {standalone && <p role="note">This model is not saved to a project yet. Go to the dashboard and choose Save as project to keep versions and share it.</p>}
+        {standalone && (
+          <p role="note">
+            This model is not saved to a project yet. <Link href="/#unsaved" style={LINK}>Save as project</Link> on the dashboard to keep versions and share it.
+          </p>
+        )}
       </div>
     );
   return (
@@ -22,9 +25,6 @@ export function ViewerNav({ shared, manifest, viewing, standalone }: { shared: b
         <span>Shared view (read-only): {manifest.name}</span>
       ) : (
         <>
-          <Link href={viewing !== null ? `/projects/${manifest.id}#versions` : `/projects/${manifest.id}`} style={LINK}>
-            &larr; Back to {viewing !== null ? "versions" : "project"}
-          </Link>
           <nav aria-label="Breadcrumb">
             <Link href="/" style={LINK}>Dashboard</Link> /{" "}
             <Link href={`/projects/${manifest.id}`} style={LINK}>{manifest.name}</Link> /{" "}

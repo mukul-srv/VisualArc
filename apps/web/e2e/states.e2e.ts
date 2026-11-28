@@ -1,3 +1,4 @@
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { expectNoA11yViolations } from "./a11y";
 import { createProject, generateFixture } from "./helpers";
@@ -95,4 +96,39 @@ test("viewer: a model that fails to load gives its reason, not 'not found'", asy
   await page.goto("/viewer?model=no_such_model");
   await expect(page.getByRole("heading", { name: /^This model could not be shown:/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Back to projects" })).toBeVisible();
+});
+
+test("upload: plain heading and button names; floor name is visible before the check when adding a floor", async ({ page }) => {
+  await page.goto("/new");
+  await expect(page.getByRole("heading", { name: "Turn a floor plan into a 3D model", level: 1 })).toBeVisible();
+  const id = await createProject(page, `e2e-${Date.now()}`);
+  await page.goto(`/new?project=${id}`);
+  await page.getByLabel("Floor plan file").setInputFiles(path.resolve(__dirname, "../../../fixtures/input/fixture_a.dxf"));
+  await expect(page.getByRole("button", { name: "Check my plan" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByLabel("Floor name")).toBeVisible();
+  await expect(page.getByText("Project id (existing) or name (new)")).toHaveCount(0);
+  await expect(page.getByText("More options")).toBeVisible();
+});
+
+test("project page: Rename is visible by the title; Share moves focus to the Sharing heading", async ({ page }) => {
+  await createProject(page, `e2e-${Date.now()}`);
+  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
+  await page.getByRole("toolbar", { name: "Project actions" }).getByRole("button", { name: "Share" }).click();
+  await expect(page.getByRole("heading", { name: "Sharing" })).toBeFocused();
+});
+
+test("dashboard: an unsaved model is listed under Unsaved models", async ({ page }) => {
+  await generateFixture(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Unsaved models" })).toBeVisible();
+  await expect(page.getByText("Save one to keep it and share it.")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Unsaved models" }).getByRole("button", { name: "Save as project" }).first()).toBeVisible();
+});
+
+test("viewer: plain title and hint, lighting folded away", async ({ page }) => {
+  await generateFixture(page);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(/Unsaved model: \d+\.\d\d m x \d+\.\d\d m, \d+\.\d\d m tall/, { timeout: 60_000 });
+  await expect(page.getByText("Drag to look around. Walk: use W A S D to move.")).toBeVisible();
+  await expect(page.getByText("Lighting and sun")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Save as project" })).toBeVisible();
 });

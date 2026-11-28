@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { isGenerationId, type Preflight, type Presets } from "../lib/api";
 import { BUILDING_TYPES, UNITS, unitsDoubtful, type FormValues } from "../lib/params";
 import { bboxSize, type SplitRow } from "../lib/split";
@@ -18,6 +19,7 @@ type Props = {
   proj: ProjectTarget;
   setProj: (p: ProjectTarget) => void;
   errors: string[];
+  extra?: ReactNode; // more options owned by the page (layer conventions)
   reviewed?: boolean; // a review exists: "Re-run review" below replaces this button
   addingTo?: boolean; // /new?project=: the target is fixed, so the floor fields come first and the id is not shown
   disabled: boolean;
@@ -66,14 +68,6 @@ export function UploadForm(p: Props) {
 
   return (
     <>
-      <fieldset style={{ border: "none", padding: 0, margin: "8px 0" }}>
-        <legend>Building type<Hint text={HELP.buildingType} /></legend>
-        {BUILDING_TYPES.map((t) => (
-          <label key={t} style={{ marginRight: 16, textTransform: "capitalize" }}>
-            <input type="radio" name="building-type" value={t} checked={form.buildingType === t} onChange={() => setForm({ ...form, buildingType: t })} /> {t}
-          </label>
-        ))}
-      </fieldset>
       {(pre.needs.includes("units") || unitsDoubtful(pre)) && (
         <label style={block}>
           {pre.needs.includes("units")
@@ -118,8 +112,18 @@ export function UploadForm(p: Props) {
       )}
       {p.addingTo && !splitting && floorFields}
       <details style={{ margin: "12px 0" }}>
-        <summary title={HELP.advancedUpload}>Advanced settings</summary>
-        <p>Leave a field empty to use the default shown; defaults are reported as assumed in the result.</p>
+        <summary title={HELP.advancedUpload}>More options</summary>
+        <p><small>Building type: sets the typical heights, roof and stairs wherever your drawing says nothing.</small></p>
+        <fieldset style={{ border: "none", padding: 0, margin: "8px 0" }}>
+          <legend>Building type<Hint text={HELP.buildingType} /></legend>
+          {BUILDING_TYPES.map((t) => (
+            <label key={t} style={{ marginRight: 16, textTransform: "capitalize" }}>
+              <input type="radio" name="building-type" value={t} checked={form.buildingType === t} onChange={() => setForm({ ...form, buildingType: t })} /> {t}
+            </label>
+          ))}
+        </fieldset>
+        {p.extra}
+        <p><small>Sizes and project: leave a size empty to use the typical value shown; every typical value is reported as assumed in the result.</small></p>
         {field("wallHeight", "Wall height (mm)", "wall_height")}
         {field("ceilingHeight", "Ceiling height (mm)", "ceiling_height")}
         {field("doorHeight", "Door height (mm)", "door_height")}
@@ -175,7 +179,7 @@ export function UploadForm(p: Props) {
       )}
       {!p.reviewed && (
         <button disabled={p.disabled} onClick={p.onSubmit}>
-          Review
+          Check my plan
         </button>
       )}
     </>

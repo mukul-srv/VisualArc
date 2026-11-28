@@ -19,17 +19,19 @@ export function ReviewPanel(p: { draft: DraftResult; stale?: boolean; busy: bool
           {f.name && <h3>{f.name}</h3>}
           {f.stats && (
             <p>
-              {f.stats.walls} walls, {f.stats.openings} openings, {f.stats.rooms} rooms, {m2(f.stats.area)} m² total room area
+              {f.stats.walls} walls,{" "}
+              {f.stats.openings > 0 ? `${f.stats.openings} doors and windows` : "No doors or windows found"},{" "}
+              {f.stats.rooms > 0 ? `${f.stats.rooms} rooms, ${m2(f.stats.area)} m² total room area` : "No rooms found yet"}
             </p>
           )}
           {f.overlay ? <PlanOverlay overlay={f.overlay} /> : <p>No plan to show for this floor.</p>}
           <IssueList issues={f.issues} onFix={p.onFix} />
         </div>
       ))}
-      <button disabled={p.busy} onClick={p.onRerun}>Re-run review</button>{" "}
-      <button disabled={p.busy || draft.blocking || p.stale} onClick={p.onAccept}>Accept &amp; generate</button>
-      {p.stale && <p role="status">Press Re-run review: settings changed.</p>}
-      {draft.blocking && <p role="status">Resolve the blocking issues, then re-run the review.</p>}
+      <button disabled={p.busy} onClick={p.onRerun}>Check again</button>{" "}
+      <button disabled={p.busy || draft.blocking || p.stale} onClick={p.onAccept}>Create 3D model</button>
+      {p.stale && <p role="status">Press Check again: settings changed.</p>}
+      {draft.blocking && <p role="status">Resolve the blocking issues, then check again.</p>}
     </section>
   );
 }

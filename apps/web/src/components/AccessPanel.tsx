@@ -60,7 +60,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
   ] : [];
   return (
     <section aria-label="Sharing">
-      <h2>Sharing</h2>
+      <h2 tabIndex={-1}>Sharing</h2>
       <p>Invite people by email, or create a link that lets anyone look at the model.<Hint text={HELP.roles} /></p>
       {error && <p role="alert" className={styles.error}>Error: {error}</p>}
       {notice && <p role="status">{notice}</p>}
@@ -82,7 +82,7 @@ export function AccessPanel({ projectId }: { projectId: string }) {
               </li>
             ))}
           </ul>
-          <form className={styles.row} onSubmit={(e) => { e.preventDefault(); act(() => grantAccess(projectId, email.trim(), role), () => setEmail("")); }}>
+          <form className={styles.row} onSubmit={(e) => { e.preventDefault(); act(() => grantAccess(projectId, email.trim(), role), () => { setNotice(`Invited ${email.trim()}. They will see this project when they sign in.`); setEmail(""); }); }}>
             <label>Email <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
             <select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
               <option value="viewer">viewer</option>
